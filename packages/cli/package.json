@@ -1,0 +1,24 @@
+{
+  "name": "@forj/cli",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "description": "Forj CLI — Infrastructure provisioning command-line tool",
+  "main": "./dist/index.js",
+  "bin": {
+    "forj": "./dist/cli.js"
+  },
+  "scripts": {
+    "dev": "echo 'CLI package not yet implemented'",
+    "build": "echo 'CLI package not yet implemented'",
+    "test": "echo 'CLI package not yet implemented'"
+  },
+  "keywords": [
+    "cli",
+    "infrastructure",
+    "provisioning",
+    "domain",
+    "dns"
+  ],
+  "license": "MIT"
+}

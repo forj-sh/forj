@@ -1,0 +1,15 @@
+{
+  "name": "@forj/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Forj API server — Orchestrates infrastructure provisioning",
+  "main": "./dist/index.js",
+  "scripts": {
+    "dev": "echo 'API package not yet implemented'",
+    "build": "echo 'API package not yet implemented'",
+    "test": "echo 'API package not yet implemented'",
+    "db:migrate": "echo 'API package not yet implemented'"
+  },
+  "license": "MIT"
+}

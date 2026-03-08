@@ -1,0 +1,14 @@
+{
+  "name": "@forj/workers",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Forj BullMQ workers — Service provisioning workers",
+  "main": "./dist/index.js",
+  "scripts": {
+    "dev": "echo 'Workers package not yet implemented'",
+    "build": "echo 'Workers package not yet implemented'",
+    "test": "echo 'Workers package not yet implemented'"
+  },
+  "license": "MIT"
+}
