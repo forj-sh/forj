@@ -1,0 +1,156 @@
+/**
+ * Waitlist form styles
+ */
+
+.waitlist {
+  padding: 100px 48px;
+  max-width: 1200px;
+  margin: 0 auto;
+  border-top: 1px solid var(--border);
+}
+
+.waitlist-inner {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 80px;
+  align-items: center;
+}
+
+.waitlist-content h2 {
+  font-size: 48px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  margin-bottom: 24px;
+  color: var(--text);
+}
+
+.waitlist-desc {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 300;
+  color: var(--text2);
+  line-height: 1.9;
+  max-width: 400px;
+}
+
+.waitlist-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-group {
+  display: flex;
+  gap: 12px;
+}
+
+.email-input {
+  flex: 1;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  padding: 14px 20px;
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  outline: none;
+  transition: all 0.2s;
+}
+
+.email-input:focus {
+  border-color: var(--accent);
+  background: var(--bg);
+}
+
+.email-input::placeholder {
+  color: var(--text3);
+}
+
+.submit-btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--bg);
+  background: var(--text);
+  border: none;
+  padding: 14px 32px;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: all 0.2s;
+  white-space: nowrap;
+  position: relative;
+  overflow: hidden;
+}
+
+.submit-btn:hover:not(:disabled) {
+  background: var(--accent);
+}
+
+.submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.submit-btn.loading {
+  background: var(--text2);
+}
+
+.submit-btn.success {
+  background: var(--green);
+}
+
+.submit-btn.error {
+  background: var(--red);
+}
+
+.btn-text {
+  display: inline-block;
+  transition: transform 0.2s;
+}
+
+.form-message {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  min-height: 20px;
+  transition: opacity 0.2s;
+}
+
+.form-message.success {
+  color: var(--green);
+}
+
+.form-message.error {
+  color: var(--red);
+}
+
+.form-note {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text3);
+  margin-top: 8px;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .waitlist {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
+  .waitlist-inner {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+
+  .waitlist-content h2 {
+    font-size: 36px;
+  }
+
+  .form-group {
+    flex-direction: column;
+  }
+
+  .submit-btn {
+    width: 100%;
+  }
+}

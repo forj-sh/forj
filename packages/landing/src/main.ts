@@ -4,6 +4,7 @@
  */
 
 import './styles/main.css';
+import './styles/waitlist.css';
 import { Nav } from './components/Nav';
 import { Hero } from './components/Hero';
 import { Terminal } from './components/Terminal';
@@ -11,6 +12,7 @@ import { LogosStrip } from './components/LogosStrip';
 import { Features } from './components/Features';
 import { APISection } from './components/APISection';
 import { Pricing } from './components/Pricing';
+import { WaitlistForm } from './components/WaitlistForm';
 import { Footer } from './components/Footer';
 import { initRevealObserver } from './utils/reveal-observer';
 
@@ -32,6 +34,7 @@ app.appendChild(LogosStrip());
 app.appendChild(Features());
 app.appendChild(APISection());
 app.appendChild(Pricing());
+app.appendChild(WaitlistForm());
 app.appendChild(Footer());
 
 // Initialize scroll reveal observer

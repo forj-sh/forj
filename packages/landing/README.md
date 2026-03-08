@@ -47,12 +47,33 @@ packages/landing/
 
 ## 🔧 Environment Variables
 
-Create a `.env.local` file:
+Create a `.env.local` file in `packages/landing/`:
+
+```bash
+cp .env.local.example .env.local
+```
+
+Then update with your actual keys:
 
 ```env
 VITE_WEB3FORMS_KEY=your_web3forms_access_key
 VITE_TURNSTILE_SITEKEY=your_cloudflare_turnstile_sitekey
 ```
+
+### Getting API Keys
+
+**Web3Forms** (Free - Required for waitlist)
+1. Visit https://web3forms.com
+2. Sign up with your email
+3. You'll receive an access key immediately
+4. Add it to `.env.local`
+
+**Cloudflare Turnstile** (Free - Optional for spam protection)
+1. Visit https://dash.cloudflare.com/
+2. Create an account if needed
+3. Navigate to Turnstile section
+4. Create a new site
+5. Copy the site key to `.env.local`
 
 ## 📝 License
 
