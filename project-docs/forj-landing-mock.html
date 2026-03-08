@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>forj 鍛冶場 — Project Infrastructure CLI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Noto+Sans+JP:wght@300;400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --bg2: #111111;
+    --bg3: #161616;
+    --border: #222222;
+    --border2: #2a2a2a;
+    --text: #f0ede8;
+    --text2: #888880;
+    --text3: #555550;
+    --accent: #e8a030;
+    --accent2: #c47820;
+    --green: #3a7a4a;
+    --red: #7a3a3a;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    overflow-x: hidden;
+    cursor: default;
+  }
+
+  /* grain overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    opacity: 0.4;
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* NAV */
+  nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 28px 48px;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: rgba(10,10,10,0.92);
+    backdrop-filter: blur(12px);
+    z-index: 100;
+  }
+
+  .logo {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .logo-mark {
+    font-family: 'Syne', sans-serif;
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+
+  .logo-jp {
+    font-family: 'Noto Sans JP', sans-serif;
+    font-size: 12px;
+    font-weight: 300;
+    color: var(--text3);
+    letter-spacing: 0.05em;
+  }
+
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 36px;
+    list-style: none;
+  }
+
+  .nav-links a {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--text2);
+    text-decoration: none;
+    letter-spacing: 0.03em;
+    transition: color 0.2s;
+  }
+
+  .nav-links a:hover { color: var(--text); }
+
+  .nav-cta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--bg);
+    background: var(--text);
+    border: none;
+    padding: 10px 20px;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+    transition: background 0.2s;
+    text-decoration: none;
+  }
+  .nav-cta:hover { background: var(--accent); }
+
+  /* HERO */
+  .hero {
+    padding: 120px 48px 80px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .hero-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--accent);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 24px;
+  }
+
+  .hero h1 {
+    font-size: clamp(52px, 8vw, 96px);
+    font-weight: 800;
+    line-height: 0.95;
+    letter-spacing: -0.03em;
+    color: var(--text);
+    margin-bottom: 32px;
+  }
+
+  .hero h1 span {
+    color: var(--accent);
+  }
+
+  .hero-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 300;
+    color: var(--text2);
+    line-height: 1.8;
+    max-width: 500px;
+    margin-bottom: 48px;
+  }
+
+  .hero-actions {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  .btn-primary {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--bg);
+    background: var(--text);
+    border: none;
+    padding: 14px 28px;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+    transition: background 0.2s;
+    text-decoration: none;
+    display: inline-block;
+  }
+  .btn-primary:hover { background: var(--accent); }
+
+  .btn-ghost {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text2);
+    background: transparent;
+    border: 1px solid var(--border2);
+    padding: 14px 28px;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+    transition: all 0.2s;
+    text-decoration: none;
+    display: inline-block;
+  }
+  .btn-ghost:hover { color: var(--text); border-color: var(--text3); }
+
+  .hero-note {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text3);
+    letter-spacing: 0.03em;
+    align-self: center;
+  }
+
+  /* TERMINAL */
+  .terminal-wrap {
+    padding: 0 48px 100px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .terminal {
+    background: #0d0d0d;
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .terminal-bar {
+    background: #161616;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .terminal-dots {
+    display: flex;
+    gap: 6px;
+  }
+
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+  .dot.red { background: #4a2020; }
+  .dot.yellow { background: #4a3a10; }
+  .dot.green { background: #1a3a2a; }
+
+  .terminal-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text3);
+    letter-spacing: 0.05em;
+    margin-left: 4px;
+  }
+
+  .terminal-body {
+    padding: 28px 32px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 2;
+  }
+
+  .t-prompt { color: var(--accent); }
+  .t-cmd { color: var(--text); }
+  .t-dim { color: var(--text3); }
+  .t-success { color: #5aaa6a; }
+  .t-label { color: var(--text2); }
+  .t-val { color: #7ab8e8; }
+  .t-error { color: #aa5a5a; }
+  .t-section { color: var(--text3); margin: 4px 0; display: block; }
+
+  .t-line { display: flex; gap: 12px; }
+  .t-line .t-prompt { flex-shrink: 0; }
+
+  .cursor {
+    display: inline-block;
+    width: 8px;
+    height: 15px;
+    background: var(--accent);
+    animation: blink 1.2s step-end infinite;
+    vertical-align: middle;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* SOCIAL PROOF */
+  .logos-strip {
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    padding: 24px 48px;
+  }
+
+  .logos-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 48px;
+    overflow: hidden;
+  }
+
+  .logos-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .logos-scroll {
+    display: flex;
+    gap: 48px;
+    align-items: center;
+    animation: scroll 20s linear infinite;
+  }
+
+  .logos-scroll span {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text3);
+    white-space: nowrap;
+    letter-spacing: 0.05em;
+  }
+
+  @keyframes scroll {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+
+  /* FEATURES */
+  .features {
+    padding: 100px 48px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .section-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--text3);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 60px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .features-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border: 1px solid var(--border);
+  }
+
+  .feature-card {
+    padding: 48px;
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    transition: background 0.3s;
+  }
+
+  .feature-card:nth-child(even) { border-right: none; }
+  .feature-card:nth-child(n+3) { border-bottom: none; }
+  .feature-card:hover { background: var(--bg3); }
+
+  .feature-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--accent);
+    letter-spacing: 0.15em;
+    margin-bottom: 16px;
+  }
+
+  .feature-title {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    margin-bottom: 16px;
+    color: var(--text);
+  }
+
+  .feature-desc {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 300;
+    color: var(--text2);
+    line-height: 1.8;
+    max-width: 380px;
+  }
+
+  .feature-arrow {
+    position: absolute;
+    top: 48px;
+    right: 48px;
+    width: 36px;
+    height: 36px;
+    background: var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text2);
+    font-size: 16px;
+    transition: all 0.2s;
+  }
+
+  .feature-card:hover .feature-arrow {
+    background: var(--accent);
+    color: var(--bg);
+  }
+
+  .feature-mockup {
+    margin-top: 32px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    padding: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    line-height: 1.8;
+    color: var(--text2);
+  }
+
+  .feature-mockup .ok { color: #5aaa6a; }
+  .feature-mockup .key { color: var(--accent); }
+  .feature-mockup .val { color: #7ab8e8; }
+  .feature-mockup .dim { color: var(--text3); }
+
+  /* API SECTION */
+  .api-section {
+    padding: 100px 48px;
+    border-top: 1px solid var(--border);
+    background: var(--bg2);
+  }
+
+  .api-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 80px;
+    align-items: start;
+  }
+
+  .api-text h2 {
+    font-size: 48px;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1;
+    margin-bottom: 24px;
+  }
+
+  .api-text h2 .jp {
+    font-family: 'Noto Sans JP', sans-serif;
+    font-size: 20px;
+    font-weight: 300;
+    color: var(--text3);
+    display: block;
+    margin-bottom: 8px;
+    letter-spacing: 0.05em;
+  }
+
+  .api-text p {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 300;
+    color: var(--text2);
+    line-height: 1.9;
+    margin-bottom: 32px;
+  }
+
+  .api-json {
+    background: #0d0d0d;
+    border: 1px solid var(--border);
+    padding: 28px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1.8;
+  }
+
+  .j-key { color: #7ab8e8; }
+  .j-str { color: #5aaa6a; }
+  .j-num { color: var(--accent); }
+  .j-bool { color: #c47820; }
+  .j-punc { color: var(--text3); }
+
+  /* PRICING */
+  .pricing {
+    padding: 100px 48px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .pricing-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    border: 1px solid var(--border);
+    margin-top: 60px;
+  }
+
+  .price-card {
+    padding: 40px;
+    border-right: 1px solid var(--border);
+    position: relative;
+  }
+
+  .price-card:last-child { border-right: none; }
+  .price-card.featured { background: var(--bg3); }
+
+  .price-tag-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 24px;
+  }
+
+  .price-name {
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+  }
+
+  .price-amount {
+    font-size: 40px;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .price-amount span {
+    font-size: 16px;
+    font-weight: 400;
+    color: var(--text3);
+  }
+
+  .price-period {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text3);
+    margin-bottom: 32px;
+  }
+
+  .price-divider {
+    height: 1px;
+    background: var(--border);
+    margin-bottom: 28px;
+  }
+
+  .price-features {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 36px;
+  }
+
+  .price-features li {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text2);
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  .price-features li::before {
+    content: '—';
+    color: var(--text3);
+    flex-shrink: 0;
+  }
+
+  .price-btn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 12px 24px;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+    transition: all 0.2s;
+    text-decoration: none;
+    display: inline-block;
+    width: 100%;
+    text-align: center;
+    border: 1px solid var(--border2);
+    color: var(--text2);
+    background: transparent;
+  }
+
+  .price-btn:hover { color: var(--text); border-color: var(--text3); }
+  .price-btn.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .price-btn.primary:hover { background: var(--accent); border-color: var(--accent); }
+
+  .featured-badge {
+    position: absolute;
+    top: -1px;
+    left: 40px;
+    background: var(--accent);
+    color: var(--bg);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    padding: 4px 10px;
+    letter-spacing: 0.08em;
+  }
+
+  /* FOOTER */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 48px;
+  }
+
+  .footer-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .footer-left {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .footer-right {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text3);
+  }
+
+  /* Scroll reveal */
+  .reveal {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  .reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  @media (max-width: 768px) {
+    nav { padding: 20px 24px; }
+    .hero, .terminal-wrap, .features, .pricing { padding-left: 24px; padding-right: 24px; }
+    .hero h1 { font-size: 48px; }
+    .features-grid, .pricing-grid, .api-inner { grid-template-columns: 1fr; }
+    .feature-card:nth-child(even) { border-right: none; }
+    .price-card { border-right: none; border-bottom: 1px solid var(--border); }
+    .nav-links { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">
+    <span class="logo-mark">forj</span>
+    <span class="logo-jp">鍛冶場</span>
+  </div>
+  <ul class="nav-links">
+    <li><a href="#features">features</a></li>
+    <li><a href="#pricing">pricing</a></li>
+    <li><a href="#">docs</a></li>
+    <li><a href="#">github</a></li>
+  </ul>
+  <a href="#" class="nav-cta">start now →</a>
+</nav>
+
+<!-- HERO -->
+<section class="hero reveal">
+  <div class="hero-label">[ INFRA PROVISIONING CLI ]</div>
+  <h1>Project infra.<br><span>One command.</span></h1>
+  <p class="hero-sub">
+    Domain · GitHub org · Cloudflare · DNS wiring.<br>
+    Correctly configured, in under 2 minutes.<br>
+    Built for developers and the agents they work with.
+  </p>
+  <div class="hero-actions">
+    <a href="#" class="btn-primary">try for free →</a>
+    <a href="#" class="btn-ghost">view docs</a>
+    <span class="hero-note">no credit card · MIT CLI</span>
+  </div>
+</section>
+
+<!-- TERMINAL -->
+<div class="terminal-wrap reveal">
+  <div class="terminal">
+    <div class="terminal-bar">
+      <div class="terminal-dots">
+        <div class="dot red"></div>
+        <div class="dot yellow"></div>
+        <div class="dot green"></div>
+      </div>
+      <span class="terminal-title">zsh — forj init</span>
+    </div>
+    <div class="terminal-body">
+      <div class="t-line">
+        <span class="t-prompt">$</span>
+        <span class="t-cmd">npx forj init acme</span>
+      </div>
+      <br>
+      <div>&nbsp;&nbsp;<span class="t-dim">✦ forj 鍛冶場 — project infrastructure provisioning</span></div>
+      <br>
+      <div>&nbsp;&nbsp;<span class="t-label">? company / project name: </span><span class="t-val">Acme Inc</span></div>
+      <div>&nbsp;&nbsp;<span class="t-label">? desired domain: </span><span class="t-dim">(checking availability...)</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="t-success">✓</span>&nbsp;<span class="t-val">acme.io</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="t-dim">— $9.95/yr</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="t-success">✓</span>&nbsp;<span class="t-val">getacme.com</span>&nbsp;&nbsp;<span class="t-dim">— $12.95/yr</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="t-error">✗</span>&nbsp;<span class="t-dim">acme.com</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="t-dim">— taken</span></div>
+      <div>&nbsp;&nbsp;<span class="t-label">? select domain: </span><span class="t-val">getacme.com</span></div>
+      <br>
+      <div>&nbsp;&nbsp;<span class="t-dim">provisioning...</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="t-success">✓</span>&nbsp;&nbsp;<span class="t-label">domain registered</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="t-val">getacme.com</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="t-success">✓</span>&nbsp;&nbsp;<span class="t-label">github org created</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="t-val">github.com/getacme</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="t-success">✓</span>&nbsp;&nbsp;<span class="t-label">cloudflare zone active</span>&nbsp;&nbsp;&nbsp;<span class="t-val">getacme.com</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="t-success">✓</span>&nbsp;&nbsp;<span class="t-label">dns wired</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="t-val">MX · SPF · DKIM · CNAME</span></div>
+      <br>
+      <div>&nbsp;&nbsp;<span class="t-dim">credentials → .forj/credentials.json&nbsp;&nbsp;</span><span class="t-success">(gitignored ✓)</span></div>
+      <br>
+      <div>&nbsp;&nbsp;<span class="t-success">setup complete in 1m 52s</span>&nbsp;&nbsp;<span class="t-dim">run `forj status` to see your stack.</span></div>
+      <br>
+      <div class="t-line">
+        <span class="t-prompt">$</span>
+        <span class="cursor"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- LOGOS STRIP -->
+<div class="logos-strip">
+  <div class="logos-inner">
+    <span class="logos-label">built by devs at</span>
+    <div class="logos-scroll">
+      <span>Linear</span>
+      <span>Vercel</span>
+      <span>Supabase</span>
+      <span>Resend</span>
+      <span>Turso</span>
+      <span>Neon</span>
+      <span>Railway</span>
+      <span>Planetscale</span>
+      <span>Linear</span>
+      <span>Vercel</span>
+      <span>Supabase</span>
+      <span>Resend</span>
+      <span>Turso</span>
+      <span>Neon</span>
+      <span>Railway</span>
+      <span>Planetscale</span>
+    </div>
+  </div>
+</div>
+
+<!-- FEATURES -->
+<section class="features" id="features">
+  <div class="section-label">[ WHAT FORJ DOES ]</div>
+  <div class="features-grid">
+
+    <div class="feature-card reveal">
+      <div class="feature-tag">[ DOMAIN ]</div>
+      <h3 class="feature-title">Register and wire your domain</h3>
+      <p class="feature-desc">Checks availability across TLDs, registers via Cloudflare Registrar, configures DNS — all in the same step. No manual nameserver changes.</p>
+      <div class="feature-arrow">→</div>
+      <div class="feature-mockup">
+        <div><span class="ok">✓</span> <span class="key">getacme.com</span> <span class="dim">registered via Cloudflare</span></div>
+        <div><span class="ok">✓</span> <span class="dim">nameservers updated</span></div>
+        <div><span class="ok">✓</span> <span class="dim">zone active in</span> <span class="val">14s</span></div>
+      </div>
+    </div>
+
+    <div class="feature-card reveal">
+      <div class="feature-tag">[ GITHUB ]</div>
+      <h3 class="feature-title">Org, repos, branch protection</h3>
+      <p class="feature-desc">Creates your GitHub org with sane defaults — main app repo, .github org config, branch protection rules. The setup a senior engineer would do.</p>
+      <div class="feature-arrow">→</div>
+      <div class="feature-mockup">
+        <div><span class="ok">✓</span> <span class="key">github.com/getacme</span> <span class="dim">org created</span></div>
+        <div><span class="ok">✓</span> <span class="dim">repos:</span> <span class="val">app</span> <span class="dim">/</span> <span class="val">.github</span></div>
+        <div><span class="ok">✓</span> <span class="dim">branch protection on</span> <span class="val">main</span></div>
+      </div>
+    </div>
+
+    <div class="feature-card reveal">
+      <div class="feature-tag">[ DNS WIRING ]</div>
+      <h3 class="feature-title">Auto-configure every record</h3>
+      <p class="feature-desc">MX, SPF, DKIM, DMARC, CNAME — all wired correctly across every provisioned service. The part founders always get wrong, done right the first time.</p>
+      <div class="feature-arrow">→</div>
+      <div class="feature-mockup">
+        <div><span class="ok">✓</span> <span class="key">SPF</span>&nbsp;&nbsp;<span class="dim">v=spf1 include:_spf.google.com ~all</span></div>
+        <div><span class="ok">✓</span> <span class="key">DKIM</span> <span class="dim">google._domainkey configured</span></div>
+        <div><span class="ok">✓</span> <span class="key">DMARC</span> <span class="dim">baseline policy active</span></div>
+      </div>
+    </div>
+
+    <div class="feature-card reveal">
+      <div class="feature-tag">[ AGENT-READY ]</div>
+      <h3 class="feature-title">Designed for agents, not just humans</h3>
+      <p class="feature-desc">Full non-interactive mode with structured JSON output. Cursor, Claude Code, and Windsurf can call forj as a tool — programmatic infra provisioning for autonomous workflows.</p>
+      <div class="feature-arrow">→</div>
+      <div class="feature-mockup">
+        <div><span class="dim">$ npx forj init acme \</span></div>
+        <div><span class="dim">&nbsp;&nbsp;&nbsp;&nbsp;--domain getacme.com \</span></div>
+        <div><span class="dim">&nbsp;&nbsp;&nbsp;&nbsp;--non-interactive \</span></div>
+        <div><span class="key">&nbsp;&nbsp;&nbsp;&nbsp;--json</span></div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- API SECTION -->
+<section class="api-section">
+  <div class="api-inner">
+    <div class="api-text reveal">
+      <p class="section-label" style="margin-bottom: 28px">[ AGENT MODE ]</p>
+      <h2>
+        <span class="jp">エージェント対応</span>
+        Structured output for autonomous workflows
+      </h2>
+      <p>
+        Every forj command returns clean JSON when called with --json. No parsing terminal output. No scraping logs. Agents get a complete provisioning manifest they can act on immediately.
+      </p>
+      <p style="margin-bottom: 0; color: var(--text3);">
+        API key access, webhook callbacks, and priority provisioning available on the Agent tier.
+      </p>
+    </div>
+    <div class="api-json reveal">
+      <div><span class="j-punc">{</span></div>
+      <div>&nbsp;&nbsp;<span class="j-key">"status"</span><span class="j-punc">:</span> <span class="j-str">"complete"</span><span class="j-punc">,</span></div>
+      <div>&nbsp;&nbsp;<span class="j-key">"project"</span><span class="j-punc">:</span> <span class="j-str">"acme"</span><span class="j-punc">,</span></div>
+      <div>&nbsp;&nbsp;<span class="j-key">"duration_ms"</span><span class="j-punc">:</span> <span class="j-num">112340</span><span class="j-punc">,</span></div>
+      <div>&nbsp;&nbsp;<span class="j-key">"services"</span><span class="j-punc">: {</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="j-key">"domain"</span><span class="j-punc">: {</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="j-key">"status"</span><span class="j-punc">:</span> <span class="j-str">"ok"</span><span class="j-punc">,</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="j-key">"value"</span><span class="j-punc">:</span> <span class="j-str">"getacme.com"</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="j-punc">},</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="j-key">"github"</span><span class="j-punc">: {</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="j-key">"status"</span><span class="j-punc">:</span> <span class="j-str">"ok"</span><span class="j-punc">,</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="j-key">"value"</span><span class="j-punc">:</span> <span class="j-str">"github.com/getacme"</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="j-punc">},</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="j-key">"dns"</span><span class="j-punc">: {</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="j-key">"status"</span><span class="j-punc">:</span> <span class="j-str">"ok"</span><span class="j-punc">,</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="j-key">"records"</span><span class="j-punc">: [</span><span class="j-str">"MX"</span><span class="j-punc">,</span><span class="j-str">"SPF"</span><span class="j-punc">,</span><span class="j-str">"DKIM"</span><span class="j-punc">]</span></div>
+      <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="j-punc">}</span></div>
+      <div>&nbsp;&nbsp;<span class="j-punc">},</span></div>
+      <div>&nbsp;&nbsp;<span class="j-key">"credentials_path"</span><span class="j-punc">:</span> <span class="j-str">".forj/credentials.json"</span></div>
+      <div><span class="j-punc">}</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="pricing" id="pricing">
+  <div class="section-label">[ PRICING ]</div>
+  <div class="pricing-grid">
+
+    <div class="price-card reveal">
+      <div class="price-tag-label">[ FREE ]</div>
+      <div class="price-name">Starter</div>
+      <div class="price-amount">$0</div>
+      <div class="price-period">forever free · 1 project</div>
+      <div class="price-divider"></div>
+      <ul class="price-features">
+        <li>Domain registration</li>
+        <li>GitHub org + repos</li>
+        <li>Cloudflare zone + DNS wiring</li>
+        <li>1 project lifetime</li>
+      </ul>
+      <a href="#" class="price-btn">get started →</a>
+    </div>
+
+    <div class="price-card featured reveal">
+      <div class="featured-badge">POPULAR</div>
+      <div class="price-tag-label">[ PRO ]</div>
+      <div class="price-name">Pro</div>
+      <div class="price-amount">$99<span>/yr</span></div>
+      <div class="price-period">or $49 one-time · unlimited projects</div>
+      <div class="price-divider"></div>
+      <ul class="price-features">
+        <li>Everything in Starter</li>
+        <li>Unlimited projects</li>
+        <li>Google Workspace provisioning</li>
+        <li>AWS baseline configuration</li>
+        <li>forj status history</li>
+        <li>DNS health monitoring</li>
+      </ul>
+      <a href="#" class="price-btn primary">start free trial →</a>
+    </div>
+
+    <div class="price-card reveal">
+      <div class="price-tag-label">[ AGENT ]</div>
+      <div class="price-name">Agent</div>
+      <div class="price-amount">$199<span>/yr</span></div>
+      <div class="price-period">API key access · for agents + power users</div>
+      <div class="price-divider"></div>
+      <ul class="price-features">
+        <li>Everything in Pro</li>
+        <li>API key access</li>
+        <li>Non-interactive + JSON mode</li>
+        <li>Webhook callbacks</li>
+        <li>Priority provisioning queue</li>
+        <li>Accelerator cohort pricing available</li>
+      </ul>
+      <a href="#" class="price-btn">get agent tier →</a>
+    </div>
+
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-left">
+      <span class="logo-mark" style="font-size: 18px;">forj</span>
+      <span class="logo-jp">鍛冶場</span>
+    </div>
+    <div class="footer-right">
+      © 2026 forj · MIT license · built for developers
+    </div>
+  </div>
+</footer>
+
+<script>
+  // Scroll reveal
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+  document.querySelectorAll('.reveal').forEach((el, i) => {
+    el.style.transitionDelay = `${(i % 4) * 80}ms`;
+    observer.observe(el);
+  });
+</script>
+
+</body>
+</html>
