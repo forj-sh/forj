@@ -75,6 +75,45 @@ VITE_TURNSTILE_SITEKEY=your_cloudflare_turnstile_sitekey
 4. Create a new site
 5. Copy the site key to `.env.local`
 
+## 🚢 Deployment
+
+### Vercel (Recommended)
+
+1. **Connect Repository**
+   - Import your GitHub repository to Vercel
+   - Select `packages/landing` as the root directory
+
+2. **Configure Environment Variables**
+   - Add `VITE_WEB3FORMS_KEY` (required)
+   - Add `VITE_TURNSTILE_SITEKEY` (optional)
+
+3. **Deploy**
+   - Vercel will automatically detect Vite and configure the build
+   - Your site will be live at `https://your-project.vercel.app`
+
+### Manual Deployment
+
+```bash
+# Build for production
+npm run build -w packages/landing
+
+# Preview the production build locally
+npm run preview -w packages/landing
+
+# Deploy the dist/ folder to any static host
+```
+
+## 🔒 Spam Protection
+
+The waitlist form includes multiple layers of spam protection:
+
+- **Cloudflare Turnstile**: Privacy-friendly CAPTCHA (optional, requires sitekey)
+- **Honeypot Field**: Hidden field to catch bots
+- **Rate Limiting**: 3 submissions per minute per browser (localStorage-based)
+- **Email Validation**: Zod schema validation
+
+If Turnstile is not configured, the form will still work with honeypot + rate limiting.
+
 ## 📝 License
 
 MIT

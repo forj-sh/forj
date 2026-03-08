@@ -130,6 +130,16 @@
   margin-top: 8px;
 }
 
+#turnstile-container {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 8px;
+}
+
+#turnstile-container:empty {
+  display: none;
+}
+
 /* Mobile responsive */
 @media (max-width: 768px) {
   .waitlist {

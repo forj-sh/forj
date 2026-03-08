@@ -5,6 +5,8 @@
 import { html } from '@/utils/dom';
 import { validateEmail, sanitizeEmail } from '@/utils/validation';
 import { submitToWaitlist } from '@/services/waitlist';
+import { waitlistRateLimiter } from '@/utils/rate-limiter';
+import { turnstileManager } from '@/services/turnstile';
 
 type FormState = 'idle' | 'submitting' | 'success' | 'error';
 
@@ -31,10 +33,19 @@ export function WaitlistForm(): HTMLElement {
               autocomplete="email"
               required
             />
+            <input
+              type="text"
+              name="botcheck"
+              id="botcheck"
+              style="position: absolute; left: -9999px;"
+              tabindex="-1"
+              autocomplete="off"
+            />
             <button type="submit" class="submit-btn" id="submit-btn">
               <span class="btn-text">Join waitlist →</span>
             </button>
           </div>
+          <div id="turnstile-container"></div>
           <div class="form-message" id="form-message"></div>
           <p class="form-note">
             No spam, ever. We'll only email you when Forj is ready to use.
@@ -50,8 +61,18 @@ export function WaitlistForm(): HTMLElement {
   const submitBtn = container.querySelector<HTMLButtonElement>('#submit-btn')!;
   const btnText = submitBtn.querySelector<HTMLSpanElement>('.btn-text')!;
   const messageEl = container.querySelector<HTMLDivElement>('#form-message')!;
+  const turnstileContainer = container.querySelector<HTMLDivElement>('#turnstile-container')!;
+  const honeypot = container.querySelector<HTMLInputElement>('#botcheck')!;
 
   let currentState: FormState = 'idle';
+  let turnstileWidgetId: string | null = null;
+
+  // Initialize Turnstile (only if enabled)
+  if (turnstileManager.isEnabled()) {
+    turnstileManager.render(turnstileContainer).then((widgetId) => {
+      turnstileWidgetId = widgetId;
+    });
+  }
 
   // Update UI based on state
   function setState(state: FormState, message?: string) {
@@ -94,6 +115,23 @@ export function WaitlistForm(): HTMLElement {
       return;
     }
 
+    // Check honeypot (bot detection)
+    if (honeypot.value !== '') {
+      console.warn('Honeypot triggered - potential bot');
+      setState('error', 'Submission blocked. Please try again.');
+      return;
+    }
+
+    // Check rate limit
+    if (!waitlistRateLimiter.isAllowed()) {
+      const timeUntilReset = waitlistRateLimiter.getTimeUntilReset();
+      setState(
+        'error',
+        `Too many attempts. Please try again in ${timeUntilReset} seconds.`
+      );
+      return;
+    }
+
     const rawEmail = emailInput.value;
     const email = sanitizeEmail(rawEmail);
 
@@ -104,14 +142,33 @@ export function WaitlistForm(): HTMLElement {
       return;
     }
 
+    // Get Turnstile token if enabled
+    let turnstileToken: string | null = null;
+    if (turnstileManager.isEnabled()) {
+      turnstileToken = turnstileManager.getResponse();
+      if (!turnstileToken) {
+        setState('error', 'Please complete the CAPTCHA verification.');
+        return;
+      }
+    }
+
+    // Record rate limit attempt
+    waitlistRateLimiter.recordAttempt();
+
     // Submit to waitlist
     setState('submitting');
 
-    const result = await submitToWaitlist(email);
+    const result = await submitToWaitlist(email, turnstileToken);
 
     if (result.success) {
       setState('success', result.message);
       emailInput.value = '';
+      waitlistRateLimiter.reset();
+
+      // Reset Turnstile widget
+      if (turnstileWidgetId) {
+        turnstileManager.reset();
+      }
 
       // Track conversion (optional - can be added later)
       if (typeof window !== 'undefined' && (window as any).gtag) {
@@ -122,6 +179,12 @@ export function WaitlistForm(): HTMLElement {
       }
     } else {
       setState('error', result.message);
+
+      // Reset Turnstile widget on error
+      if (turnstileWidgetId) {
+        turnstileManager.reset();
+      }
+
       // Reset to idle after 3 seconds
       setTimeout(() => {
         if (currentState === 'error') {

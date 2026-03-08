@@ -8,7 +8,10 @@ export interface WaitlistResponse {
   message: string;
 }
 
-export async function submitToWaitlist(email: string): Promise<WaitlistResponse> {
+export async function submitToWaitlist(
+  email: string,
+  turnstileToken?: string | null
+): Promise<WaitlistResponse> {
   const accessKey = import.meta.env.VITE_WEB3FORMS_KEY;
 
   if (!accessKey) {
@@ -20,20 +23,27 @@ export async function submitToWaitlist(email: string): Promise<WaitlistResponse>
   }
 
   try {
+    const payload: Record<string, string> = {
+      access_key: accessKey,
+      email,
+      subject: 'New Forj Waitlist Signup',
+      from_name: 'Forj Landing Page',
+      // Honeypot field - will be filled by spam bots
+      botcheck: '',
+    };
+
+    // Include Turnstile token if provided
+    if (turnstileToken) {
+      payload['h-captcha-response'] = turnstileToken;
+    }
+
     const response = await fetch('https://api.web3forms.com/submit', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
-      body: JSON.stringify({
-        access_key: accessKey,
-        email,
-        subject: 'New Forj Waitlist Signup',
-        from_name: 'Forj Landing Page',
-        // Honeypot field - will be filled by spam bots
-        botcheck: '',
-      }),
+      body: JSON.stringify(payload),
     });
 
     const data = await response.json();
