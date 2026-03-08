@@ -4,6 +4,15 @@
  */
 
 import './styles/main.css';
+import { Nav } from './components/Nav';
+import { Hero } from './components/Hero';
+import { Terminal } from './components/Terminal';
+import { LogosStrip } from './components/LogosStrip';
+import { Features } from './components/Features';
+import { APISection } from './components/APISection';
+import { Pricing } from './components/Pricing';
+import { Footer } from './components/Footer';
+import { initRevealObserver } from './utils/reveal-observer';
 
 // App initialization
 console.log('🔨 forj landing page — initializing...');
@@ -15,15 +24,17 @@ if (!app) {
   throw new Error('App container not found');
 }
 
-// Placeholder content (will be replaced with component rendering)
-app.innerHTML = `
-  <div style="padding: 2rem; font-family: 'JetBrains Mono', monospace; color: #f0ede8;">
-    <h1 style="font-family: 'Syne', sans-serif; font-size: 3rem; margin-bottom: 1rem;">
-      forj <span style="font-family: 'Noto Sans JP'; font-size: 1rem; color: #888;">鍛冶場</span>
-    </h1>
-    <p>Vite + TypeScript setup complete!</p>
-    <p style="color: #888; font-size: 0.875rem;">Ready for component conversion...</p>
-  </div>
-`;
+// Render all components
+app.appendChild(Nav());
+app.appendChild(Hero());
+app.appendChild(Terminal());
+app.appendChild(LogosStrip());
+app.appendChild(Features());
+app.appendChild(APISection());
+app.appendChild(Pricing());
+app.appendChild(Footer());
+
+// Initialize scroll reveal observer
+initRevealObserver();
 
 console.log('✅ forj landing page — initialized');
