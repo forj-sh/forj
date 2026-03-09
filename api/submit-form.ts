@@ -4,7 +4,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { emailExists, createSignup } from '../packages/landing/src/lib/database';
+import { emailExists, createSignup } from '../lib/database';
 
 // Simple email validation regex
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
