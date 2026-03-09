@@ -74,13 +74,44 @@ export default async function handler(
   }
 
   try {
-    const { email }: SignupData = req.body;
-    // TODO: Verify turnstile_token when Turnstile is enabled
-    // const { turnstile_token } = req.body;
+    const { email, turnstile_token }: SignupData = req.body;
 
-    // Get client IP for rate limiting
+    // Get client IP for rate limiting and Turnstile validation
     const clientIp = req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || 'unknown';
     const identifier = Array.isArray(clientIp) ? clientIp[0] : clientIp;
+
+    // Verify Turnstile token
+    if (turnstile_token && process.env.TURNSTILE_SECRET_KEY) {
+      try {
+        const verifyResponse = await fetch(
+          'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              secret: process.env.TURNSTILE_SECRET_KEY,
+              response: turnstile_token,
+              remoteip: identifier,
+            }),
+          }
+        );
+        const verifyData = await verifyResponse.json();
+        if (!verifyData.success) {
+          console.error('Turnstile verification failed:', verifyData['error-codes']);
+          return res.status(400).json({
+            success: false,
+            message: 'CAPTCHA verification failed. Please try again.',
+          });
+        }
+        console.log('Turnstile verification successful');
+      } catch (turnstileError) {
+        console.error('Turnstile verification error:', turnstileError);
+        return res.status(500).json({
+          success: false,
+          message: 'Verification error. Please try again.',
+        });
+      }
+    }
 
     // Check rate limit
     if (!checkRateLimit(identifier)) {
@@ -117,7 +148,7 @@ export default async function handler(
       try {
         console.log('Attempting to send email notification...');
         const emailResult = await resend.emails.send({
-          from: 'forj <noreply@forj.sh>',
+          from: 'forj <hello@updates.forj.sh>',
           to: 'dewar.daniel@pm.me',
           subject: 'New forj waitlist signup',
           text: `New signup: ${email}\nIP: ${identifier}\nTime: ${new Date().toISOString()}`,
@@ -130,29 +161,6 @@ export default async function handler(
     } else {
       console.warn('RESEND_API_KEY not found - skipping email notification');
     }
-
-    // TODO: Verify Turnstile token if provided
-    // const { turnstile_token } = req.body;
-    // if (turnstile_token && process.env.TURNSTILE_SECRET_KEY) {
-    //   const verifyResponse = await fetch(
-    //     'https://challenges.cloudflare.com/turnstile/v0/siteverify',
-    //     {
-    //       method: 'POST',
-    //       headers: { 'Content-Type': 'application/json' },
-    //       body: JSON.stringify({
-    //         secret: process.env.TURNSTILE_SECRET_KEY,
-    //         response: turnstile_token,
-    //       }),
-    //     }
-    //   );
-    //   const verifyData = await verifyResponse.json();
-    //   if (!verifyData.success) {
-    //     return res.status(400).json({
-    //       success: false,
-    //       message: 'CAPTCHA verification failed',
-    //     });
-    //   }
-    // }
 
     return res.status(200).json({
       success: true,
