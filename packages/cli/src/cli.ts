@@ -4,6 +4,7 @@ import packageJson from '../package.json' with { type: 'json' };
 import { createInitCommand } from './commands/init.js';
 import { createLoginCommand } from './commands/login.js';
 import { createLogoutCommand } from './commands/logout.js';
+import { createStatusCommand } from './commands/status.js';
 
 const program = new Command();
 
@@ -16,6 +17,7 @@ program
 
 // Register commands
 program.addCommand(createInitCommand());
+program.addCommand(createStatusCommand());
 program.addCommand(createLoginCommand());
 program.addCommand(createLogoutCommand());
 
