@@ -1,5 +1,5 @@
 {
-  "name": "@forj/cli",
+  "name": "forj-cli",
   "version": "0.1.0",
   "private": false,
   "type": "module",
@@ -9,9 +9,10 @@
     "forj": "./dist/cli.js"
   },
   "scripts": {
-    "dev": "echo 'CLI package not yet implemented'",
-    "build": "echo 'CLI package not yet implemented'",
-    "test": "echo 'CLI package not yet implemented'"
+    "dev": "tsup --watch",
+    "build": "tsup",
+    "type-check": "tsc --noEmit",
+    "test": "echo 'Tests coming soon' && exit 0"
   },
   "keywords": [
     "cli",
@@ -20,5 +21,24 @@
     "domain",
     "dns"
   ],
-  "license": "MIT"
+  "author": "Forj",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:forj-sh/forj.git",
+    "directory": "packages/cli"
+  },
+  "dependencies": {
+    "commander": "^12.0.0",
+    "chalk": "^5.3.0",
+    "ora": "^8.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.19",
+    "tsup": "^8.0.2",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
 }
