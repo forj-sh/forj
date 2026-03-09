@@ -4,7 +4,10 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { Resend } from 'resend';
 import { emailExists, createSignup } from '../lib/database';
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Simple email validation regex
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -109,6 +112,21 @@ export default async function handler(
     await createSignup(email, identifier);
     console.log('Waitlist signup:', { email, ip: identifier, timestamp: new Date().toISOString() });
 
+    // Send notification email to admin
+    if (process.env.RESEND_API_KEY) {
+      try {
+        await resend.emails.send({
+          from: 'forj <noreply@forj.sh>',
+          to: 'dewar.daniel@pm.me',
+          subject: 'New forj waitlist signup',
+          text: `New signup: ${email}\nIP: ${identifier}\nTime: ${new Date().toISOString()}`,
+        });
+      } catch (emailError) {
+        // Log but don't fail the request if email fails
+        console.error('Failed to send notification email:', emailError);
+      }
+    }
+
     // TODO: Verify Turnstile token if provided
     // const { turnstile_token } = req.body;
     // if (turnstile_token && process.env.TURNSTILE_SECRET_KEY) {
@@ -130,23 +148,6 @@ export default async function handler(
     //       message: 'CAPTCHA verification failed',
     //     });
     //   }
-    // }
-
-    // TODO: Send confirmation email via Resend
-    // if (process.env.RESEND_API_KEY) {
-    //   await fetch('https://api.resend.com/emails', {
-    //     method: 'POST',
-    //     headers: {
-    //       'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
-    //       'Content-Type': 'application/json',
-    //     },
-    //     body: JSON.stringify({
-    //       from: 'forj <noreply@forj.sh>',
-    //       to: email,
-    //       subject: 'Welcome to the forj waitlist',
-    //       html: '<p>Thanks for signing up! We\'ll notify you when forj launches.</p>',
-    //     }),
-    //   });
     // }
 
     return res.status(200).json({
