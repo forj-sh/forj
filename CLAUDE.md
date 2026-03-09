@@ -262,9 +262,130 @@ npx forj init acme \
 
 See `project-docs/forj-spec.md` Section 8 for detailed milestone checklists.
 
-## Development Workflow (Once Implemented)
+## Development Workflow
 
-Since no code exists yet, the following are planned conventions:
+### Git Workflow: Graphite Stacking Method
+
+**IMPORTANT**: All feature development MUST follow the Graphite stacking methodology for incremental, reviewable PRs.
+
+#### What is Graphite Stacking?
+
+Graphite stacking is a development workflow where you break large features into small, sequential pull requests that build on top of each other. Each PR (or "stack") is independently reviewable and mergeable.
+
+#### Why Use Graphite?
+
+- **Incremental review**: Reviewers can approve small, focused changes instead of massive diffs
+- **Parallel work**: Other devs can build on your lower stacks while upper stacks are still in review
+- **Easier debugging**: Isolate issues to specific stacks
+- **Better git history**: Each stack represents a logical unit of work
+- **Faster iteration**: Merge lower stacks while refining upper ones
+
+#### Graphite Workflow Steps
+
+**1. Plan your stacks before coding**
+Break your feature into logical, sequential units. Each stack should:
+- Be independently testable
+- Build on the previous stack
+- Represent a complete logical unit
+- Be small enough to review in < 10 minutes
+
+Example: Landing page in 5 stacks:
+- Stack 1: Monorepo foundation
+- Stack 2: Vite + TypeScript setup
+- Stack 3: UI component conversion
+- Stack 4: Email waitlist functionality
+- Stack 5: Spam protection + deployment
+
+**2. Create branches for each stack**
+
+```bash
+# Start from main
+git checkout main
+
+# Create Stack 1 branch and make commits
+git checkout -b stack-1-feature-name
+# ... make changes ...
+git add -A && git commit -m "Stack 1: Description"
+git push -u origin stack-1-feature-name
+
+# Create Stack 2 branch FROM Stack 1
+git checkout -b stack-2-next-feature stack-1-feature-name
+# ... make changes ...
+git add -A && git commit -m "Stack 2: Description"
+git push -u origin stack-2-next-feature
+
+# Continue for all stacks...
+```
+
+**3. Create PRs in dependency order**
+
+```bash
+# PR #1: Stack 1 → main
+gh pr create --base main --head stack-1-feature-name --title "Stack 1: ..." --body "..."
+
+# PR #2: Stack 2 → Stack 1 (depends on PR #1)
+gh pr create --base stack-1-feature-name --head stack-2-next-feature --title "Stack 2: ..." --body "..."
+
+# PR #3: Stack 3 → Stack 2 (depends on PR #2)
+# etc...
+```
+
+**4. PR template for stacks**
+
+Each PR should include:
+```markdown
+## Summary
+Brief description of changes in this stack
+
+## Stack Position
+**Stack X of Y** - Builds on Stack X-1
+
+## Dependencies
+- **Requires**: Stack X-1 (PR #N)
+- **Required by**: Stack X+1 (PR #N+1)
+
+## Next Stack
+Brief preview of what Stack X+1 will add
+```
+
+**5. Merging stacks**
+
+Once a lower stack is approved:
+1. Merge Stack 1 → main
+2. Update Stack 2's base to main: `gh pr edit <PR#> --base main`
+3. Merge Stack 2 → main
+4. Continue up the stack
+
+**6. What NOT to do**
+
+❌ **Don't commit everything to main first, then create PRs** (defeats the purpose)
+❌ **Don't make stacks too large** (> 500 lines of changes)
+❌ **Don't make stacks too granular** (< 50 lines, unless critical)
+❌ **Don't create stacks with unclear dependencies**
+
+#### Example: Landing Page Implementation (Correct Way)
+
+```bash
+# Stack 1: Monorepo foundation
+git checkout -b stack-1-monorepo
+# ... create package structure, workspace config ...
+git commit -m "Stack 1: Initialize monorepo structure"
+git push -u origin stack-1-monorepo
+gh pr create --base main --head stack-1-monorepo
+
+# Stack 2: Build on Stack 1
+git checkout -b stack-2-vite stack-1-monorepo
+# ... add Vite config, TypeScript setup ...
+git commit -m "Stack 2: Set up Vite + TypeScript"
+git push -u origin stack-2-vite
+gh pr create --base stack-1-monorepo --head stack-2-vite
+
+# Continue pattern for remaining stacks...
+```
+
+### Current Repository State
+
+The landing page (`packages/landing`) has been implemented and is on main. Future feature work should follow the Graphite stacking method outlined above.
 
 ### Project Structure (Expected)
 ```
