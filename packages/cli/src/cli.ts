@@ -17,5 +17,12 @@ program
 program.addCommand(createLoginCommand());
 program.addCommand(createLogoutCommand());
 
+// Dev/testing commands - only load if explicitly enabled with FORJ_DEV=1
+if (process.env.FORJ_DEV === '1') {
+  // Use dynamic import to avoid bundling dev-only code in production
+  const { createTestPromptsCommand } = await import('./commands/test-prompts.js');
+  program.addCommand(createTestPromptsCommand());
+}
+
 // Parse command line arguments
 program.parse(process.argv);
