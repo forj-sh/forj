@@ -1,9 +1,13 @@
 /**
  * Database migration script
- * Run with: npx tsx scripts/migrate.ts
+ * Run with: npm run db:migrate
  */
 
+import { config } from 'dotenv';
 import { neon } from '@neondatabase/serverless';
+
+// Load environment variables from .env.local
+config({ path: '.env.local' });
 
 const sql = neon(process.env.DATABASE_URL!);
 
