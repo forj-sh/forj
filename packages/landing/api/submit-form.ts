@@ -4,6 +4,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { emailExists, createSignup } from '../src/lib/database';
 
 // Simple email validation regex
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -70,7 +71,9 @@ export default async function handler(
   }
 
   try {
-    const { email, turnstile_token }: SignupData = req.body;
+    const { email }: SignupData = req.body;
+    // TODO: Verify turnstile_token when Turnstile is enabled
+    // const { turnstile_token } = req.body;
 
     // Get client IP for rate limiting
     const clientIp = req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || 'unknown';
@@ -93,7 +96,21 @@ export default async function handler(
       });
     }
 
+    // Check if email already exists
+    const exists = await emailExists(email);
+    if (exists) {
+      return res.status(400).json({
+        success: false,
+        message: 'This email is already on the waitlist.',
+      });
+    }
+
+    // Store in database
+    await createSignup(email, identifier);
+    console.log('Waitlist signup:', { email, ip: identifier, timestamp: new Date().toISOString() });
+
     // TODO: Verify Turnstile token if provided
+    // const { turnstile_token } = req.body;
     // if (turnstile_token && process.env.TURNSTILE_SECRET_KEY) {
     //   const verifyResponse = await fetch(
     //     'https://challenges.cloudflare.com/turnstile/v0/siteverify',
@@ -115,10 +132,6 @@ export default async function handler(
     //   }
     // }
 
-    // TODO: Store in database
-    // For now, just log to console (will add database integration)
-    console.log('Waitlist signup:', { email, ip: identifier, timestamp: new Date().toISOString() });
-
     // TODO: Send confirmation email via Resend
     // if (process.env.RESEND_API_KEY) {
     //   await fetch('https://api.resend.com/emails', {
@@ -128,7 +141,7 @@ export default async function handler(
     //       'Content-Type': 'application/json',
     //     },
     //     body: JSON.stringify({
-    //       from: 'forj <noreply@forj.dev>',
+    //       from: 'forj <noreply@forj.sh>',
     //       to: email,
     //       subject: 'Welcome to the forj waitlist',
     //       html: '<p>Thanks for signing up! We\'ll notify you when forj launches.</p>',
