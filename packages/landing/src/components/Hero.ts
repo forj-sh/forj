@@ -16,7 +16,6 @@ export function Hero(): HTMLElement {
       </p>
       <div class="hero-actions">
         <a href="#waitlist" class="btn-primary">try for free →</a>
-        <a href="#" class="btn-ghost">view docs</a>
         <span class="hero-note">no credit card · MIT CLI</span>
       </div>
     </section>
