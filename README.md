@@ -2,7 +2,15 @@
 
 **Project infrastructure provisioning CLI — One command. Production-ready infrastructure.**
 
-`npx forj init my-startup` provisions domain, GitHub repos, Cloudflare DNS, and automatically wires all DNS records (MX, SPF, DKIM, DMARC) in under 2 minutes.
+`npx forj-cli init my-startup` provisions domain, GitHub repos, Cloudflare DNS, and automatically wires all DNS records (MX, SPF, DKIM, DMARC) in under 2 minutes.
+
+---
+
+## 🌐 Links
+
+- **Website**: [forj.sh](https://forj.sh)
+- **GitHub**: [forj-sh/forj](https://github.com/forj-sh/forj)
+- **npm**: forj-cli (coming soon)
 
 ---
 
@@ -59,8 +67,15 @@ npm run build -w packages/landing
 
 - ✅ Product specification (v0.2)
 - ✅ API feasibility assessment
-- 🚧 Landing page (in progress)
+- ✅ Landing page (live at forj.sh)
 - ⏳ MVP (4 week build after validation)
+
+## 📦 Branding
+
+- **Domain**: forj.sh
+- **GitHub org**: forj-sh
+- **npm package**: forj-cli
+- **CLI usage**: `npx forj-cli init <project>` or `forj init <project>` (after global install)
 
 ## 📝 License
 

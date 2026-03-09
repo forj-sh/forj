@@ -4,9 +4,33 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Forj** is an infrastructure provisioning CLI tool that creates production-ready project infrastructure with a single command. The value proposition is: `npx forj init my-startup` provisions domain registration (Namecheap), GitHub repos, Cloudflare DNS zone, and automatically wires all DNS records (MX, SPF, DKIM, DMARC) correctly in under 2 minutes.
+**Forj** is an infrastructure provisioning CLI tool that creates production-ready project infrastructure with a single command. The value proposition is: `npx forj-cli init my-startup` provisions domain registration (Namecheap), GitHub repos, Cloudflare DNS zone, and automatically wires all DNS records (MX, SPF, DKIM, DMARC) correctly in under 2 minutes.
 
-This project is currently in the **specification phase** with no code implementation yet. The complete product specification is in `project-docs/forj-spec.md` (currently v0.2 - updated after API feasibility assessment).
+This project is currently in the **pre-launch validation phase**. The landing page with waitlist is live and deployed. The complete product specification is in `project-docs/forj-spec.md` (currently v0.2 - updated after API feasibility assessment).
+
+## Branding & Naming
+
+- **Domain**: forj.sh
+- **GitHub org**: forj-sh
+- **npm package**: forj-cli
+- **CLI invocation (cold)**: `npx forj-cli init acme`
+- **CLI invocation (global)**: `forj init acme` (after `npm install -g forj-cli`)
+
+## Current Repository Structure
+
+```
+forj/ (GitHub: forj-sh/forj)
+├── packages/
+│   ├── landing/        ✅ Landing page (live at forj.sh, deployed on Vercel)
+│   ├── cli/            📋 Placeholder (future CLI client → npm: forj-cli)
+│   ├── api/            📋 Placeholder (future API server → api.forj.sh)
+│   ├── workers/        📋 Placeholder (future BullMQ workers)
+│   └── shared/         📋 Placeholder (future shared utilities)
+├── api/                ✅ Vercel serverless functions (waitlist form)
+├── lib/                ✅ Shared database utilities
+├── project-docs/       ✅ Product specifications
+└── CLAUDE.md           ✅ This file
+```
 
 ## Technical Feasibility: ✅ CONFIRMED
 
@@ -151,7 +175,7 @@ Auto-configures records that founders commonly misconfigure:
 
 ### Interactive Mode (Human Developers)
 ```bash
-$ npx forj init acme
+$ npx forj-cli init acme
 
 ✦ forj — project infrastructure provisioning
 
@@ -188,7 +212,7 @@ Run `forj status` to see your stack.
 
 ### Non-Interactive Mode (AI Coding Agents)
 ```bash
-npx forj init acme \
+npx forj-cli init acme \
   --domain getacme.com \
   --services github,cloudflare,domain \
   --github-org getacme \
@@ -211,6 +235,15 @@ npx forj init acme \
 ```
 
 **Note for agents**: `--github-org` flag assumes org already exists. For new orgs, interactive mode required.
+
+**After global install:**
+```bash
+npm install -g forj-cli
+forj init acme              # Simplified invocation
+forj status                 # Check project status
+forj add vercel             # Add services post-init
+forj dns check              # Verify DNS configuration
+```
 
 ## Build Plan (4 Week MVP → V2 → V3)
 
@@ -245,7 +278,7 @@ npx forj init acme \
 
 **Week 4:** Ship
 - Landing page + CLI demo GIF
-- `npm publish` to registry
+- `npm publish forj-cli` to registry
 - Show HN post + dev Twitter launch
 - 50 projects provisioned target
 
@@ -387,7 +420,92 @@ gh pr create --base stack-1-monorepo --head stack-2-vite
 
 The landing page (`packages/landing`) has been implemented and is on main. Future feature work should follow the Graphite stacking method outlined above.
 
-### Project Structure (Expected)
+## Common Commands
+
+### Monorepo Commands (from root)
+
+```bash
+# Development
+npm run dev                      # Run dev servers for all packages
+npm run dev -w packages/landing  # Run landing page dev server only
+
+# Build
+npm run build                    # Build all packages
+npm run build -w packages/landing # Build landing page only
+
+# Testing
+npm test                         # Run tests for all packages
+
+# Utilities
+npm run clean                    # Remove all node_modules and dist folders
+```
+
+### Landing Page (`packages/landing`)
+
+```bash
+# Development
+npm run dev -w packages/landing        # Start Vite dev server (http://localhost:5173)
+npm run build -w packages/landing      # Build for production (outputs to dist/)
+npm run preview -w packages/landing    # Preview production build locally
+npm run type-check -w packages/landing # Run TypeScript type checking
+npm run db:migrate -w packages/landing # Run database migrations
+
+# Deployment (handled automatically by Vercel on push to main)
+```
+
+### Landing Page Architecture
+
+The landing page is a **Vite + TypeScript** application with the following structure:
+
+```
+packages/landing/
+├── src/
+│   ├── components/     # UI components (header, hero, waitlist form, etc.)
+│   ├── services/       # API integrations (waitlist submission)
+│   ├── styles/         # CSS modules
+│   ├── utils/          # Utilities (validation, observers)
+│   ├── lib/            # Shared libraries (Turnstile integration)
+│   └── main.ts         # Entry point
+├── api/                # Vercel serverless functions (waitlist form handler)
+├── public/             # Static assets (images, fonts)
+└── scripts/            # Database migration scripts
+```
+
+**Key components:**
+- **Waitlist form** (`src/components/waitlist-form.ts`): Email capture with client-side validation
+- **Turnstile integration** (`src/lib/turnstile.ts`): Cloudflare CAPTCHA for spam protection
+- **API handler** (`/api/submit-form.ts`): Vercel serverless function for form submissions
+- **Database utilities** (`/lib/database.ts`): Neon PostgreSQL helpers for storing signups
+
+**Tech stack:**
+- **Build**: Vite 5 + TypeScript
+- **Database**: Neon PostgreSQL (serverless, managed)
+- **Email**: Resend (notification emails to admin)
+- **Spam protection**: Cloudflare Turnstile + rate limiting + disposable email blocking
+- **Deployment**: Vercel (auto-deploys on push to main)
+
+**Environment variables** (see `packages/landing/.env.local.example`):
+- `VITE_TURNSTILE_SITEKEY`: Public Cloudflare Turnstile site key (optional for dev)
+- `TURNSTILE_SECRET_KEY`: Secret Turnstile key for server-side verification (optional for dev)
+- `RESEND_API_KEY`: Resend API key for email notifications (optional for dev)
+- `DATABASE_URL`: Neon PostgreSQL connection string (required for production)
+
+**Important: Root-level `/api` and `/lib` directories**
+
+Due to Vercel deployment constraints, the landing page has two directories at the monorepo root:
+- `/api/submit-form.ts`: Vercel serverless function for waitlist form submission
+- `/lib/database.ts`: Shared database utilities used by the API function
+
+These are logically part of the landing page but must live at the root because Vercel expects API routes at `/api` when deploying. The `vercel.json` at the root configures the deployment to treat `packages/landing` as the build directory while keeping API routes accessible.
+
+**When working on the landing page**, remember that:
+- Frontend code lives in `packages/landing/src/`
+- API code lives in `/api/` (root level)
+- Shared utilities live in `/lib/` (root level)
+- All three work together as a single deployed application on Vercel
+
+### Future Project Structure (Not Yet Implemented)
+
 ```
 /packages
   /cli          - CLI client (commander.js + inquirer)
@@ -397,7 +515,7 @@ The landing page (`packages/landing`) has been implemented and is on main. Futur
 /infrastructure - Deployment configs
 ```
 
-### Common Commands (Once Implemented)
+**Planned commands** (once implemented):
 ```bash
 # Development
 npm run dev          # Start API server + workers in watch mode
