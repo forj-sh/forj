@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import packageJson from '../package.json' with { type: 'json' };
+import { createInitCommand } from './commands/init.js';
 import { createLoginCommand } from './commands/login.js';
 import { createLogoutCommand } from './commands/logout.js';
 
@@ -14,6 +15,7 @@ program
   .version(packageJson.version, '-v, --version', 'Display version number');
 
 // Register commands
+program.addCommand(createInitCommand());
 program.addCommand(createLoginCommand());
 program.addCommand(createLogoutCommand());
 
