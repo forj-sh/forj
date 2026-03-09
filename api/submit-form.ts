@@ -115,16 +115,20 @@ export default async function handler(
     // Send notification email to admin
     if (process.env.RESEND_API_KEY) {
       try {
-        await resend.emails.send({
+        console.log('Attempting to send email notification...');
+        const emailResult = await resend.emails.send({
           from: 'forj <noreply@forj.sh>',
           to: 'dewar.daniel@pm.me',
           subject: 'New forj waitlist signup',
           text: `New signup: ${email}\nIP: ${identifier}\nTime: ${new Date().toISOString()}`,
         });
+        console.log('Email sent successfully:', emailResult);
       } catch (emailError) {
         // Log but don't fail the request if email fails
         console.error('Failed to send notification email:', emailError);
       }
+    } else {
+      console.warn('RESEND_API_KEY not found - skipping email notification');
     }
 
     // TODO: Verify Turnstile token if provided
