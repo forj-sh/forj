@@ -1,6 +1,6 @@
 /**
  * Waitlist email submission service
- * Uses Web3Forms for backend-less email collection
+ * Submits to our own Vercel API route
  */
 
 export interface WaitlistResponse {
@@ -12,38 +12,17 @@ export async function submitToWaitlist(
   email: string,
   turnstileToken?: string | null
 ): Promise<WaitlistResponse> {
-  const accessKey = import.meta.env.VITE_WEB3FORMS_KEY;
-
-  if (!accessKey) {
-    console.error('Web3Forms access key not configured');
-    return {
-      success: false,
-      message: 'Configuration error. Please try again later.',
-    };
-  }
-
   try {
-    const payload: Record<string, string> = {
-      access_key: accessKey,
-      email,
-      subject: 'New Forj Waitlist Signup',
-      from_name: 'Forj Landing Page',
-      // Honeypot field - will be filled by spam bots
-      botcheck: '',
-    };
-
-    // Include Turnstile token if provided
-    if (turnstileToken) {
-      payload['h-captcha-response'] = turnstileToken;
-    }
-
-    const response = await fetch('https://api.web3forms.com/submit', {
+    const response = await fetch('/api/submit-form', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        email,
+        turnstile_token: turnstileToken,
+      }),
     });
 
     const data = await response.json();
@@ -51,7 +30,7 @@ export async function submitToWaitlist(
     if (response.ok && data.success) {
       return {
         success: true,
-        message: 'Thanks! You\'re on the waitlist.',
+        message: data.message || 'Thanks! You\'re on the waitlist.',
       };
     }
 

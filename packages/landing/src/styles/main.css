@@ -31,7 +31,8 @@ html {
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'Syne', sans-serif;
+  font-family: 'TASA Orbiter', sans-serif;
+  font-optical-sizing: auto;
   overflow-x: hidden;
   cursor: default;
 }
@@ -63,24 +64,14 @@ body::before {
 
 .logo {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  text-decoration: none;
 }
 
-.logo-mark {
-  font-family: 'Syne', sans-serif;
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--text);
-}
-
-.logo-jp {
-  font-family: 'Noto Sans JP', sans-serif;
-  font-size: 12px;
-  font-weight: 300;
-  color: var(--text3);
-  letter-spacing: 0.05em;
+.logo-img {
+  height: 32px;
+  width: auto;
+  display: block;
 }
 
 .nav-links {
@@ -368,7 +359,7 @@ body::before {
 }
 
 .logos-scroll span {
-  font-family: 'Syne', sans-serif;
+  font-family: 'TASA Orbiter', sans-serif;
   font-size: 13px;
   font-weight: 600;
   color: var(--text3);
@@ -739,8 +730,14 @@ footer {
 
 .footer-left {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
+}
+
+.footer-logo {
+  height: 24px;
+  width: auto;
+  display: block;
 }
 
 .footer-right {

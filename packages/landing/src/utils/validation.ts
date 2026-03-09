@@ -1,31 +1,25 @@
 /**
- * Email validation utilities using Zod
+ * Client-side email validation
  */
 
-import { z } from 'zod';
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// Email validation schema
-export const emailSchema = z
-  .string()
-  .min(1, 'Email is required')
-  .email('Please enter a valid email address')
-  .max(255, 'Email is too long');
-
-// Validate email and return result
 export function validateEmail(email: string): { valid: boolean; error?: string } {
-  const result = emailSchema.safeParse(email);
-
-  if (result.success) {
-    return { valid: true };
+  if (!email || email.length === 0) {
+    return { valid: false, error: 'Email is required' };
   }
 
-  return {
-    valid: false,
-    error: result.error.errors[0]?.message || 'Invalid email',
-  };
+  if (email.length > 255) {
+    return { valid: false, error: 'Email is too long' };
+  }
+
+  if (!EMAIL_REGEX.test(email)) {
+    return { valid: false, error: 'Please enter a valid email address' };
+  }
+
+  return { valid: true };
 }
 
-// Basic sanitization for email input
 export function sanitizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }

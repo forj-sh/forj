@@ -39,10 +39,12 @@ packages/landing/
 
 - **Build Tool:** Vite 5
 - **Language:** TypeScript
-- **Styling:** CSS Modules
-- **Validation:** Zod
-- **Email Backend:** Web3Forms
-- **Spam Protection:** Cloudflare Turnstile + Honeypot
+- **Styling:** Vanilla CSS
+- **Validation:** Native regex (no dependencies)
+- **API:** Vercel serverless functions
+- **Database:** Neon PostgreSQL (serverless)
+- **Email:** Resend (optional confirmations)
+- **Spam Protection:** Cloudflare Turnstile + rate limiting
 - **Deployment:** Vercel
 
 ## 🔧 Environment Variables
@@ -53,27 +55,41 @@ Create a `.env.local` file in `packages/landing/`:
 cp .env.local.example .env.local
 ```
 
-Then update with your actual keys:
+### Development (Optional)
+
+For local testing, all environment variables are optional. The form will work without them (just logs to console).
 
 ```env
-VITE_WEB3FORMS_KEY=your_web3forms_access_key
-VITE_TURNSTILE_SITEKEY=your_cloudflare_turnstile_sitekey
+# Optional - CAPTCHA spam protection
+VITE_TURNSTILE_SITEKEY=your_site_key
+
+# Optional - Server-side CAPTCHA verification
+TURNSTILE_SECRET_KEY=your_secret_key
+
+# Optional - Email confirmations
+RESEND_API_KEY=your_resend_api_key
+
+# Optional - Database storage (required for production)
+DATABASE_URL=postgres://...
 ```
 
-### Getting API Keys
+### Production (Required)
 
-**Web3Forms** (Free - Required for waitlist)
-1. Visit https://web3forms.com
-2. Sign up with your email
-3. You'll receive an access key immediately
-4. Add it to `.env.local`
+For production deployment, configure these in Vercel:
 
-**Cloudflare Turnstile** (Free - Optional for spam protection)
-1. Visit https://dash.cloudflare.com/
-2. Create an account if needed
-3. Navigate to Turnstile section
-4. Create a new site
-5. Copy the site key to `.env.local`
+1. **Cloudflare Turnstile** (Recommended - spam protection)
+   - Visit https://dash.cloudflare.com/ → Turnstile
+   - Create a site
+   - Add `VITE_TURNSTILE_SITEKEY` (public) and `TURNSTILE_SECRET_KEY` (secret) to Vercel
+
+2. **Neon Database** (Required - stores signups)
+   - Visit https://neon.tech → Create project
+   - Copy connection string to `DATABASE_URL` in Vercel
+
+3. **Resend** (Optional - email confirmations)
+   - Visit https://resend.com/api-keys
+   - Create API key
+   - Add `RESEND_API_KEY` to Vercel
 
 ## 🚢 Deployment
 
@@ -84,11 +100,14 @@ VITE_TURNSTILE_SITEKEY=your_cloudflare_turnstile_sitekey
    - Select `packages/landing` as the root directory
 
 2. **Configure Environment Variables**
-   - Add `VITE_WEB3FORMS_KEY` (required)
-   - Add `VITE_TURNSTILE_SITEKEY` (optional)
+   - Add `DATABASE_URL` (required - Neon PostgreSQL connection string)
+   - Add `VITE_TURNSTILE_SITEKEY` (optional - public CAPTCHA key)
+   - Add `TURNSTILE_SECRET_KEY` (optional - secret CAPTCHA key)
+   - Add `RESEND_API_KEY` (optional - email confirmations)
 
 3. **Deploy**
    - Vercel will automatically detect Vite and configure the build
+   - API routes in `/api` folder will be deployed as serverless functions
    - Your site will be live at `https://your-project.vercel.app`
 
 ### Manual Deployment
@@ -107,12 +126,14 @@ npm run preview -w packages/landing
 
 The waitlist form includes multiple layers of spam protection:
 
-- **Cloudflare Turnstile**: Privacy-friendly CAPTCHA (optional, requires sitekey)
-- **Honeypot Field**: Hidden field to catch bots
-- **Rate Limiting**: 3 submissions per minute per browser (localStorage-based)
-- **Email Validation**: Zod schema validation
+- **Server-side rate limiting**: IP-based, 60-second cooldown between submissions
+- **Disposable email blocking**: Blocks common disposable email domains
+- **Email validation**: Server-side regex validation
+- **Cloudflare Turnstile**: Privacy-friendly CAPTCHA (optional)
+- **Client-side rate limiting**: Browser-based, 3 attempts per 60 seconds
+- **Honeypot field**: Hidden input to catch bots
 
-If Turnstile is not configured, the form will still work with honeypot + rate limiting.
+The form works without Turnstile - it's just an additional layer of protection.
 
 ## 📝 License
 

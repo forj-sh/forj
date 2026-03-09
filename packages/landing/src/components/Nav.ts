@@ -7,10 +7,9 @@ import { html } from '@/utils/dom';
 export function Nav(): HTMLElement {
   return html`
     <nav class="nav">
-      <div class="logo">
-        <span class="logo-mark">forj</span>
-        <span class="logo-jp">鍛冶場</span>
-      </div>
+      <a href="/" class="logo">
+        <img src="/forj-logo.svg" alt="forj 鍛冶場" class="logo-img" />
+      </a>
       <ul class="nav-links">
         <li><a href="#features">features</a></li>
         <li><a href="#pricing">pricing</a></li>

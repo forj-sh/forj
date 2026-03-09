@@ -11,8 +11,7 @@ export function Footer(): HTMLElement {
     <footer>
       <div class="footer-inner">
         <div class="footer-left">
-          <span class="logo-mark" style="font-size: 18px;">forj</span>
-          <span class="logo-jp">鍛冶場</span>
+          <img src="/forj-logo.svg" alt="forj 鍛冶場" class="footer-logo" />
         </div>
         <div class="footer-right">
           © ${year} forj · MIT license · built for developers
