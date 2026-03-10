@@ -1,6 +1,8 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import packageJson from '../package.json' with { type: 'json' };
+import { createAddCommand } from './commands/add.js';
+import { createDNSCommand } from './commands/dns.js';
 import { createInitCommand } from './commands/init.js';
 import { createLoginCommand } from './commands/login.js';
 import { createLogoutCommand } from './commands/logout.js';
@@ -18,6 +20,8 @@ program
 // Register commands
 program.addCommand(createInitCommand());
 program.addCommand(createStatusCommand());
+program.addCommand(createAddCommand());
+program.addCommand(createDNSCommand());
 program.addCommand(createLoginCommand());
 program.addCommand(createLogoutCommand());
 
