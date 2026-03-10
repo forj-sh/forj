@@ -40,3 +40,9 @@ export {
   parseNumber,
   getAttribute,
 } from './xml-parser.js';
+
+// Client
+export { NamecheapClient } from './client.js';
+
+// Constants
+export { NAMECHEAP_URLS, REQUEST_TIMEOUT_MS, USER_AGENT } from './constants.js';
