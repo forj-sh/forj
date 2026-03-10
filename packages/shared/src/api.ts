@@ -1,13 +1,19 @@
 /**
  * API Response Envelope
  * Used by all API endpoints for consistent response structure
+ * Discriminated union ensures type safety between success and error states
  */
-export interface ApiResponse<T = unknown> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  message?: string;
-}
+export type ApiResponse<T = unknown> =
+  | {
+      success: true;
+      data?: T;
+      message?: string;
+    }
+  | {
+      success: false;
+      error: string;
+      message?: string;
+    };
 
 /**
  * Generic paginated response

@@ -2,13 +2,14 @@ import type { ServiceState, ServiceStatusDisplay, ServiceType } from './services
 
 /**
  * Project schema (stored in Postgres)
+ * Services are optional to support incremental provisioning
  */
 export interface Project {
   id: string;
   name: string;
   domain: string;
   userId: string;
-  services: Record<ServiceType, ServiceState>;
+  services: Partial<Record<ServiceType, ServiceState>>;
   createdAt: string;
   updatedAt: string;
 }
@@ -24,18 +25,12 @@ export interface ProjectConfig {
 
 /**
  * Project status response (GET /projects/:id/status)
+ * Uses Partial<Record<>> to automatically include all ServiceType values
  */
 export interface ProjectStatus {
   project: string;
   domain: string;
-  services: {
-    domain?: ServiceStatusDisplay;
-    github?: ServiceStatusDisplay;
-    cloudflare?: ServiceStatusDisplay;
-    dns?: ServiceStatusDisplay;
-    vercel?: ServiceStatusDisplay;
-    railway?: ServiceStatusDisplay;
-  };
+  services: Partial<Record<ServiceType, ServiceStatusDisplay>>;
   createdAt: string;
   updatedAt: string;
 }

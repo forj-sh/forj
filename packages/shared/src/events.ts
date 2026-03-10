@@ -27,12 +27,13 @@ export interface ServiceEvent {
 
 /**
  * Provisioning complete event
+ * Services are optional to support partial/incremental provisioning
  */
 export interface CompleteEvent {
   type: 'complete';
   data: {
     projectId: string;
-    services: Record<ServiceType, { status: ServiceStatus; value?: string }>;
+    services: Partial<Record<ServiceType, { status: ServiceStatus; value?: string }>>;
   };
 }
 
