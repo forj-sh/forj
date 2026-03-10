@@ -1,0 +1,42 @@
+/**
+ * @forj/shared/namecheap - Namecheap API client
+ *
+ * TypeScript client for Namecheap Reseller API
+ * Reference: project-docs/namecheap-integration-spec.md
+ */
+
+// Types
+export type {
+  NamecheapConfig,
+  NamecheapApiResponse,
+  ContactInfo,
+  DomainCheckResult,
+  TldPricing,
+  DomainCreateParams,
+  DomainCreateResult,
+  DomainInfo,
+  DomainRenewParams,
+  DomainRenewResult,
+  AccountBalances,
+  DomainListParams,
+  DomainListItem,
+  DomainListResult,
+  NamecheapError,
+} from './types.js';
+
+// Errors
+export {
+  NamecheapApiError,
+  NamecheapErrorCategory,
+  categorizeError,
+  ERROR_CODE_MAP,
+} from './errors.js';
+
+// XML Parser utilities
+export {
+  parseResponse,
+  normalizeArray,
+  parseBoolean,
+  parseNumber,
+  getAttribute,
+} from './xml-parser.js';
