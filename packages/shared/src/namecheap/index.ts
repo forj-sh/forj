@@ -66,3 +66,17 @@ export {
   type RequestExecutor,
   type QueuePosition,
 } from './request-queue.js';
+
+// Queue Events
+export {
+  QueueEventEmitter,
+  QueueEventType,
+  type QueueEvent,
+  type EnqueuedEvent,
+  type ProcessingEvent,
+  type CompletedEvent,
+  type FailedEvent,
+  type PositionUpdateEvent,
+  type MetricsUpdateEvent,
+  type QueueEventData,
+} from './queue-events.js';
