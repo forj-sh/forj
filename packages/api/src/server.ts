@@ -4,6 +4,7 @@ import helmet from '@fastify/helmet';
 import { logger } from './lib/logger.js';
 import { errorHandler } from './lib/error-handler.js';
 import { healthRoutes } from './routes/health.js';
+import { queueRoutes } from './routes/queues.js';
 
 /**
  * Create and configure Fastify server
@@ -32,6 +33,7 @@ export async function createServer() {
 
   // Routes
   await server.register(healthRoutes);
+  await server.register(queueRoutes);
 
   return server;
 }
