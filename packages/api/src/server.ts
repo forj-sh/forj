@@ -7,6 +7,7 @@ import { healthRoutes } from './routes/health.js';
 import { queueRoutes } from './routes/queues.js';
 import { authRoutes } from './routes/auth.js';
 import { domainRoutes } from './routes/domains.js';
+import { projectRoutes } from './routes/projects.js';
 
 /**
  * Create and configure Fastify server
@@ -38,6 +39,7 @@ export async function createServer() {
   await server.register(queueRoutes);
   await server.register(authRoutes);
   await server.register(domainRoutes);
+  await server.register(projectRoutes);
 
   return server;
 }
