@@ -306,4 +306,161 @@ export class NamecheapClient {
 
     return parseBoolean(getAttribute(result, 'Updated'));
   }
+
+  /**
+   * Get domain information
+   *
+   * API: namecheap.domains.getInfo
+   * Reference: project-docs/namecheap-integration-spec.md Section 3.5
+   *
+   * @param domainName - Full domain name
+   * @returns Domain information
+   * @throws NamecheapApiError if request fails
+   */
+  async getDomainInfo(domainName: string): Promise<import('./types.js').DomainInfo> {
+    const response = await this.executeRequest('namecheap.domains.getInfo', {
+      DomainName: domainName,
+    });
+
+    const result = (response.data as any).DomainGetInfoResult;
+
+    const status = getAttribute(result, 'Status');
+    if (!status) {
+      throw new Error('API response missing required Status field');
+    }
+
+    return {
+      status: status as 'OK' | 'Locked' | 'Expired',
+      id: parseNumber(getAttribute(result, 'ID')),
+      domainName: getAttribute(result, 'DomainName') || '',
+      ownerName: getAttribute(result, 'OwnerName') || '',
+      isOwner: parseBoolean(getAttribute(result, 'IsOwner')),
+      isPremium: parseBoolean(getAttribute(result, 'IsPremium')),
+    };
+  }
+
+  /**
+   * Renew a domain
+   *
+   * API: namecheap.domains.renew
+   * Reference: project-docs/namecheap-integration-spec.md Section 3.6
+   *
+   * @param params - Domain renewal parameters
+   * @returns Domain renewal result
+   * @throws NamecheapApiError if renewal fails
+   */
+  async renewDomain(params: import('./types.js').DomainRenewParams): Promise<import('./types.js').DomainRenewResult> {
+    const requestParams: Record<string, string> = {
+      DomainName: params.domainName,
+      Years: params.years.toString(),
+    };
+
+    if (params.isPremiumDomain) {
+      if (!params.premiumPrice) {
+        throw new Error('premiumPrice is required when isPremiumDomain is true');
+      }
+      requestParams.IsPremiumDomain = 'true';
+      requestParams.PremiumPrice = params.premiumPrice.toString();
+    }
+
+    if (params.promotionCode) {
+      requestParams.PromotionCode = params.promotionCode;
+    }
+
+    const response = await this.executeRequest('namecheap.domains.renew', requestParams);
+
+    const result = (response.data as any).DomainRenewResult;
+
+    return {
+      domainName: getAttribute(result, 'DomainName') || '',
+      domainId: parseNumber(getAttribute(result, 'DomainID')),
+      renewed: parseBoolean(getAttribute(result, 'Renew')),
+      chargedAmount: parseNumber(getAttribute(result, 'ChargedAmount')),
+      orderId: parseNumber(getAttribute(result, 'OrderID')),
+      transactionId: parseNumber(getAttribute(result, 'TransactionID')),
+    };
+  }
+
+  /**
+   * Get account balance information
+   *
+   * API: namecheap.users.getBalances
+   * Reference: project-docs/namecheap-integration-spec.md Section 3.7
+   *
+   * @returns Account balance information
+   * @throws NamecheapApiError if request fails
+   */
+  async getBalances(): Promise<import('./types.js').AccountBalances> {
+    const response = await this.executeRequest('namecheap.users.getBalances', {});
+
+    const result = (response.data as any).UserGetBalancesResult;
+
+    const currency = getAttribute(result, 'Currency');
+    if (!currency) {
+      throw new Error('API response missing required Currency field');
+    }
+
+    return {
+      currency,
+      availableBalance: parseNumber(getAttribute(result, 'AvailableBalance')),
+      accountBalance: parseNumber(getAttribute(result, 'AccountBalance')),
+      fundsRequiredForAutoRenew: parseNumber(getAttribute(result, 'FundsRequiredForAutoRenew')),
+    };
+  }
+
+  /**
+   * List domains in account
+   *
+   * API: namecheap.domains.getList
+   * Reference: project-docs/namecheap-integration-spec.md Section 3.8
+   *
+   * @param params - Optional filtering and pagination parameters
+   * @returns Domain list result
+   * @throws NamecheapApiError if request fails
+   */
+  async listDomains(params?: import('./types.js').DomainListParams): Promise<import('./types.js').DomainListResult> {
+    const requestParams: Record<string, string> = {};
+
+    if (params?.listType) {
+      requestParams.ListType = params.listType;
+    }
+    if (params?.searchTerm) {
+      requestParams.SearchTerm = params.searchTerm;
+    }
+    if (params?.page) {
+      requestParams.Page = params.page.toString();
+    }
+    if (params?.pageSize) {
+      requestParams.PageSize = params.pageSize.toString();
+    }
+    if (params?.sortBy) {
+      requestParams.SortBy = params.sortBy;
+    }
+
+    const response = await this.executeRequest('namecheap.domains.getList', requestParams);
+
+    const commandResponse = response.data as any;
+    const result = commandResponse.DomainGetListResult;
+    const paging = commandResponse.Paging;
+    const domains = normalizeArray(result?.Domain);
+
+    return {
+      domains: domains.map((domain: any) => ({
+        id: parseNumber(getAttribute(domain, 'ID')),
+        name: getAttribute(domain, 'Name') || '',
+        user: getAttribute(domain, 'User') || '',
+        created: getAttribute(domain, 'Created') || '',
+        expires: getAttribute(domain, 'Expires') || '',
+        isExpired: parseBoolean(getAttribute(domain, 'IsExpired')),
+        isLocked: parseBoolean(getAttribute(domain, 'IsLocked')),
+        autoRenew: parseBoolean(getAttribute(domain, 'AutoRenew')),
+        whoisGuard: getAttribute(domain, 'WhoisGuard') || '',
+        isPremium: parseBoolean(getAttribute(domain, 'IsPremium')),
+        isOurDNS: parseBoolean(getAttribute(domain, 'IsOurDNS')),
+      })),
+      totalItems: parseNumber(getAttribute(paging, 'TotalItems')),
+      currentPage: parseNumber(getAttribute(paging, 'CurrentPage')),
+      pageSize: parseNumber(getAttribute(paging, 'PageSize')),
+    };
+  }
 }
