@@ -5,7 +5,7 @@
  * Reference: project-docs/namecheap-integration-spec.md Section 4
  */
 
-import { parseResponse } from './xml-parser.js';
+import { parseResponse, normalizeArray, parseBoolean, parseNumber, getAttribute } from './xml-parser.js';
 import { NAMECHEAP_URLS, REQUEST_TIMEOUT_MS, USER_AGENT } from './constants.js';
 import type { NamecheapConfig, NamecheapApiResponse } from './types.js';
 
@@ -113,5 +113,107 @@ export class NamecheapClient {
    */
   isSandbox(): boolean {
     return this.config.sandbox;
+  }
+
+  /**
+   * Check domain availability
+   *
+   * API: namecheap.domains.check
+   * Reference: project-docs/namecheap-integration-spec.md Section 3.1
+   *
+   * @param domains - List of domains to check (max 50)
+   * @returns Array of domain check results
+   * @throws Error for invalid input (empty array or > 50 domains)
+   * @throws NamecheapApiError if API request fails
+   */
+  async checkDomains(domains: string[]): Promise<import('./types.js').DomainCheckResult[]> {
+    if (domains.length === 0) {
+      throw new Error('At least one domain is required');
+    }
+
+    if (domains.length > 50) {
+      throw new Error('Maximum 50 domains per check');
+    }
+
+    const response = await this.executeRequest('namecheap.domains.check', {
+      DomainList: domains.join(','),
+    });
+
+    // Parse response
+    const domainResults = normalizeArray((response.data as any).DomainCheckResult);
+
+    return domainResults.map((result: any) => ({
+      domain: getAttribute(result, 'Domain') || '',
+      available: parseBoolean(getAttribute(result, 'Available')),
+      isPremium: parseBoolean(getAttribute(result, 'IsPremiumName')),
+      premiumRegistrationPrice: parseNumber(getAttribute(result, 'PremiumRegistrationPrice')),
+      premiumRenewalPrice: parseNumber(getAttribute(result, 'PremiumRenewalPrice')),
+      icannFee: parseNumber(getAttribute(result, 'IcannFee')),
+      errorNo: getAttribute(result, 'ErrorNo') || '0',
+      description: getAttribute(result, 'Description') || '',
+    }));
+  }
+
+  /**
+   * Get TLD pricing information
+   *
+   * API: namecheap.users.getPricing
+   * Reference: project-docs/namecheap-integration-spec.md Section 3.2
+   *
+   * @param tld - Optional TLD to filter (e.g., 'COM', 'IO')
+   * @param action - Optional action type ('REGISTER', 'RENEW', 'REACTIVATE', 'TRANSFER')
+   * @returns Array of TLD pricing information
+   * @throws NamecheapApiError if API request fails
+   */
+  async getTldPricing(
+    tld?: string,
+    action?: 'REGISTER' | 'RENEW' | 'REACTIVATE' | 'TRANSFER'
+  ): Promise<import('./types.js').TldPricing[]> {
+    const params: Record<string, string> = {
+      ProductType: 'DOMAIN',
+      ProductCategory: 'DOMAINS',
+    };
+
+    if (action) {
+      params.ActionName = action;
+    }
+
+    if (tld) {
+      params.ProductName = tld.toUpperCase();
+    }
+
+    const response = await this.executeRequest('namecheap.users.getPricing', params);
+
+    // Parse nested pricing structure
+    const productTypes = normalizeArray((response.data as any).ProductType);
+
+    const pricingResults: import('./types.js').TldPricing[] = [];
+
+    for (const productType of productTypes) {
+      const categories = normalizeArray(productType.ProductCategory);
+
+      for (const category of categories) {
+        const products = normalizeArray(category.Product);
+
+        for (const product of products) {
+          const prices = normalizeArray(product.Price);
+
+          for (const price of prices) {
+            pricingResults.push({
+              tld: getAttribute(product, 'Name') || '',
+              action: getAttribute(price, 'ActionName') || 'REGISTER',
+              duration: parseNumber(getAttribute(price, 'Duration')),
+              durationType: getAttribute(price, 'DurationType') || 'YEAR',
+              wholesalePrice: parseNumber(getAttribute(price, 'Price')),
+              retailPrice: parseNumber(getAttribute(price, 'RegularPrice')),
+              icannFee: parseNumber(getAttribute(price, 'AdditionalCost')),
+              currency: getAttribute(price, 'Currency') || 'USD',
+            });
+          }
+        }
+      }
+    }
+
+    return pricingResults;
   }
 }
