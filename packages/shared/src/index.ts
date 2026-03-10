@@ -91,4 +91,37 @@ export {
   RequestPriority,
   type RequestExecutor,
   type QueuePosition,
+  QueueEventEmitter,
+  QueueEventType,
+  type QueueEvent,
+  type EnqueuedEvent,
+  type ProcessingEvent,
+  type CompletedEvent,
+  type FailedEvent,
+  type PositionUpdateEvent,
+  type MetricsUpdateEvent,
+  type QueueEventData,
 } from './namecheap/index.js';
+
+// Domain worker types
+export type {
+  BaseDomainJobData,
+  CheckDomainJobData,
+  RegisterDomainJobData,
+  RenewDomainJobData,
+  SetNameserversJobData,
+  GetDomainInfoJobData,
+  DomainJobData,
+  DomainWorkerConfig,
+  DomainWorkerEvent,
+} from './domain-worker.js';
+
+export {
+  DomainOperationType,
+  DomainJobStatus,
+  DomainWorkerEventType,
+  DOMAIN_STATE_TRANSITIONS,
+  isValidStateTransition,
+  isTerminalState,
+  isRetryableState,
+} from './domain-worker.js';
