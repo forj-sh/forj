@@ -7,6 +7,7 @@
 
 import { parseResponse, normalizeArray, parseBoolean, parseNumber, getAttribute } from './xml-parser.js';
 import { NAMECHEAP_URLS, REQUEST_TIMEOUT_MS, USER_AGENT } from './constants.js';
+import { flattenContactInfo } from './utils.js';
 import type { NamecheapConfig, NamecheapApiResponse } from './types.js';
 
 /**
@@ -215,5 +216,94 @@ export class NamecheapClient {
     }
 
     return pricingResults;
+  }
+
+  /**
+   * Register a domain
+   *
+   * API: namecheap.domains.create
+   * Reference: project-docs/namecheap-integration-spec.md Section 3.3
+   *
+   * @param params - Domain creation parameters
+   * @returns Domain creation result
+   * @throws NamecheapApiError if registration fails
+   */
+  async createDomain(params: import('./types.js').DomainCreateParams): Promise<import('./types.js').DomainCreateResult> {
+    // Build request parameters
+    const requestParams: Record<string, string> = {
+      DomainName: params.domainName,
+      Years: params.years.toString(),
+      AddFreeWhoisguard: params.addFreeWhoisguard ? 'yes' : 'no',
+      WGEnabled: params.wgEnabled ? 'yes' : 'no',
+    };
+
+    // Add nameservers if provided
+    if (params.nameservers && params.nameservers.length > 0) {
+      requestParams.Nameservers = params.nameservers.join(',');
+    }
+
+    // Add premium domain params if applicable
+    if (params.isPremiumDomain) {
+      if (!params.premiumPrice) {
+        throw new Error('premiumPrice is required when isPremiumDomain is true');
+      }
+      requestParams.IsPremiumDomain = 'true';
+      requestParams.PremiumPrice = params.premiumPrice.toString();
+    }
+
+    // Add promotion code if provided
+    if (params.promotionCode) {
+      requestParams.PromotionCode = params.promotionCode;
+    }
+
+    // Flatten all contact info
+    Object.assign(requestParams, flattenContactInfo(params.registrant, 'Registrant'));
+    Object.assign(requestParams, flattenContactInfo(params.tech, 'Tech'));
+    Object.assign(requestParams, flattenContactInfo(params.admin, 'Admin'));
+    Object.assign(requestParams, flattenContactInfo(params.auxBilling, 'AuxBilling'));
+
+    const response = await this.executeRequest('namecheap.domains.create', requestParams);
+
+    // Parse response
+    const result = (response.data as any).DomainCreateResult;
+
+    return {
+      domain: getAttribute(result, 'Domain') || '',
+      registered: parseBoolean(getAttribute(result, 'Registered')),
+      chargedAmount: parseNumber(getAttribute(result, 'ChargedAmount')),
+      domainId: parseNumber(getAttribute(result, 'DomainID')),
+      orderId: parseNumber(getAttribute(result, 'OrderID')),
+      transactionId: parseNumber(getAttribute(result, 'TransactionID')),
+      whoisguardEnabled: parseBoolean(getAttribute(result, 'WhoisguardEnable')),
+      nonRealTimeDomain: parseBoolean(getAttribute(result, 'NonRealTimeDomain')),
+    };
+  }
+
+  /**
+   * Set custom nameservers for a domain
+   *
+   * API: namecheap.domains.dns.setCustom
+   * Reference: project-docs/namecheap-integration-spec.md Section 3.4
+   *
+   * @param sld - Second-level domain (e.g., 'example' for 'example.com')
+   * @param tld - Top-level domain (e.g., 'com')
+   * @param nameservers - Array of nameserver hostnames
+   * @returns True if update succeeded
+   * @throws NamecheapApiError if update fails
+   */
+  async setCustomNameservers(sld: string, tld: string, nameservers: string[]): Promise<boolean> {
+    if (nameservers.length === 0) {
+      throw new Error('At least one nameserver is required');
+    }
+
+    const response = await this.executeRequest('namecheap.domains.dns.setCustom', {
+      SLD: sld,
+      TLD: tld,
+      Nameservers: nameservers.join(','),
+    });
+
+    const result = (response.data as any).DomainDNSSetCustomResult;
+
+    return parseBoolean(getAttribute(result, 'Updated'));
   }
 }
