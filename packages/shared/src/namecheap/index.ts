@@ -49,3 +49,12 @@ export { NAMECHEAP_URLS, REQUEST_TIMEOUT_MS, USER_AGENT } from './constants.js';
 
 // Utilities
 export { flattenContactInfo, splitDomain, formatPhoneNumber } from './utils.js';
+
+// Rate Limiter
+export {
+  RateLimiter,
+  createNamecheapRateLimiter,
+  type RateLimiterConfig,
+  type RateLimiterLogger,
+  type RateLimitResult,
+} from './rate-limiter.js';

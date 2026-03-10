@@ -82,4 +82,9 @@ export {
   flattenContactInfo,
   splitDomain,
   formatPhoneNumber,
+  RateLimiter,
+  createNamecheapRateLimiter,
+  type RateLimiterConfig,
+  type RateLimiterLogger,
+  type RateLimitResult,
 } from './namecheap/index.js';
