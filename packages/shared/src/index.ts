@@ -87,4 +87,8 @@ export {
   type RateLimiterConfig,
   type RateLimiterLogger,
   type RateLimitResult,
+  NamecheapRequestQueue,
+  RequestPriority,
+  type RequestExecutor,
+  type QueuePosition,
 } from './namecheap/index.js';
