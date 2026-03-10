@@ -75,4 +75,8 @@ export {
   NamecheapErrorCategory,
   categorizeError,
   ERROR_CODE_MAP,
+  NamecheapClient,
+  NAMECHEAP_URLS,
+  REQUEST_TIMEOUT_MS,
+  USER_AGENT,
 } from './namecheap/index.js';
