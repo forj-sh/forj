@@ -58,3 +58,11 @@ export {
   type RateLimiterLogger,
   type RateLimitResult,
 } from './rate-limiter.js';
+
+// Request Queue
+export {
+  NamecheapRequestQueue,
+  RequestPriority,
+  type RequestExecutor,
+  type QueuePosition,
+} from './request-queue.js';
