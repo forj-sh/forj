@@ -17,24 +17,28 @@ export interface SSEEvent<T = unknown> {
  * Service update event (emitted via SSE)
  */
 export interface ServiceEvent {
-  type: 'service_update';
-  service: ServiceType;
+  type: 'status';
+  service?: ServiceType;
   status: ServiceStatus;
   message?: string;
+  data?: Record<string, unknown>;
   error?: string;
   metadata?: Record<string, unknown>;
+  timestamp?: string;
 }
 
 /**
  * Provisioning complete event
- * Services are optional to support partial/incremental provisioning
  */
 export interface CompleteEvent {
   type: 'complete';
-  data: {
-    projectId: string;
-    services: Partial<Record<ServiceType, { status: ServiceStatus; value?: string }>>;
+  message?: string;
+  data?: {
+    projectId?: string;
+    duration?: string;
+    services?: ServiceType[] | Record<ServiceType, { status: ServiceStatus; value?: string }>;
   };
+  timestamp?: string;
 }
 
 /**

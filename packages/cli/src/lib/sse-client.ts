@@ -3,19 +3,12 @@ import { getApiUrl, getAuthToken } from './config.js';
 import { ForjError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 import type { Ora } from 'ora';
+import type { ServiceEvent } from '@forj/shared';
 
 export interface SSEEvent {
   type: string;
   data: unknown;
   timestamp?: string;
-}
-
-export interface ServiceEvent {
-  service: string;
-  status: 'pending' | 'running' | 'complete' | 'failed';
-  message?: string;
-  error?: string;
-  metadata?: Record<string, unknown>;
 }
 
 export interface SSEClientOptions {
@@ -76,11 +69,12 @@ export function createSSEClient(options: SSEClientOptions): {
         }
 
         // Handle service-specific events with validation
-        if (data.type === 'service_update' && onServiceUpdate) {
-          if (data && typeof data.service === 'string' && typeof data.status === 'string') {
+        // Note: service field is optional (allows general status events)
+        if (data.type === 'status' && onServiceUpdate) {
+          if (data && typeof data.status === 'string') {
             onServiceUpdate(data as ServiceEvent);
           } else {
-            logger.warn(`Received malformed 'service_update' event: ${JSON.stringify(data)}`);
+            logger.warn(`Received malformed 'status' event: ${JSON.stringify(data)}`);
           }
         }
 
@@ -139,6 +133,11 @@ export async function streamProvisioningProgress(
       endpoint,
       onServiceUpdate: (event) => {
         const { service, status, message, error } = event;
+
+        // Skip events without a service (e.g., general status events)
+        if (!service) {
+          return;
+        }
 
         // Get or create spinner for this service
         let serviceSpinner = serviceSpinners.get(service);
