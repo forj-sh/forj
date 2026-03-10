@@ -157,4 +157,151 @@ describe('NamecheapClient', () => {
       expect(prodClient.isSandbox()).toBe(false);
     });
   });
+
+  describe('checkDomains', () => {
+    it('should throw error for empty domain list', async () => {
+      await expect(client.checkDomains([])).rejects.toThrow('At least one domain is required');
+    });
+
+    it('should throw error for more than 50 domains', async () => {
+      const domains = Array.from({ length: 51 }, (_, i) => `domain${i}.com`);
+      await expect(client.checkDomains(domains)).rejects.toThrow('Maximum 50 domains per check');
+    });
+
+    it('should check single domain availability', async () => {
+      const mockXml = `
+        <ApiResponse Status="OK">
+          <Errors/>
+          <RequestedCommand>namecheap.domains.check</RequestedCommand>
+          <CommandResponse>
+            <DomainCheckResult Domain="example.com" Available="true" IsPremiumName="false"
+              PremiumRegistrationPrice="0" PremiumRenewalPrice="0" IcannFee="0.18"
+              ErrorNo="0" Description=""/>
+          </CommandResponse>
+          <ExecutionTime>0.5</ExecutionTime>
+        </ApiResponse>
+      `;
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        text: async () => mockXml,
+      });
+
+      const results = await client.checkDomains(['example.com']);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].domain).toBe('example.com');
+      expect(results[0].available).toBe(true);
+      expect(results[0].isPremium).toBe(false);
+      expect(results[0].icannFee).toBe(0.18);
+    });
+
+    it('should check multiple domains with premium pricing', async () => {
+      const mockXml = `
+        <ApiResponse Status="OK">
+          <Errors/>
+          <RequestedCommand>namecheap.domains.check</RequestedCommand>
+          <CommandResponse>
+            <DomainCheckResult Domain="example.com" Available="true" IsPremiumName="false"
+              PremiumRegistrationPrice="0" PremiumRenewalPrice="0" IcannFee="0.18"
+              ErrorNo="0" Description=""/>
+            <DomainCheckResult Domain="premium.com" Available="true" IsPremiumName="true"
+              PremiumRegistrationPrice="2500.00" PremiumRenewalPrice="2500.00" IcannFee="0.18"
+              ErrorNo="0" Description="Premium domain"/>
+          </CommandResponse>
+          <ExecutionTime>0.8</ExecutionTime>
+        </ApiResponse>
+      `;
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        text: async () => mockXml,
+      });
+
+      const results = await client.checkDomains(['example.com', 'premium.com']);
+
+      expect(results).toHaveLength(2);
+      expect(results[0].domain).toBe('example.com');
+      expect(results[0].isPremium).toBe(false);
+      expect(results[1].domain).toBe('premium.com');
+      expect(results[1].isPremium).toBe(true);
+      expect(results[1].premiumRegistrationPrice).toBe(2500.00);
+    });
+  });
+
+  describe('getTldPricing', () => {
+    it('should fetch all TLD pricing', async () => {
+      const mockXml = `
+        <ApiResponse Status="OK">
+          <Errors/>
+          <RequestedCommand>namecheap.users.getPricing</RequestedCommand>
+          <CommandResponse>
+            <UserGetPricingResult>
+              <ProductType Name="DOMAINS">
+                <ProductCategory Name="domains">
+                  <Product Name="COM">
+                    <Price Duration="1" DurationType="YEAR" Price="8.88" RegularPrice="12.98"
+                      AdditionalCost="0.18" Currency="USD" ActionName="REGISTER"/>
+                    <Price Duration="1" DurationType="YEAR" Price="9.88" RegularPrice="13.98"
+                      AdditionalCost="0.18" Currency="USD" ActionName="RENEW"/>
+                  </Product>
+                </ProductCategory>
+              </ProductType>
+            </UserGetPricingResult>
+          </CommandResponse>
+          <ExecutionTime>1.2</ExecutionTime>
+        </ApiResponse>
+      `;
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        text: async () => mockXml,
+      });
+
+      const results = await client.getTldPricing();
+
+      expect(results).toHaveLength(2);
+      expect(results[0].tld).toBe('COM');
+      expect(results[0].action).toBe('REGISTER');
+      expect(results[0].duration).toBe(1);
+      expect(results[0].wholesalePrice).toBe(8.88);
+      expect(results[0].retailPrice).toBe(12.98);
+      expect(results[0].icannFee).toBe(0.18);
+      expect(results[1].action).toBe('RENEW');
+    });
+
+    it('should filter by TLD', async () => {
+      const mockXml = `
+        <ApiResponse Status="OK">
+          <Errors/>
+          <RequestedCommand>namecheap.users.getPricing</RequestedCommand>
+          <CommandResponse>
+            <UserGetPricingResult>
+              <ProductType Name="DOMAINS">
+                <ProductCategory Name="domains">
+                  <Product Name="IO">
+                    <Price Duration="1" DurationType="YEAR" Price="32.88" RegularPrice="39.98"
+                      AdditionalCost="0.00" Currency="USD" ActionName="REGISTER"/>
+                  </Product>
+                </ProductCategory>
+              </ProductType>
+            </UserGetPricingResult>
+          </CommandResponse>
+          <ExecutionTime>0.9</ExecutionTime>
+        </ApiResponse>
+      `;
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        text: async () => mockXml,
+      });
+
+      const results = await client.getTldPricing('io', 'REGISTER');
+
+      expect(results).toHaveLength(1);
+      expect(results[0].tld).toBe('IO');
+      expect(results[0].action).toBe('REGISTER');
+      expect(results[0].wholesalePrice).toBe(32.88);
+    });
+  });
 });
