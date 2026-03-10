@@ -50,3 +50,29 @@ export type {
   ErrorEvent,
   ProvisioningEvent,
 } from './events.js';
+
+// Namecheap API types and utilities
+export type {
+  NamecheapConfig,
+  NamecheapApiResponse,
+  ContactInfo,
+  DomainCheckResult,
+  TldPricing,
+  DomainCreateParams,
+  DomainCreateResult,
+  DomainInfo,
+  DomainRenewParams,
+  DomainRenewResult,
+  AccountBalances,
+  DomainListParams,
+  DomainListItem,
+  DomainListResult,
+  NamecheapError,
+} from './namecheap/index.js';
+
+export {
+  NamecheapApiError,
+  NamecheapErrorCategory,
+  categorizeError,
+  ERROR_CODE_MAP,
+} from './namecheap/index.js';
