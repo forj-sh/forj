@@ -79,4 +79,7 @@ export {
   NAMECHEAP_URLS,
   REQUEST_TIMEOUT_MS,
   USER_AGENT,
+  flattenContactInfo,
+  splitDomain,
+  formatPhoneNumber,
 } from './namecheap/index.js';
