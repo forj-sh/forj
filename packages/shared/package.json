@@ -3,13 +3,27 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Forj shared types and utilities",
+  "description": "Shared types and utilities for Forj monorepo",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "scripts": {
-    "dev": "echo 'Shared package not yet implemented'",
-    "build": "echo 'Shared package not yet implemented'",
-    "test": "echo 'Shared package not yet implemented'"
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "type-check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.19",
+    "tsup": "^8.0.2",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "license": "MIT"
 }
