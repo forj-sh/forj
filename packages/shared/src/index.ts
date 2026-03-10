@@ -125,3 +125,21 @@ export {
   isTerminalState,
   isRetryableState,
 } from './domain-worker.js';
+
+// Stripe payment types
+export type {
+  StripeCheckoutMetadata,
+  ParsedCheckoutMetadata,
+  DomainPaymentData,
+  StripeWebhookPayload,
+  StripeConfig,
+  DomainCheckoutPricing,
+} from './stripe.js';
+
+export {
+  StripeWebhookEvent,
+  parseCheckoutMetadata,
+  calculateDomainPricing,
+  dollarsToCents,
+  centsToDollars,
+} from './stripe.js';
