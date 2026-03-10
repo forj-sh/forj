@@ -515,4 +515,293 @@ describe('NamecheapClient', () => {
       expect(result).toBe(false);
     });
   });
+
+  describe('getDomainInfo', () => {
+    it('should retrieve domain information', async () => {
+      const mockXml = `
+        <ApiResponse Status="OK">
+          <Errors/>
+          <RequestedCommand>namecheap.domains.getInfo</RequestedCommand>
+          <CommandResponse>
+            <DomainGetInfoResult Status="OK" ID="12345" DomainName="example.com"
+              OwnerName="John Doe" IsOwner="true" IsPremium="false"/>
+          </CommandResponse>
+          <ExecutionTime>1.0</ExecutionTime>
+        </ApiResponse>
+      `;
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        text: async () => mockXml,
+      });
+
+      const result = await client.getDomainInfo('example.com');
+
+      expect(result.status).toBe('OK');
+      expect(result.id).toBe(12345);
+      expect(result.domainName).toBe('example.com');
+      expect(result.ownerName).toBe('John Doe');
+      expect(result.isOwner).toBe(true);
+      expect(result.isPremium).toBe(false);
+    });
+
+    it('should throw error when Status field is missing', async () => {
+      const mockXml = `
+        <ApiResponse Status="OK">
+          <Errors/>
+          <RequestedCommand>namecheap.domains.getInfo</RequestedCommand>
+          <CommandResponse>
+            <DomainGetInfoResult ID="12345" DomainName="example.com"
+              OwnerName="John Doe" IsOwner="true" IsPremium="false"/>
+          </CommandResponse>
+          <ExecutionTime>1.0</ExecutionTime>
+        </ApiResponse>
+      `;
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        text: async () => mockXml,
+      });
+
+      await expect(client.getDomainInfo('example.com')).rejects.toThrow(
+        'API response missing required Status field'
+      );
+    });
+  });
+
+  describe('renewDomain', () => {
+    it('should throw error when isPremiumDomain is true but premiumPrice is not provided', async () => {
+      await expect(
+        client.renewDomain({
+          domainName: 'premium.com',
+          years: 1,
+          isPremiumDomain: true,
+          // premiumPrice missing
+        })
+      ).rejects.toThrow('premiumPrice is required when isPremiumDomain is true');
+    });
+
+    it('should renew a standard domain', async () => {
+      const mockXml = `
+        <ApiResponse Status="OK">
+          <Errors/>
+          <RequestedCommand>namecheap.domains.renew</RequestedCommand>
+          <CommandResponse>
+            <DomainRenewResult DomainName="example.com" DomainID="12345"
+              Renew="true" ChargedAmount="12.98" OrderID="67890" TransactionID="54321"/>
+          </CommandResponse>
+          <ExecutionTime>2.0</ExecutionTime>
+        </ApiResponse>
+      `;
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        text: async () => mockXml,
+      });
+
+      const result = await client.renewDomain({
+        domainName: 'example.com',
+        years: 1,
+      });
+
+      expect(result.domainName).toBe('example.com');
+      expect(result.domainId).toBe(12345);
+      expect(result.renewed).toBe(true);
+      expect(result.chargedAmount).toBe(12.98);
+      expect(result.orderId).toBe(67890);
+      expect(result.transactionId).toBe(54321);
+    });
+
+    it('should renew a premium domain with price', async () => {
+      const mockXml = `
+        <ApiResponse Status="OK">
+          <Errors/>
+          <RequestedCommand>namecheap.domains.renew</RequestedCommand>
+          <CommandResponse>
+            <DomainRenewResult DomainName="premium.com" DomainID="12346"
+              Renew="true" ChargedAmount="2500.00" OrderID="67891" TransactionID="54322"/>
+          </CommandResponse>
+          <ExecutionTime>2.5</ExecutionTime>
+        </ApiResponse>
+      `;
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        text: async () => mockXml,
+      });
+
+      const result = await client.renewDomain({
+        domainName: 'premium.com',
+        years: 1,
+        isPremiumDomain: true,
+        premiumPrice: 2500.0,
+      });
+
+      expect(result.domainName).toBe('premium.com');
+      expect(result.chargedAmount).toBe(2500.0);
+
+      // Verify premium params were sent
+      const fetchCall = (global.fetch as jest.Mock).mock.calls[0][0];
+      expect(fetchCall).toContain('IsPremiumDomain=true');
+      expect(fetchCall).toContain('PremiumPrice=2500');
+    });
+  });
+
+  describe('getBalances', () => {
+    it('should retrieve account balances', async () => {
+      const mockXml = `
+        <ApiResponse Status="OK">
+          <Errors/>
+          <RequestedCommand>namecheap.users.getBalances</RequestedCommand>
+          <CommandResponse>
+            <UserGetBalancesResult Currency="USD" AvailableBalance="1234.56"
+              AccountBalance="1234.56" FundsRequiredForAutoRenew="150.00"/>
+          </CommandResponse>
+          <ExecutionTime>0.5</ExecutionTime>
+        </ApiResponse>
+      `;
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        text: async () => mockXml,
+      });
+
+      const result = await client.getBalances();
+
+      expect(result.currency).toBe('USD');
+      expect(result.availableBalance).toBe(1234.56);
+      expect(result.accountBalance).toBe(1234.56);
+      expect(result.fundsRequiredForAutoRenew).toBe(150.0);
+    });
+
+    it('should throw error when Currency field is missing', async () => {
+      const mockXml = `
+        <ApiResponse Status="OK">
+          <Errors/>
+          <RequestedCommand>namecheap.users.getBalances</RequestedCommand>
+          <CommandResponse>
+            <UserGetBalancesResult AvailableBalance="1234.56"
+              AccountBalance="1234.56" FundsRequiredForAutoRenew="150.00"/>
+          </CommandResponse>
+          <ExecutionTime>0.5</ExecutionTime>
+        </ApiResponse>
+      `;
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        text: async () => mockXml,
+      });
+
+      await expect(client.getBalances()).rejects.toThrow(
+        'API response missing required Currency field'
+      );
+    });
+  });
+
+  describe('listDomains', () => {
+    it('should list domains with pagination', async () => {
+      const mockXml = `
+        <ApiResponse Status="OK">
+          <Errors/>
+          <RequestedCommand>namecheap.domains.getList</RequestedCommand>
+          <CommandResponse>
+            <DomainGetListResult>
+              <Domain ID="12345" Name="example.com" User="testuser"
+                Created="01/15/2024" Expires="01/15/2025" IsExpired="false"
+                IsLocked="false" AutoRenew="true" WhoisGuard="ENABLED"
+                IsPremium="false" IsOurDNS="true"/>
+              <Domain ID="12346" Name="example.org" User="testuser"
+                Created="02/20/2024" Expires="02/20/2025" IsExpired="false"
+                IsLocked="false" AutoRenew="false" WhoisGuard="DISABLED"
+                IsPremium="false" IsOurDNS="true"/>
+            </DomainGetListResult>
+            <Paging TotalItems="2" CurrentPage="1" PageSize="20"/>
+          </CommandResponse>
+          <ExecutionTime>1.5</ExecutionTime>
+        </ApiResponse>
+      `;
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        text: async () => mockXml,
+      });
+
+      const result = await client.listDomains({ page: 1, pageSize: 20 });
+
+      expect(result.domains).toHaveLength(2);
+      expect(result.domains[0].name).toBe('example.com');
+      expect(result.domains[0].autoRenew).toBe(true);
+      expect(result.domains[1].name).toBe('example.org');
+      expect(result.domains[1].autoRenew).toBe(false);
+      expect(result.totalItems).toBe(2);
+      expect(result.currentPage).toBe(1);
+      expect(result.pageSize).toBe(20);
+    });
+
+    it('should handle empty domain list', async () => {
+      const mockXml = `
+        <ApiResponse Status="OK">
+          <Errors/>
+          <RequestedCommand>namecheap.domains.getList</RequestedCommand>
+          <CommandResponse>
+            <DomainGetListResult/>
+            <Paging TotalItems="0" CurrentPage="1" PageSize="20"/>
+          </CommandResponse>
+          <ExecutionTime>0.8</ExecutionTime>
+        </ApiResponse>
+      `;
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        text: async () => mockXml,
+      });
+
+      const result = await client.listDomains();
+
+      expect(result.domains).toHaveLength(0);
+      expect(result.totalItems).toBe(0);
+      expect(result.currentPage).toBe(1);
+      expect(result.pageSize).toBe(20);
+    });
+
+    it('should handle filtering and sorting parameters', async () => {
+      const mockXml = `
+        <ApiResponse Status="OK">
+          <Errors/>
+          <RequestedCommand>namecheap.domains.getList</RequestedCommand>
+          <CommandResponse>
+            <DomainGetListResult>
+              <Domain ID="12345" Name="example.com" User="testuser"
+                Created="01/15/2024" Expires="01/15/2025" IsExpired="false"
+                IsLocked="false" AutoRenew="true" WhoisGuard="ENABLED"
+                IsPremium="false" IsOurDNS="true"/>
+            </DomainGetListResult>
+            <Paging TotalItems="1" CurrentPage="1" PageSize="20"/>
+          </CommandResponse>
+          <ExecutionTime="1.0</ExecutionTime>
+        </ApiResponse>
+      `;
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        text: async () => mockXml,
+      });
+
+      await client.listDomains({
+        listType: 'ALL',
+        searchTerm: 'example',
+        sortBy: 'NAME',
+        page: 1,
+        pageSize: 20,
+      });
+
+      // Verify parameters were sent correctly
+      const fetchCall = (global.fetch as jest.Mock).mock.calls[0][0];
+      expect(fetchCall).toContain('ListType=ALL');
+      expect(fetchCall).toContain('SearchTerm=example');
+      expect(fetchCall).toContain('SortBy=NAME');
+      expect(fetchCall).toContain('Page=1');
+      expect(fetchCall).toContain('PageSize=20');
+    });
+  });
 });
