@@ -3,13 +3,28 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Forj API server — Orchestrates infrastructure provisioning",
+  "description": "Forj API server",
   "main": "./dist/index.js",
   "scripts": {
-    "dev": "echo 'API package not yet implemented'",
-    "build": "echo 'API package not yet implemented'",
-    "test": "echo 'API package not yet implemented'",
-    "db:migrate": "echo 'API package not yet implemented'"
+    "dev": "tsx watch src/index.ts",
+    "build": "tsup",
+    "start": "node dist/index.js",
+    "type-check": "tsc --noEmit"
   },
-  "license": "MIT"
+  "dependencies": {
+    "@fastify/cors": "^9.0.1",
+    "@fastify/helmet": "^11.1.1",
+    "fastify": "^4.26.1",
+    "pino": "^8.19.0",
+    "pino-pretty": "^10.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.19",
+    "tsup": "^8.0.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
 }
