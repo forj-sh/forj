@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Forj** is an infrastructure provisioning CLI tool that creates production-ready project infrastructure with a single command. The value proposition is: `npx forj-cli init my-startup` provisions domain registration (Namecheap), GitHub repos, Cloudflare DNS zone, and automatically wires all DNS records (MX, SPF, DKIM, DMARC) correctly in under 2 minutes.
 
-This project is currently in the **pre-launch validation phase**. The landing page with waitlist is live and deployed. The complete product specification is in `project-docs/forj-spec.md` (currently v0.2 - updated after API feasibility assessment).
+This project is currently in **active MVP development**. The landing page with waitlist is live and deployed. The CLI client is fully implemented. The API server scaffold and Namecheap domain integration (including rate limiting, priority queuing, and Stripe webhook stubs) are complete and merged. Next milestone: integration glue (route mounting, auth middleware, Stripe signature verification) then GitHub + Cloudflare workers. The complete product specification is in `project-docs/forj-spec.md` (currently v0.2 - updated after API feasibility assessment).
 
 ## Branding & Naming
 
@@ -22,10 +22,10 @@ This project is currently in the **pre-launch validation phase**. The landing pa
 forj/ (GitHub: forj-sh/forj)
 ├── packages/
 │   ├── landing/        ✅ Landing page (live at forj.sh, deployed on Vercel)
-│   ├── cli/            📋 Placeholder (future CLI client → npm: forj-cli)
-│   ├── api/            📋 Placeholder (future API server → api.forj.sh)
-│   ├── workers/        📋 Placeholder (future BullMQ workers)
-│   └── shared/         📋 Placeholder (future shared utilities)
+│   ├── cli/            ✅ CLI client — fully implemented thin client (commander.js + inquirer)
+│   ├── api/            ✅ Fastify API server — scaffold + domain routes + Stripe webhooks
+│   ├── workers/        ✅ Domain worker — BullMQ job handlers + state machine
+│   └── shared/         ✅ Shared types + Namecheap client + rate limiter + priority queue
 ├── api/                ✅ Vercel serverless functions (waitlist form)
 ├── lib/                ✅ Shared database utilities
 ├── project-docs/       ✅ Product specifications
@@ -44,7 +44,7 @@ forj/ (GitHub: forj-sh/forj)
 
 **V2 additions** (Vercel, Railway) also confirmed feasible with official APIs.
 
-## Architecture (Planned)
+## Architecture (Implemented)
 
 ### System Design Principles
 
@@ -90,31 +90,65 @@ Projects table stores project state with JSONB `services` column:
 
 Credentials table is ephemeral — encrypted payloads delivered once then purged.
 
-## Planned Tech Stack
+### API Contracts (Defined by CLI)
 
-| Layer | Technology | Why |
-|-------|-----------|-----|
-| Runtime | Node.js + TypeScript | Native fit for API integrations, strong typing |
-| API Framework | Fastify | Fast, schema-native, good SSE support |
-| Queue | BullMQ + Redis | Reliable job processing, retry semantics |
-| Database | Postgres | JSONB for flexible state, battle-tested |
-| CLI | commander.js + inquirer | Interactive CLI standard |
-| Auth | jose (JWT) + Node crypto AES-256-GCM | Token encryption, short-lived sessions |
-| Deployment | Railway or Render | Low ops, managed Postgres + Redis |
-| Domain API | Namecheap Reseller API | Established reseller program, $50 deposit, competitive wholesale pricing |
-| Payments | Stripe Checkout | Single transaction for domain + service fee |
-| DNS Validation | dns.resolve() + dnspropagation.net API | Post-provision record verification |
+The CLI client defines these endpoints (all expect `{ success, data, error, message }` response envelope):
+
+| Endpoint | Method | Purpose | Status |
+|----------|--------|---------|--------|
+| `/domains/check` | POST | Domain availability + pricing | ✅ Route defined, not mounted |
+| `/domains/register` | POST | Create registration job | ✅ Route defined, not mounted |
+| `/domains/jobs/:jobId` | GET | Job status polling | ✅ Route defined, not mounted |
+| `/projects/init` | POST | Create project record | ✅ Implemented |
+| `/projects/:id/stream` | GET (SSE) | Real-time provisioning events | ✅ Implemented |
+| `/projects/:id/status` | GET | Project + service status | ✅ Implemented |
+| `/projects/:id/services` | POST | Add service post-init | ✅ Implemented |
+| `/projects/:id/dns/health` | GET | DNS record validation | 🔲 Not started |
+| `/projects/:id/dns/fix` | POST | Auto-repair DNS issues | 🔲 Not started |
+| `/auth/cli` | GET | OAuth flow initiation | 🔲 Not started |
+| `/webhooks/stripe` | POST | Stripe payment webhooks | ⚠️ Handlers defined, no signature verification |
+
+## Tech Stack
+
+| Layer | Technology | Status | Why |
+|-------|-----------|--------|-----|
+| Runtime | Node.js 18+ TypeScript | ✅ | Native fit for API integrations, strong typing |
+| API Framework | Fastify 4 | ✅ | Fast, schema-native, good SSE support |
+| Queue | BullMQ 5 + Redis (ioredis) | ✅ | Reliable job processing, retry semantics |
+| Database | Neon Postgres (serverless) | ✅ | JSONB for flexible state, WebSocket connections |
+| CLI | commander.js 12 + inquirer 9 | ✅ | Interactive CLI standard |
+| CLI Build | tsup 8 (esbuild) | ✅ | ESM output with shebang, Node 18+ target |
+| CLI UX | chalk 5 + ora 8 | ✅ | Styled output + spinners for streaming progress |
+| SSE Client | eventsource 2 | ✅ | Real-time provisioning updates in CLI |
+| XML Parsing | fast-xml-parser | ✅ | Namecheap's attribute-based XML responses |
+| Phone Validation | libphonenumber-js | ✅ | Contact info formatting for domain registration |
+| Logging | Pino 8 | ✅ | Structured logging with pretty-printing in dev |
+| Auth | jose (JWT) + Node crypto AES-256-GCM | 🔲 | Token encryption, short-lived sessions |
+| Deployment | Railway or Render | 🔲 | Low ops, managed Postgres + Redis |
+| Domain API | Namecheap Reseller API | ✅ | 8 methods implemented, rate limited, priority queued |
+| Payments | Stripe Checkout | ⚠️ | Webhook handlers defined, signature verification pending |
+| DNS Validation | dns.resolve() + dnspropagation.net API | 🔲 | Post-provision record verification |
 
 ## Key Service Integrations (by Phase)
 
 ### V1 MVP - Core Infrastructure
 
-**Domain Registration (Namecheap Reseller API)**
+**Domain Registration (Namecheap Reseller API)** ✅ IMPLEMENTED
 - Forj acts as true reseller: buys wholesale, sells at market rate
 - Setup: $50 deposit OR 20+ domains in account
 - API endpoints: `namecheap.domains.check` (availability), `namecheap.domains.create` (registration)
 - Payment flow: User pays Forj via Stripe → Forj pays Namecheap wholesale → ~15% margin
 - Fallback: GoDaddy Reseller API if Namecheap has issues
+
+**Implementation details** (see `packages/shared/src/namecheap/`):
+- `client.ts`: 8 API methods (checkDomains, getTldPricing, createDomain, setCustomNameservers, getDomainInfo, renewDomain, listDomains, getBalances)
+- `xml-parser.ts`: Custom parser for Namecheap's attribute-based XML format
+- `rate-limiter.ts`: Redis-backed sliding window (Lua script, 20 req/min)
+- `request-queue.ts`: 3-tier priority queue (CRITICAL > INTERACTIVE > BACKGROUND) with per-user fairness
+- `errors.ts`: 50+ error codes mapped to 6 categories with retryability + user-facing messages
+- Domain worker (`packages/workers/src/domain-worker.ts`): BullMQ job handlers for CHECK, REGISTER, RENEW, SET_NAMESERVERS, GET_INFO with full state machine
+- Pricing cache (`packages/api/src/lib/pricing-cache.ts`): Redis-backed, 1-hour TTL, warmup for common TLDs
+- Stripe webhooks (`packages/api/src/routes/stripe-webhooks.ts`): Handlers defined for checkout.session.completed, payment events, refunds (signature verification not yet implemented)
 
 **GitHub Guided Flow** (Semi-Manual)
 - GitHub.com does NOT support org creation via API (Enterprise-only feature)
@@ -249,37 +283,71 @@ forj dns check              # Verify DNS configuration
 
 ### V1 - 4 Week MVP (Core Infrastructure)
 
-**Week 1:** Core API + Workers
-- Fastify API + Postgres + BullMQ + Redis scaffold
-- Auth: GitHub OAuth + Cloudflare OAuth + token encryption
-- Domain worker: Namecheap Reseller API (availability check + registration)
-- GitHub worker: guided org confirmation → repo creation + branch protection
-- Cloudflare worker: zone creation via user OAuth
-- State machine: Postgres JSONB-backed service status tracking
-- SSE event emitter for real-time provisioning updates
+**Phase 1: CLI Client** ✅ COMPLETE
+- All 6 commands implemented: `init`, `status`, `add`, `dns` (check/fix), `login`, `logout`
+- Interactive mode with guided GitHub org step + SSE stream rendering
+- Non-interactive mode: `--non-interactive`, `--json`, `--github-org` flags for AI agents
+- API client (`lib/api-client.ts`) with Bearer token auth
+- SSE client (`lib/sse-client.ts`) for real-time provisioning progress
+- Config management (`~/.forj/config.json`), project state (`.forj/config.json`)
+- Credential handoff: `.forj/credentials.json` generation + `.gitignore` injection
+- Build: tsup (ESM, Node 18+), bin entry `forj` → `dist/cli.js`
 
-**Week 2:** DNS Wiring + CLI
-- DNS wiring worker: auto-configure MX, SPF, DKIM, DMARC, CNAME after services complete
+**Phase 2: API Server Scaffold** ✅ COMPLETE (Stacks 1-7, PRs #12-#18)
+- Fastify server with TypeScript + Pino structured logging
+- Neon Postgres (serverless) with connection pooling
+- BullMQ + Redis job queue infrastructure (5 queues: DOMAIN_CHECK, PROJECT_INIT, SERVICE_PROVISION, DNS_CHECK, DNS_FIX)
+- SSE streaming endpoint for real-time CLI updates
+- Project management routes (CRUD + status)
+- Mock auth + domain routes (replaced by real implementation in Phase 3)
+- Shared types foundation (`@forj/shared`)
+
+**Phase 3: Namecheap Domain Integration** ✅ COMPLETE (Stacks 1-12, PRs #19-#30)
+- Full Namecheap API client: `checkDomains`, `getTldPricing`, `createDomain`, `setCustomNameservers`, `getDomainInfo`, `renewDomain`, `listDomains`, `getBalances`
+- Custom XML parser using `fast-xml-parser` for Namecheap's attribute-based responses
+- Redis-backed sliding window rate limiter (Lua script, atomic operations, 20 req/min limit)
+- 3-tier priority queue with fairness: CRITICAL (registrations) > INTERACTIVE (availability checks) > BACKGROUND (pricing/monitoring)
+- Error categorization: 50+ Namecheap error codes mapped to 6 categories (AUTH, VALIDATION, PAYMENT, AVAILABILITY, PROVIDER, UNKNOWN) with retryability flags and user-facing messages
+- Domain worker state machine: PENDING → QUEUED → CHECKING → AVAILABLE → REGISTERING → CONFIGURING → COMPLETE (with FAILED → RETRYING branches)
+- BullMQ job handlers for 5 operation types: CHECK, REGISTER, RENEW, SET_NAMESERVERS, GET_INFO
+- Contact info flattening + phone number formatting via `libphonenumber-js`
+- Pricing cache with Redis-backed 1-hour TTL + warmup for common TLDs
+- Stripe webhook routes (checkout.session.completed, payment_intent.succeeded/failed, charge.refunded)
+- Stripe pricing calculation (wholesale + ICANN fee + service fee)
+- Unit tests for state machine, XML parser, rate limiter, queue, error categorization
+
+**Phase 4: Integration + Security** 🔲 NOT STARTED
+- Register domain routes in `server.ts` (routes defined but not mounted)
+- JWT authentication middleware
+- Authorization checks on domain routes (prevent IDOR on `/domains/jobs/:jobId`)
+- Stripe webhook signature verification (currently parses body without verifying — **critical security gap**)
+- Install `stripe` npm package (not yet in dependencies)
+- Redis pub/sub for worker → SSE event streaming (worker currently logs to console)
+- Payment verification flow: Stripe checkout → verify payment → trigger registration
+
+**Phase 5: GitHub + Cloudflare Workers** 🔲 NOT STARTED
+- GitHub worker: verify org exists via API → repo creation + branch protection + `.github` defaults
+- GitHub OAuth flow (`admin:org` scope)
+- Cloudflare worker: user OAuth → zone creation + DNS record management
+- Cloudflare OAuth flow for zone management access
+
+**Phase 6: DNS Wiring Worker** 🔲 NOT STARTED
+- Auto-configure MX, SPF, DKIM, DMARC, CNAME after all services complete
 - DNS health checker: validate records via `dns.resolve()`
-- CLI client: interactive mode with guided GitHub org step + SSE stream rendering
-- Credential handoff: encrypt → display once → purge
-- `.forj/credentials.json` generation + `.gitignore` injection
-- `forj status` command
+- Powers `forj dns check` and `forj dns fix` CLI commands
 
-**Week 3:** Agent Mode + Polish
-- `--non-interactive` flag: skip prompts, use flag values
-- `--json` flag: structured output for AI agents
-- `--github-org` flag: skip guided step for existing orgs
-- Error handling: partial failure recovery, per-worker retry with exponential backoff
-- `forj add <service>` command for post-init provisioning
-- `forj dns check` / `forj dns fix` commands
-- API key auth + rate limiting
-- Stripe checkout: domain fee + service fee in single transaction
+**Phase 7: Auth + Credential Security** 🔲 NOT STARTED
+- OAuth flows: GitHub (user auth), Cloudflare (zone access)
+- API key generation for agent tier (long-lived, scoped: `agent:provision`, `agent:read`)
+- AES-256-GCM credential encryption on server
+- One-time credential delivery + server-side purge
+- MCP tool definition for agent discoverability
 
-**Week 4:** Ship
+**Phase 8: Ship**
 - Landing page + CLI demo GIF
 - `npm publish forj-cli` to registry
 - Show HN post + dev Twitter launch
+- End-to-end testing: `forj init` → domain check → provisioning → credentials
 - 50 projects provisioned target
 
 ### V2 - Deployment Platforms (Post-Validation)
@@ -418,7 +486,7 @@ gh pr create --base stack-1-monorepo --head stack-2-vite
 
 ### Current Repository State
 
-The landing page (`packages/landing`) has been implemented and is on main. Future feature work should follow the Graphite stacking method outlined above.
+The landing page, CLI client, API server scaffold, and Namecheap domain integration are all implemented and merged to main. The CLI is a production-ready thin client; the API has domain routes defined (not yet mounted) with full Namecheap API coverage, rate limiting, priority queuing, and Stripe webhook stubs. Next milestone is Phase 4 (integration glue + security middleware). Future feature work should follow the Graphite stacking method outlined above.
 
 ## Common Commands
 
@@ -504,34 +572,41 @@ These are logically part of the landing page but must live at the root because V
 - Shared utilities live in `/lib/` (root level)
 - All three work together as a single deployed application on Vercel
 
-### Future Project Structure (Not Yet Implemented)
+### Package Architecture (Implemented)
 
 ```
 /packages
-  /cli          - CLI client (commander.js + inquirer)
-  /api          - Fastify API server
-  /workers      - BullMQ worker implementations
-  /shared       - Shared types, utilities
-/infrastructure - Deployment configs
+  /cli          - CLI client (commander.js + inquirer) — ✅ complete
+  /api          - Fastify API server — ✅ scaffold + domain routes + Stripe webhooks
+  /workers      - BullMQ worker implementations — ✅ domain worker complete
+  /shared       - Shared types + Namecheap client + rate limiter + queue — ✅ complete
 ```
 
-**Planned commands** (once implemented):
+**Key dependencies by package:**
+
+`@forj/shared`: fast-xml-parser, libphonenumber-js, ioredis (peer)
+`@forj/api`: fastify, bullmq, ioredis, pg, @neondatabase/serverless, pino
+`@forj/workers`: bullmq, ioredis, @forj/shared
+`@forj/cli`: commander, inquirer, chalk, ora, eventsource
+
+**Commands:**
 ```bash
 # Development
-npm run dev          # Start API server + workers in watch mode
-npm run dev:cli      # Run CLI in development
+npm run dev                      # Run dev servers for all packages
+npm run dev -w packages/cli      # Run CLI in development (watch mode via tsup)
+npm run dev -w packages/api      # Start Fastify API server
 
 # Testing
-npm test             # Run all tests
-npm test -- <file>   # Run specific test file
+npm test                         # Run all tests
+npm test -w packages/shared      # Run shared package tests (Namecheap client, rate limiter, queue, state machine)
+
+# Build
+npm run build                    # Build all packages
+npm run build -w packages/cli    # Build CLI (outputs to dist/cli.js with shebang)
 
 # Database
-npm run db:migrate   # Run Postgres migrations
-npm run db:seed      # Seed development data
-
-# Build & Deploy
-npm run build        # Compile TypeScript for all packages
-npm run deploy       # Deploy to Railway/Render
+npm run db:migrate               # Run Postgres migrations
+npm run db:seed                  # Seed development data
 ```
 
 ## Security Considerations
@@ -540,9 +615,12 @@ npm run deploy       # Deploy to Railway/Render
 2. **Audit all OAuth token access** — Log every read/use of GitHub/Cloudflare tokens
 3. **Validate all external API responses** — Never trust GitHub/Cloudflare/Namecheap API data without schema validation
 4. **Namecheap API keys** — Store encrypted at rest, rotate regularly, use separate keys per environment
-5. **Rate limiting** — Implement per-user and per-IP rate limits from day one
-6. **Stripe webhook verification** — Always verify webhook signatures to prevent payment manipulation
-7. **Penetration test before public launch** — Credential handoff flow is primary attack surface
+5. **Rate limiting** — ✅ Redis-backed sliding window rate limiter implemented for Namecheap API (20 req/min). Per-user/per-IP API rate limiting still needed on Fastify routes.
+6. **Stripe webhook verification** — ⚠️ **CRITICAL: Not yet implemented.** Current webhook handler parses body without signature verification. Must implement `stripe.webhooks.constructEvent()` with raw body before production. Without this, anyone can forge webhooks and trigger registrations without payment.
+7. **Authorization (IDOR)** — ⚠️ **CRITICAL: `/domains/jobs/:jobId` has no ownership check.** Job IDs are enumerable; attacker could iterate and access other users' domain job data. Must verify `request.user.id` owns the job before returning data.
+8. **Authentication middleware** — ⚠️ Domain routes have TODO comments noting auth is missing. JWT verification must be added to all domain routes before production.
+9. **Penetration test before public launch** — Credential handoff flow is primary attack surface
+10. **Error sanitization** — ✅ Namecheap API keys are sanitized in error messages to prevent credential leakage in logs
 
 ## Target Users
 
