@@ -39,6 +39,7 @@ export type {
   ProjectInitRequest,
   ProjectInitResponse,
   AddServiceRequest,
+  AddServiceResponse,
 } from './projects.js';
 
 // SSE event types

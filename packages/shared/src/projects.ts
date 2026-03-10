@@ -21,8 +21,15 @@ export interface ProjectInitResponse {
 /**
  * Add service request
  * POST /projects/:id/services
- * Response: ApiResponse<{ message: string }> with success status
  */
 export interface AddServiceRequest {
   service: ServiceType;
+}
+
+/**
+ * Add service response
+ * Note: Wrapped in ApiResponse envelope by API layer
+ */
+export interface AddServiceResponse {
+  message: string;
 }

@@ -188,7 +188,7 @@ async function interactiveInit(
   logger.log(chalk.bold('Provisioning...'));
 
   const provisioningResult = await streamProvisioningProgress(
-    `/projects/${projectId}/stream`
+    `/events/stream/${projectId}`
   );
 
   const durationMs = Date.now() - startTime;
