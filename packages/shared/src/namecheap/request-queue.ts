@@ -13,6 +13,7 @@
 
 import type { Redis } from 'ioredis';
 import type { RateLimiter } from './rate-limiter.js';
+import { QueueEventEmitter } from './queue-events.js';
 
 /**
  * Request executor function type
@@ -65,6 +66,7 @@ export class NamecheapRequestQueue {
   private readonly redis: Redis;
   private readonly keyPrefix: string;
   private readonly executor: RequestExecutor;
+  public readonly events: QueueEventEmitter;
 
   // In-memory priority queues
   private readonly queues: Map<RequestPriority, QueuedRequest<any>[]> = new Map([
@@ -72,6 +74,14 @@ export class NamecheapRequestQueue {
     [RequestPriority.INTERACTIVE, []],
     [RequestPriority.BACKGROUND, []],
   ]);
+
+  // Fairness tracking: userId -> count of pending requests
+  private readonly userRequestCounts: Map<string, number> = new Map();
+
+  // Metrics tracking
+  private totalEnqueued = 0;
+  private totalProcessed = 0;
+  private totalFailed = 0;
 
   // Processing state
   private isProcessing = false;
@@ -87,6 +97,7 @@ export class NamecheapRequestQueue {
     this.redis = redis;
     this.executor = executor;
     this.keyPrefix = keyPrefix;
+    this.events = new QueueEventEmitter();
   }
 
   /**
@@ -124,6 +135,26 @@ export class NamecheapRequestQueue {
       }
 
       queue.push(request);
+      this.totalEnqueued++;
+
+      // Track user request count for fairness
+      if (userId) {
+        this.userRequestCounts.set(userId, (this.userRequestCounts.get(userId) || 0) + 1);
+      }
+
+      // Emit enqueued event (guarded to prevent listener exceptions)
+      try {
+        const position = this.getQueuePosition(priority);
+        this.events.emitEnqueued({
+          requestId: request.id,
+          command,
+          priority,
+          userId,
+          position,
+        });
+      } catch (emitError) {
+        console.error('Error in enqueued event listener:', emitError);
+      }
 
       // Start processing if not already running
       if (!this.isProcessing) {
@@ -172,17 +203,29 @@ export class NamecheapRequestQueue {
     background: number;
     total: number;
     processing: boolean;
+    totalEnqueued: number;
+    totalProcessed: number;
+    totalFailed: number;
+    utilizationPercent: number;
   }> {
     const critical = this.queues.get(RequestPriority.CRITICAL)?.length || 0;
     const interactive = this.queues.get(RequestPriority.INTERACTIVE)?.length || 0;
     const background = this.queues.get(RequestPriority.BACKGROUND)?.length || 0;
+    const total = critical + interactive + background;
+
+    // Calculate utilization based on rate limiter
+    const rateLimitStats = await this.rateLimiter.getStats();
 
     return {
       critical,
       interactive,
       background,
-      total: critical + interactive + background,
+      total,
       processing: this.isProcessing,
+      totalEnqueued: this.totalEnqueued,
+      totalProcessed: this.totalProcessed,
+      totalFailed: this.totalFailed,
+      utilizationPercent: rateLimitStats.utilizationPercent,
     };
   }
 
@@ -212,6 +255,20 @@ export class NamecheapRequestQueue {
   }
 
   /**
+   * Decrement user request count after processing
+   */
+  private decrementUserRequestCount(userId?: string): void {
+    if (!userId) return;
+
+    const count = this.userRequestCounts.get(userId) || 0;
+    if (count <= 1) {
+      this.userRequestCounts.delete(userId);
+    } else {
+      this.userRequestCounts.set(userId, count - 1);
+    }
+  }
+
+  /**
    * Process next request from queue
    */
   private async processNext(): Promise<void> {
@@ -237,17 +294,93 @@ export class NamecheapRequestQueue {
       return;
     }
 
+    const startTime = Date.now();
+    const waitTimeMs = startTime - request.enqueuedAt;
+
+    // Emit processing event (guarded to prevent listener exceptions from breaking queue)
+    try {
+      this.events.emitProcessing({
+        requestId: request.id,
+        command: request.command,
+        priority: request.priority,
+        userId: request.userId,
+        waitTimeMs,
+      });
+    } catch (emitError) {
+      // Listener threw - log but don't break request processing
+      console.error('Error in processing event listener:', emitError);
+    }
+
     // Execute the request using the provided executor
     try {
       const result = await this.executor(request.command, request.params);
       request.resolve(result);
+
+      const processingTimeMs = Date.now() - startTime;
+      this.totalProcessed++;
+
+      // Decrement user request count
+      this.decrementUserRequestCount(request.userId);
+
+      // Emit completed event (guarded to prevent listener exceptions)
+      try {
+        this.events.emitCompleted({
+          requestId: request.id,
+          command: request.command,
+          priority: request.priority,
+          userId: request.userId,
+          processingTimeMs,
+        });
+      } catch (emitError) {
+        console.error('Error in completed event listener:', emitError);
+      }
     } catch (error) {
+      this.totalFailed++;
+
+      // Decrement user request count
+      this.decrementUserRequestCount(request.userId);
+
+      // Emit failed event (guarded to prevent listener exceptions)
+      try {
+        this.events.emitFailed({
+          requestId: request.id,
+          command: request.command,
+          priority: request.priority,
+          userId: request.userId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      } catch (emitError) {
+        console.error('Error in failed event listener:', emitError);
+      }
+
       request.reject(error instanceof Error ? error : new Error(String(error)));
+    }
+
+    // Emit metrics update (guarded to prevent unhandled rejections)
+    try {
+      const stats = await this.getStats();
+      this.events.emitMetricsUpdate({
+        metrics: {
+          critical: stats.critical,
+          interactive: stats.interactive,
+          background: stats.background,
+          total: stats.total,
+          processing: stats.processing,
+          utilizationPercent: stats.utilizationPercent,
+        },
+      });
+    } catch (statsError) {
+      // getStats() or emit failed - avoid unhandled promise rejection
+      console.error('Error emitting queue metrics update:', statsError);
     }
   }
 
   /**
-   * Dequeue next request by priority
+   * Dequeue next request by priority with fairness
+   *
+   * Selects the next request from the user with the fewest pending requests
+   * within the current priority level. System requests (without userId) are
+   * served immediately.
    *
    * @returns Next request to process, or null if queue is empty
    */
@@ -259,10 +392,35 @@ export class NamecheapRequestQueue {
       RequestPriority.BACKGROUND,
     ]) {
       const queue = this.queues.get(priority);
-      if (queue && queue.length > 0) {
-        // Remove and return first request
+      if (!queue || queue.length === 0) continue;
+
+      // If only one request, return it
+      if (queue.length === 1) {
         return queue.shift() || null;
       }
+
+      // Find user with fewest pending requests (fairness)
+      let minCount = Infinity;
+      let minIndex = 0;
+
+      for (let i = 0; i < queue.length; i++) {
+        const request = queue[i];
+        const userId = request.userId;
+
+        if (userId === undefined || userId === null) {
+          // No user ID, serve immediately (system requests)
+          return queue.splice(i, 1)[0];
+        }
+
+        const count = this.userRequestCounts.get(userId) || 0;
+        if (count < minCount) {
+          minCount = count;
+          minIndex = i;
+        }
+      }
+
+      // Remove and return request with fewest pending requests
+      return queue.splice(minIndex, 1)[0];
     }
 
     return null;

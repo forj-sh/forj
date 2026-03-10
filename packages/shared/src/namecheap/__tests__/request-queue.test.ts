@@ -394,4 +394,199 @@ describe('NamecheapRequestQueue', () => {
       expect(stats.processing).toBe(false);
     });
   });
+
+  describe('fairness - user request tracking', () => {
+    beforeEach(() => {
+      mockRateLimiter.tryAcquire.mockResolvedValue({
+        allowed: true,
+        currentCount: 1,
+        remaining: 19,
+        resetMs: 60000,
+      });
+      mockExecutor.mockResolvedValue({ success: true });
+    });
+
+    it('should serve system requests (no userId) immediately', async () => {
+      const results: string[] = [];
+
+      mockExecutor.mockImplementation(async (command) => {
+        results.push(command);
+        return { success: true };
+      });
+
+      // Submit user request first, then system request
+      const userPromise = queue.submit('user-command', {}, RequestPriority.INTERACTIVE, 'user-123');
+      const systemPromise = queue.submit('system-command', {}, RequestPriority.INTERACTIVE);
+
+      await new Promise((resolve) => setTimeout(resolve, 250));
+
+      await Promise.all([userPromise, systemPromise]);
+
+      // System request should be processed first despite being submitted second
+      expect(results[0]).toBe('system-command');
+      expect(results[1]).toBe('user-command');
+    });
+
+    it('should prioritize users with fewer pending requests', async () => {
+      const results: string[] = [];
+
+      mockExecutor.mockImplementation(async (command) => {
+        results.push(command);
+        // Slow down execution to allow multiple requests to queue
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        return { success: true };
+      });
+
+      // User A submits 3 requests, User B submits 1
+      const a1 = queue.submit('a1', {}, RequestPriority.INTERACTIVE, 'user-a');
+      const a2 = queue.submit('a2', {}, RequestPriority.INTERACTIVE, 'user-a');
+      const a3 = queue.submit('a3', {}, RequestPriority.INTERACTIVE, 'user-a');
+      const b1 = queue.submit('b1', {}, RequestPriority.INTERACTIVE, 'user-b');
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      await Promise.all([a1, a2, a3, b1]);
+
+      // User B's request should be processed early due to fairness
+      // Exact order depends on timing, but B should not be last
+      expect(results).toContain('b1');
+      expect(results.indexOf('b1')).toBeLessThan(results.length - 1);
+    });
+
+    it('should not treat empty string userId as system request', async () => {
+      const results: string[] = [];
+
+      mockExecutor.mockImplementation(async (command) => {
+        results.push(command);
+        return { success: true };
+      });
+
+      // Submit requests with empty string userId
+      const emptyPromise = queue.submit('empty-user', {}, RequestPriority.INTERACTIVE, '');
+      const realPromise = queue.submit('real-user', {}, RequestPriority.INTERACTIVE, 'user-123');
+
+      await new Promise((resolve) => setTimeout(resolve, 250));
+
+      await Promise.all([emptyPromise, realPromise]);
+
+      // Empty string should be treated as a user, not system request
+      // Both should be processed in order
+      expect(results).toHaveLength(2);
+    });
+  });
+
+  describe('event emission', () => {
+    beforeEach(() => {
+      mockRateLimiter.tryAcquire.mockResolvedValue({
+        allowed: true,
+        currentCount: 1,
+        remaining: 19,
+        resetMs: 60000,
+      });
+    });
+
+    it('should emit enqueued event when request is submitted', (done) => {
+      queue.events.on('enqueued', (event) => {
+        expect(event.requestId).toBeDefined();
+        expect(event.command).toBe('test.command');
+        expect(event.priority).toBe(RequestPriority.INTERACTIVE);
+        expect(event.userId).toBe('user-123');
+        expect(event.position).toBeDefined();
+        done();
+      });
+
+      queue.submit('test.command', {}, RequestPriority.INTERACTIVE, 'user-123');
+    });
+
+    it('should emit processing event when request starts', (done) => {
+      mockExecutor.mockImplementation(async () => {
+        // Slow down to ensure event is captured
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return { success: true };
+      });
+
+      queue.events.on('processing', (event) => {
+        expect(event.requestId).toBeDefined();
+        expect(event.command).toBe('test.command');
+        expect(event.waitTimeMs).toBeGreaterThanOrEqual(0);
+        done();
+      });
+
+      queue.submit('test.command', {}, RequestPriority.INTERACTIVE, 'user-123');
+    });
+
+    it('should emit completed event on successful execution', (done) => {
+      mockExecutor.mockResolvedValue({ success: true });
+
+      queue.events.on('completed', (event) => {
+        expect(event.requestId).toBeDefined();
+        expect(event.command).toBe('test.command');
+        expect(event.processingTimeMs).toBeGreaterThanOrEqual(0);
+        done();
+      });
+
+      queue.submit('test.command', {}, RequestPriority.INTERACTIVE, 'user-123');
+    });
+
+    it('should emit failed event on execution error', (done) => {
+      mockExecutor.mockRejectedValue(new Error('API error'));
+
+      queue.events.on('failed', (event) => {
+        expect(event.requestId).toBeDefined();
+        expect(event.command).toBe('test.command');
+        expect(event.error).toBe('API error');
+        done();
+      });
+
+      queue.submit('test.command', {}, RequestPriority.INTERACTIVE, 'user-123').catch(() => {
+        // Expected to reject
+      });
+    });
+
+    it('should emit metrics update after request completes', (done) => {
+      mockExecutor.mockResolvedValue({ success: true });
+      mockRateLimiter.getStats = jest.fn().mockResolvedValue({
+        currentCount: 5,
+        maxRequests: 20,
+        remaining: 15,
+        utilizationPercent: 25,
+        resetMs: 30000,
+      });
+
+      queue.events.on('metrics_update', (event) => {
+        expect(event.metrics).toBeDefined();
+        expect(event.metrics.utilizationPercent).toBe(25);
+        expect(event.metrics.processing).toBe(true);
+        done();
+      });
+
+      queue.submit('test.command', {}, RequestPriority.INTERACTIVE);
+    });
+
+    it('should not crash queue if event listener throws', async () => {
+      mockExecutor.mockResolvedValue({ success: true });
+
+      // Add a listener that throws
+      queue.events.on('processing', () => {
+        throw new Error('Listener error');
+      });
+
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+
+      const promise = queue.submit('test.command', {}, RequestPriority.INTERACTIVE);
+
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      // Request should still complete despite listener error
+      await expect(promise).resolves.toEqual({ success: true });
+
+      // Error should be logged
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'Error in processing event listener:',
+        expect.any(Error)
+      );
+
+      consoleErrorSpy.mockRestore();
+    });
+  });
 });
