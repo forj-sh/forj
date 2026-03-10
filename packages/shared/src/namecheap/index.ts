@@ -46,3 +46,6 @@ export { NamecheapClient } from './client.js';
 
 // Constants
 export { NAMECHEAP_URLS, REQUEST_TIMEOUT_MS, USER_AGENT } from './constants.js';
+
+// Utilities
+export { flattenContactInfo, splitDomain, formatPhoneNumber } from './utils.js';

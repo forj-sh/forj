@@ -304,4 +304,215 @@ describe('NamecheapClient', () => {
       expect(results[0].wholesalePrice).toBe(32.88);
     });
   });
+
+  describe('createDomain', () => {
+    const mockContactInfo = {
+      firstName: 'John',
+      lastName: 'Doe',
+      address1: '123 Main St',
+      city: 'San Francisco',
+      stateProvince: 'CA',
+      postalCode: '94102',
+      country: 'US',
+      phone: '+1.4155551234',
+      emailAddress: 'john@example.com',
+    };
+
+    it('should throw error when isPremiumDomain is true but premiumPrice is not provided', async () => {
+      await expect(
+        client.createDomain({
+          domainName: 'premium.com',
+          years: 1,
+          registrant: mockContactInfo,
+          tech: mockContactInfo,
+          admin: mockContactInfo,
+          auxBilling: mockContactInfo,
+          addFreeWhoisguard: false,
+          wgEnabled: false,
+          isPremiumDomain: true,
+          // premiumPrice missing
+        })
+      ).rejects.toThrow('premiumPrice is required when isPremiumDomain is true');
+    });
+
+    it('should register a standard domain', async () => {
+      const mockXml = `
+        <ApiResponse Status="OK">
+          <Errors/>
+          <RequestedCommand>namecheap.domains.create</RequestedCommand>
+          <CommandResponse>
+            <DomainCreateResult Domain="example.com" Registered="true" ChargedAmount="12.98"
+              DomainID="12345" OrderID="67890" TransactionID="54321"
+              WhoisguardEnable="false" NonRealTimeDomain="false"/>
+          </CommandResponse>
+          <ExecutionTime>2.5</ExecutionTime>
+        </ApiResponse>
+      `;
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        text: async () => mockXml,
+      });
+
+      const result = await client.createDomain({
+        domainName: 'example.com',
+        years: 1,
+        registrant: mockContactInfo,
+        tech: mockContactInfo,
+        admin: mockContactInfo,
+        auxBilling: mockContactInfo,
+        addFreeWhoisguard: false,
+        wgEnabled: false,
+      });
+
+      expect(result.domain).toBe('example.com');
+      expect(result.registered).toBe(true);
+      expect(result.chargedAmount).toBe(12.98);
+      expect(result.domainId).toBe(12345);
+      expect(result.orderId).toBe(67890);
+      expect(result.transactionId).toBe(54321);
+      expect(result.whoisguardEnabled).toBe(false);
+      expect(result.nonRealTimeDomain).toBe(false);
+    });
+
+    it('should register a premium domain with price', async () => {
+      const mockXml = `
+        <ApiResponse Status="OK">
+          <Errors/>
+          <RequestedCommand>namecheap.domains.create</RequestedCommand>
+          <CommandResponse>
+            <DomainCreateResult Domain="premium.com" Registered="true" ChargedAmount="2500.00"
+              DomainID="12346" OrderID="67891" TransactionID="54322"
+              WhoisguardEnable="true" NonRealTimeDomain="false"/>
+          </CommandResponse>
+          <ExecutionTime>3.0</ExecutionTime>
+        </ApiResponse>
+      `;
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        text: async () => mockXml,
+      });
+
+      const result = await client.createDomain({
+        domainName: 'premium.com',
+        years: 1,
+        registrant: mockContactInfo,
+        tech: mockContactInfo,
+        admin: mockContactInfo,
+        auxBilling: mockContactInfo,
+        addFreeWhoisguard: true,
+        wgEnabled: true,
+        isPremiumDomain: true,
+        premiumPrice: 2500.0,
+      });
+
+      expect(result.domain).toBe('premium.com');
+      expect(result.registered).toBe(true);
+      expect(result.chargedAmount).toBe(2500.0);
+      expect(result.whoisguardEnabled).toBe(true);
+
+      // Verify premium params were sent
+      const fetchCall = (global.fetch as jest.Mock).mock.calls[0][0];
+      expect(fetchCall).toContain('IsPremiumDomain=true');
+      expect(fetchCall).toContain('PremiumPrice=2500');
+    });
+
+    it('should register domain with custom nameservers', async () => {
+      const mockXml = `
+        <ApiResponse Status="OK">
+          <Errors/>
+          <RequestedCommand>namecheap.domains.create</RequestedCommand>
+          <CommandResponse>
+            <DomainCreateResult Domain="example.com" Registered="true" ChargedAmount="12.98"
+              DomainID="12345" OrderID="67890" TransactionID="54321"
+              WhoisguardEnable="false" NonRealTimeDomain="false"/>
+          </CommandResponse>
+          <ExecutionTime>2.5</ExecutionTime>
+        </ApiResponse>
+      `;
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        text: async () => mockXml,
+      });
+
+      await client.createDomain({
+        domainName: 'example.com',
+        years: 1,
+        registrant: mockContactInfo,
+        tech: mockContactInfo,
+        admin: mockContactInfo,
+        auxBilling: mockContactInfo,
+        addFreeWhoisguard: false,
+        wgEnabled: false,
+        nameservers: ['ns1.example.com', 'ns2.example.com'],
+      });
+
+      // Verify nameservers were sent
+      const fetchCall = (global.fetch as jest.Mock).mock.calls[0][0];
+      expect(fetchCall).toContain('Nameservers=ns1.example.com%2Cns2.example.com');
+    });
+  });
+
+  describe('setCustomNameservers', () => {
+    it('should throw error for empty nameserver list', async () => {
+      await expect(client.setCustomNameservers('example', 'com', [])).rejects.toThrow(
+        'At least one nameserver is required'
+      );
+    });
+
+    it('should set custom nameservers successfully', async () => {
+      const mockXml = `
+        <ApiResponse Status="OK">
+          <Errors/>
+          <RequestedCommand>namecheap.domains.dns.setCustom</RequestedCommand>
+          <CommandResponse>
+            <DomainDNSSetCustomResult Domain="example.com" Updated="true"/>
+          </CommandResponse>
+          <ExecutionTime>0.8</ExecutionTime>
+        </ApiResponse>
+      `;
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        text: async () => mockXml,
+      });
+
+      const result = await client.setCustomNameservers('example', 'com', [
+        'ns1.example.com',
+        'ns2.example.com',
+      ]);
+
+      expect(result).toBe(true);
+
+      // Verify parameters were sent correctly
+      const fetchCall = (global.fetch as jest.Mock).mock.calls[0][0];
+      expect(fetchCall).toContain('SLD=example');
+      expect(fetchCall).toContain('TLD=com');
+      expect(fetchCall).toContain('Nameservers=ns1.example.com%2Cns2.example.com');
+    });
+
+    it('should handle update failure', async () => {
+      const mockXml = `
+        <ApiResponse Status="OK">
+          <Errors/>
+          <RequestedCommand>namecheap.domains.dns.setCustom</RequestedCommand>
+          <CommandResponse>
+            <DomainDNSSetCustomResult Domain="example.com" Updated="false"/>
+          </CommandResponse>
+          <ExecutionTime>0.5</ExecutionTime>
+        </ApiResponse>
+      `;
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        text: async () => mockXml,
+      });
+
+      const result = await client.setCustomNameservers('example', 'com', ['ns1.example.com']);
+
+      expect(result).toBe(false);
+    });
+  });
 });
