@@ -24,9 +24,13 @@ export async function errorHandler(
   }, 'Request error');
 
   // Send error response
+  // In production, hide internal error details for 5xx errors
+  const isProduction = process.env.NODE_ENV === 'production';
+  const isInternalError = statusCode >= 500;
+
   reply.status(statusCode).send({
     success: false,
-    error: message,
+    error: isProduction && isInternalError ? 'Internal Server Error' : message,
     code: error.code,
     ...(process.env.NODE_ENV !== 'production' && {
       stack: error.stack,

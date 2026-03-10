@@ -10,7 +10,7 @@ import { healthRoutes } from './routes/health.js';
  */
 export async function createServer() {
   const server = Fastify({
-    logger: true,
+    logger: logger as any,
     disableRequestLogging: false,
     requestIdLogLabel: 'reqId',
   });
