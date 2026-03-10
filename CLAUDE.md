@@ -279,99 +279,30 @@ forj add vercel             # Add services post-init
 forj dns check              # Verify DNS configuration
 ```
 
-## Build Plan (4 Week MVP → V2 → V3)
+## Build Progress
 
-### V1 - 4 Week MVP (Core Infrastructure)
+| Phase | Status | Description |
+|-------|--------|-------------|
+| 1. CLI Client | ✅ Complete | All 6 commands, interactive + non-interactive modes |
+| 2. API Server Scaffold | ✅ Complete | Fastify + Postgres + BullMQ + Redis (PRs #12-#18) |
+| 3. Namecheap Domain Integration | ✅ Complete | Full API client, rate limiter, priority queue, domain worker (PRs #19-#30) |
+| 4. Integration + Security | 🔲 Next | Route mounting, auth middleware, Stripe verification, SSE wiring |
+| 5. GitHub + Cloudflare Workers | 🔲 Planned | GitHub OAuth + repos, Cloudflare OAuth + zones |
+| 6. DNS Wiring Worker | 🔲 Planned | MX, SPF, DKIM, DMARC auto-configuration |
+| 7. Auth + Credential Security | 🔲 Planned | Agent API keys, credential encryption, MCP definition |
+| 8. Ship | 🔲 Planned | npm publish, demo, launch |
 
-**Phase 1: CLI Client** ✅ COMPLETE
-- All 6 commands implemented: `init`, `status`, `add`, `dns` (check/fix), `login`, `logout`
-- Interactive mode with guided GitHub org step + SSE stream rendering
-- Non-interactive mode: `--non-interactive`, `--json`, `--github-org` flags for AI agents
-- API client (`lib/api-client.ts`) with Bearer token auth
-- SSE client (`lib/sse-client.ts`) for real-time provisioning progress
-- Config management (`~/.forj/config.json`), project state (`.forj/config.json`)
-- Credential handoff: `.forj/credentials.json` generation + `.gitignore` injection
-- Build: tsup (ESM, Node 18+), bin entry `forj` → `dist/cli.js`
-
-**Phase 2: API Server Scaffold** ✅ COMPLETE (Stacks 1-7, PRs #12-#18)
-- Fastify server with TypeScript + Pino structured logging
-- Neon Postgres (serverless) with connection pooling
-- BullMQ + Redis job queue infrastructure (5 queues: DOMAIN_CHECK, PROJECT_INIT, SERVICE_PROVISION, DNS_CHECK, DNS_FIX)
-- SSE streaming endpoint for real-time CLI updates
-- Project management routes (CRUD + status)
-- Mock auth + domain routes (replaced by real implementation in Phase 3)
-- Shared types foundation (`@forj/shared`)
-
-**Phase 3: Namecheap Domain Integration** ✅ COMPLETE (Stacks 1-12, PRs #19-#30)
-- Full Namecheap API client: `checkDomains`, `getTldPricing`, `createDomain`, `setCustomNameservers`, `getDomainInfo`, `renewDomain`, `listDomains`, `getBalances`
-- Custom XML parser using `fast-xml-parser` for Namecheap's attribute-based responses
-- Redis-backed sliding window rate limiter (Lua script, atomic operations, 20 req/min limit)
-- 3-tier priority queue with fairness: CRITICAL (registrations) > INTERACTIVE (availability checks) > BACKGROUND (pricing/monitoring)
-- Error categorization: 50+ Namecheap error codes mapped to 6 categories (AUTH, VALIDATION, PAYMENT, AVAILABILITY, PROVIDER, UNKNOWN) with retryability flags and user-facing messages
-- Domain worker state machine: PENDING → QUEUED → CHECKING → AVAILABLE → REGISTERING → CONFIGURING → COMPLETE (with FAILED → RETRYING branches)
-- BullMQ job handlers for 5 operation types: CHECK, REGISTER, RENEW, SET_NAMESERVERS, GET_INFO
-- Contact info flattening + phone number formatting via `libphonenumber-js`
-- Pricing cache with Redis-backed 1-hour TTL + warmup for common TLDs
-- Stripe webhook routes (checkout.session.completed, payment_intent.succeeded/failed, charge.refunded)
-- Stripe pricing calculation (wholesale + ICANN fee + service fee)
-- Unit tests for state machine, XML parser, rate limiter, queue, error categorization
-
-**Phase 4: Integration + Security** 🔲 NOT STARTED
-- Register domain routes in `server.ts` (routes defined but not mounted)
-- JWT authentication middleware
-- Authorization checks on domain routes (prevent IDOR on `/domains/jobs/:jobId`)
-- Stripe webhook signature verification (currently parses body without verifying — **critical security gap**)
-- Install `stripe` npm package (not yet in dependencies)
-- Redis pub/sub for worker → SSE event streaming (worker currently logs to console)
-- Payment verification flow: Stripe checkout → verify payment → trigger registration
-
-**Phase 5: GitHub + Cloudflare Workers** 🔲 NOT STARTED
-- GitHub worker: verify org exists via API → repo creation + branch protection + `.github` defaults
-- GitHub OAuth flow (`admin:org` scope)
-- Cloudflare worker: user OAuth → zone creation + DNS record management
-- Cloudflare OAuth flow for zone management access
-
-**Phase 6: DNS Wiring Worker** 🔲 NOT STARTED
-- Auto-configure MX, SPF, DKIM, DMARC, CNAME after all services complete
-- DNS health checker: validate records via `dns.resolve()`
-- Powers `forj dns check` and `forj dns fix` CLI commands
-
-**Phase 7: Auth + Credential Security** 🔲 NOT STARTED
-- OAuth flows: GitHub (user auth), Cloudflare (zone access)
-- API key generation for agent tier (long-lived, scoped: `agent:provision`, `agent:read`)
-- AES-256-GCM credential encryption on server
-- One-time credential delivery + server-side purge
-- MCP tool definition for agent discoverability
-
-**Phase 8: Ship**
-- Landing page + CLI demo GIF
-- `npm publish forj-cli` to registry
-- Show HN post + dev Twitter launch
-- End-to-end testing: `forj init` → domain check → provisioning → credentials
-- 50 projects provisioned target
-
-### V2 - Deployment Platforms (Post-Validation)
-- Vercel worker: create project, link repo, set custom domain
-- Railway worker: create project, link repo, optional Postgres
-- DNS wiring updates: auto-add Vercel/Railway CNAMEs
-- `forj add vercel` / `forj add railway` commands
-
-### V3 - Enterprise & Recurring Revenue (Post-Scale)
-- Google Workspace reseller application (start at launch, not before)
-- Google Workspace worker: provision org, users, billing via Reseller API
-- AWS enterprise tier: cross-account IAM for teams that outgrew Vercel/Railway
-
-See `project-docs/forj-spec.md` Section 8 for detailed milestone checklists.
+**Full build plan with details, environment variables, and security gaps:** `project-docs/build-plan.md`
 
 ## Development Workflow
 
 ### Git Workflow: Graphite Stacking Method
 
-**IMPORTANT**: All feature development MUST follow the Graphite stacking methodology for incremental, reviewable PRs.
+**IMPORTANT**: All feature development MUST use the Graphite CLI (`gt`) for stacked PRs. Do NOT use raw `git` commands for branch management — use `gt create`, `gt modify`, `gt restack`, and `gt submit`.
 
 #### What is Graphite Stacking?
 
-Graphite stacking is a development workflow where you break large features into small, sequential pull requests that build on top of each other. Each PR (or "stack") is independently reviewable and mergeable.
+Graphite stacking is a development workflow where you break large features into small, sequential pull requests that build on top of each other. Each PR (or "stack") is independently reviewable and mergeable. The `gt` CLI handles all the branch/rebase complexity automatically.
 
 #### Why Use Graphite?
 
@@ -380,6 +311,28 @@ Graphite stacking is a development workflow where you break large features into 
 - **Easier debugging**: Isolate issues to specific stacks
 - **Better git history**: Each stack represents a logical unit of work
 - **Faster iteration**: Merge lower stacks while refining upper ones
+- **Automatic rebasing**: `gt restack` handles cascade rebases when lower stacks change
+
+#### Graphite CLI Commands (Required)
+
+```bash
+# ESSENTIAL COMMANDS — use these instead of git branch/checkout/rebase
+gt create -m "Stack 1: Description"      # Create new branch on top of current stack
+gt modify                                  # Amend current stack (after making changes)
+gt restack                                 # Rebase all stacks after lower stack changes
+gt submit                                  # Push all stacks + create/update PRs on GitHub
+gt log short                               # View your current stack
+gt checkout <branch>                       # Switch between stacks
+gt trunk                                   # Switch back to main
+
+# USEFUL COMMANDS
+gt info                                    # Show current branch info
+gt diff                                    # Show changes in current stack
+gt bottom / gt top                         # Navigate to bottom/top of stack
+gt up / gt down                            # Navigate one stack up/down
+gt delete <branch>                         # Remove a stack
+gt reorder                                 # Reorder stacks interactively
+```
 
 #### Graphite Workflow Steps
 
@@ -390,48 +343,70 @@ Break your feature into logical, sequential units. Each stack should:
 - Represent a complete logical unit
 - Be small enough to review in < 10 minutes
 
-Example: Landing page in 5 stacks:
-- Stack 1: Monorepo foundation
-- Stack 2: Vite + TypeScript setup
-- Stack 3: UI component conversion
-- Stack 4: Email waitlist functionality
-- Stack 5: Spam protection + deployment
+Example: Namecheap integration in 12 stacks:
+- Stack 1: XML parser foundation + types
+- Stack 2: Namecheap client core + error handling
+- Stack 3: Domain check + pricing methods
+- Stack 4: Domain registration + nameserver methods
+- Stack 5: Domain info, renewal, balance methods
+- Stack 6: Redis-backed rate limiter
+- Stack 7: Priority queue
+- Stack 8: Queue fairness + SSE event integration
+- Stack 9: Domain worker state machine
+- Stack 10: Domain worker job handlers
+- Stack 11: API routes + pricing cache
+- Stack 12: Stripe webhooks + production config
 
-**2. Create branches for each stack**
+**2. Create stacks with `gt create`**
 
 ```bash
 # Start from main
-git checkout main
+gt trunk
 
-# Create Stack 1 branch and make commits
-git checkout -b stack-1-feature-name
-# ... make changes ...
-git add -A && git commit -m "Stack 1: Description"
-git push -u origin stack-1-feature-name
+# Create Stack 1 — make changes, stage them, then:
+gt create -m "Stack 1: XML parser foundation + Namecheap types"
 
-# Create Stack 2 branch FROM Stack 1
-git checkout -b stack-2-next-feature stack-1-feature-name
+# Create Stack 2 — automatically stacks on top of Stack 1
 # ... make changes ...
-git add -A && git commit -m "Stack 2: Description"
-git push -u origin stack-2-next-feature
+gt create -m "Stack 2: Namecheap client core + error handling"
+
+# Create Stack 3 — stacks on top of Stack 2
+# ... make changes ...
+gt create -m "Stack 3: Domain check + pricing methods"
 
 # Continue for all stacks...
 ```
 
-**3. Create PRs in dependency order**
+**3. Submit all PRs at once**
 
 ```bash
+# Push all stacks and create/update PRs on GitHub
+gt submit
+
+# This creates PRs with correct base branches automatically:
 # PR #1: Stack 1 → main
-gh pr create --base main --head stack-1-feature-name --title "Stack 1: ..." --body "..."
-
-# PR #2: Stack 2 → Stack 1 (depends on PR #1)
-gh pr create --base stack-1-feature-name --head stack-2-next-feature --title "Stack 2: ..." --body "..."
-
-# PR #3: Stack 3 → Stack 2 (depends on PR #2)
-# etc...
+# PR #2: Stack 2 → Stack 1
+# PR #3: Stack 3 → Stack 2
+# etc.
 ```
 
-**4. PR template for stacks**
+**4. When you need to modify a lower stack**
+
+```bash
+# Go to the stack you need to change
+gt checkout stack-2-namecheap-client
+
+# Make your changes, then:
+gt modify                  # Amend the current stack
+
+# Rebase all stacks above it
+gt restack                 # Automatically rebases stacks 3-12
+
+# Push updated stacks
+gt submit
+```
+
+**5. PR template for stacks**
 
 Each PR should include:
 ```markdown
@@ -449,40 +424,22 @@ Brief description of changes in this stack
 Brief preview of what Stack X+1 will add
 ```
 
-**5. Merging stacks**
+**6. Merging stacks**
 
-Once a lower stack is approved:
-1. Merge Stack 1 → main
-2. Update Stack 2's base to main: `gh pr edit <PR#> --base main`
-3. Merge Stack 2 → main
-4. Continue up the stack
+Use Graphite's merge queue or merge from GitHub:
+1. Merge Stack 1 → main (Graphite auto-retargets Stack 2 to main)
+2. Merge Stack 2 → main
+3. Continue up the stack
 
-**6. What NOT to do**
+**7. What NOT to do**
 
+❌ **Don't use `git checkout -b` for stacked branches** — use `gt create`
+❌ **Don't manually rebase stacks** — use `gt restack`
+❌ **Don't use `gh pr create` with manual base branches** — use `gt submit`
 ❌ **Don't commit everything to main first, then create PRs** (defeats the purpose)
 ❌ **Don't make stacks too large** (> 500 lines of changes)
 ❌ **Don't make stacks too granular** (< 50 lines, unless critical)
 ❌ **Don't create stacks with unclear dependencies**
-
-#### Example: Landing Page Implementation (Correct Way)
-
-```bash
-# Stack 1: Monorepo foundation
-git checkout -b stack-1-monorepo
-# ... create package structure, workspace config ...
-git commit -m "Stack 1: Initialize monorepo structure"
-git push -u origin stack-1-monorepo
-gh pr create --base main --head stack-1-monorepo
-
-# Stack 2: Build on Stack 1
-git checkout -b stack-2-vite stack-1-monorepo
-# ... add Vite config, TypeScript setup ...
-git commit -m "Stack 2: Set up Vite + TypeScript"
-git push -u origin stack-2-vite
-gh pr create --base stack-1-monorepo --head stack-2-vite
-
-# Continue pattern for remaining stacks...
-```
 
 ### Current Repository State
 
