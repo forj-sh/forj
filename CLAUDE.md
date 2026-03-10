@@ -96,17 +96,24 @@ The CLI client defines these endpoints (all expect `{ success, data, error, mess
 
 | Endpoint | Method | Purpose | Status |
 |----------|--------|---------|--------|
-| `/domains/check` | POST | Domain availability + pricing | ✅ Route defined, not mounted |
-| `/domains/register` | POST | Create registration job | ✅ Route defined, not mounted |
-| `/domains/jobs/:jobId` | GET | Job status polling | ✅ Route defined, not mounted |
-| `/projects/init` | POST | Create project record | ✅ Implemented |
-| `/projects/:id/stream` | GET (SSE) | Real-time provisioning events | ✅ Implemented |
-| `/projects/:id/status` | GET | Project + service status | ✅ Implemented |
-| `/projects/:id/services` | POST | Add service post-init | ✅ Implemented |
-| `/projects/:id/dns/health` | GET | DNS record validation | 🔲 Not started |
-| `/projects/:id/dns/fix` | POST | Auto-repair DNS issues | 🔲 Not started |
-| `/auth/cli` | GET | OAuth flow initiation | 🔲 Not started |
-| `/webhooks/stripe` | POST | Stripe payment webhooks | ⚠️ Handlers defined, no signature verification |
+| `/domains/check` (Namecheap) | POST | Domain availability + pricing | ⚠️ Defined in `routes/domains-namecheap.ts`, NOT mounted in `server.ts` |
+| `/domains/register` (Namecheap) | POST | Create registration job | ⚠️ Defined in `routes/domains-namecheap.ts`, NOT mounted in `server.ts` |
+| `/domains/jobs/:jobId` (Namecheap) | GET | Job status polling | ⚠️ Defined in `routes/domains-namecheap.ts`, NOT mounted in `server.ts` |
+| `/domains/check` (Mock) | POST | Domain availability (mock) | ✅ Mounted in `server.ts` (temporary) |
+| `/projects/init` | POST | Create project record | ✅ Mounted (returns mock project ID) |
+| `/projects/:id/stream` | GET (SSE) | Real-time provisioning events | ✅ Mounted (simulated flow) |
+| `/projects/:id/status` | GET | Project + service status | ✅ Mounted (mock data) |
+| `/projects/:id/services` | POST | Add service post-init | ✅ Mounted |
+| `/projects/:id/dns/health` | GET | DNS record validation | ✅ Mounted (mock) |
+| `/projects/:id/dns/fix` | POST | Auto-repair DNS issues | ✅ Mounted (mock) |
+| `/auth/cli` | GET | OAuth flow initiation | ✅ Mounted (mock implementation) |
+| `/events/stream/:projectId` | GET (SSE) | SSE endpoint for provisioning | ✅ Mounted |
+| `/webhooks/stripe` | POST | Stripe payment webhooks | ⚠️ Defined in `routes/stripe-webhooks.ts`, NOT mounted in `server.ts` |
+
+**IMPORTANT - Integration Status:**
+- **Mock routes** in `server.ts` are MOUNTED and working (used for CLI development)
+- **Production routes** in `routes/domains-namecheap.ts` and `routes/stripe-webhooks.ts` are DEFINED but NOT MOUNTED
+- **Phase 4 task**: Remove mock routes, mount production routes with auth middleware
 
 ## Tech Stack
 
@@ -445,6 +452,101 @@ Use Graphite's merge queue or merge from GitHub:
 
 The landing page, CLI client, API server scaffold, and Namecheap domain integration are all implemented and merged to main. The CLI is a production-ready thin client; the API has domain routes defined (not yet mounted) with full Namecheap API coverage, rate limiting, priority queuing, and Stripe webhook stubs. Next milestone is Phase 4 (integration glue + security middleware). Future feature work should follow the Graphite stacking method outlined above.
 
+## Local Development Setup
+
+### Prerequisites
+- **Node.js**: >= 18.0.0
+- **npm**: >= 9.0.0
+- **Redis**: Required for API/workers (rate limiting, BullMQ)
+- **PostgreSQL**: Required for API (Neon Postgres in production, local Postgres for dev)
+
+### Environment Setup
+
+**API Server** (`packages/api/.env`):
+```bash
+# Server
+PORT=3000
+HOST=localhost
+NODE_ENV=development
+API_URL=http://localhost:3000
+
+# Database (Neon Postgres or local)
+DATABASE_URL=postgresql://user:pass@localhost:5432/forj_dev
+
+# Redis (local or managed)
+REDIS_URL=redis://localhost:6379
+
+# Namecheap (sandbox mode for dev)
+NAMECHEAP_API_USER=your_username
+NAMECHEAP_API_KEY=your_api_key
+NAMECHEAP_USERNAME=your_username
+NAMECHEAP_CLIENT_IP=your_ip
+NAMECHEAP_SANDBOX=true  # Use sandbox API
+
+# Stripe
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PUBLISHABLE_KEY=pk_test_...
+
+# Workers
+DOMAIN_WORKER_CONCURRENCY=5
+
+# Features (optional)
+ENABLE_BULL_BOARD=false  # Queue monitoring UI
+RATE_LIMITING_ENABLED=true
+```
+
+**Landing Page** (`packages/landing/.env.local`):
+See `packages/landing/.env.local.example` for Turnstile, Resend, and database settings.
+
+### First-Time Setup
+
+```bash
+# Install dependencies
+npm install
+
+# Run database migrations (API)
+npm run db:migrate -w packages/api
+
+# Build all packages
+npm run build
+
+# Start development servers
+npm run dev  # All packages with dev scripts
+```
+
+### Running Individual Services
+
+```bash
+# API server (requires Redis + Postgres)
+npm run dev -w packages/api
+
+# CLI (in watch mode)
+npm run dev -w packages/cli
+
+# Landing page (Vite dev server on :5173)
+npm run dev -w packages/landing
+
+# Run domain worker (requires Redis + API server running)
+cd packages/workers
+npm run dev
+```
+
+### Testing the CLI Locally
+
+```bash
+# Build CLI first
+npm run build -w packages/cli
+
+# Run from dist with Node
+node packages/cli/dist/cli.js init test-project
+
+# Or link globally for development
+cd packages/cli
+npm link
+forj init test-project  # Now available globally
+```
+
 ## Common Commands
 
 ### Monorepo Commands (from root)
@@ -556,15 +658,51 @@ npm run dev -w packages/api      # Start Fastify API server
 # Testing
 npm test                         # Run all tests
 npm test -w packages/shared      # Run shared package tests (Namecheap client, rate limiter, queue, state machine)
+npm run test:watch -w packages/shared  # Watch mode for tests
 
 # Build
 npm run build                    # Build all packages
 npm run build -w packages/cli    # Build CLI (outputs to dist/cli.js with shebang)
 
 # Database
-npm run db:migrate               # Run Postgres migrations
-npm run db:seed                  # Seed development data
+npm run db:migrate -w packages/api     # Run Postgres migrations
+npm run db:migrate:create -w packages/api # Create new migration
+
+# Type Checking
+npm run type-check -w packages/cli     # TypeScript validation for CLI
+npm run type-check -w packages/landing # TypeScript validation for landing
 ```
+
+### Key Architectural Patterns
+
+**Import Conventions:**
+- **CLI package uses .js extensions** (ESM requirement): `import { api } from '../lib/api-client.js'`
+- **Other packages omit extensions**: `import { NamecheapClient } from '@forj/shared'`
+- **All async code uses async/await** (no raw Promises or .catch())
+
+**Error Handling:**
+- **API responses**: Always return `{ success: boolean, data?: any, error?: string }`
+- **CLI errors**: Wrapped with `withErrorHandling()` → log + exit code 1
+- **Worker errors**: Throw for BullMQ retry mechanism
+- **Namecheap errors**: Categorized into 6 types (AUTH, INPUT, AVAILABILITY, PAYMENT, SYSTEM, NETWORK) with retryability flags
+
+**State Management:**
+- **Project services stored as JSONB** in Postgres `projects` table
+- **State transitions validated** by `isValidStateTransition()` before worker updates
+- **Domain worker state machine**: PENDING → QUEUED → CHECKING → AVAILABLE/UNAVAILABLE → REGISTERING → CONFIGURING → COMPLETE/FAILED
+- **ALL Namecheap API calls MUST go through `requestQueue.submit()`** to ensure rate limiting
+
+**TypeScript Patterns:**
+- **Strict mode enabled** across all packages
+- **Discriminated unions** for job types: `CheckDomainJobData | RegisterDomainJobData | ...`
+- **Export types with `export type`**, functions/classes with `export`
+- **Generic constraints** in API client: `apiRequest<T = unknown>()`
+
+**Testing Patterns:**
+- **Jest with ts-jest** + ESM support
+- **Mock strategy**: `global.fetch` for HTTP, `jest.fn()` for Redis
+- **Type-safe mocks**: `jest.Mocked<Redis>`
+- **Test files**: Adjacent to source in `__tests__/` directories
 
 ## Security Considerations
 
@@ -669,8 +807,109 @@ The spec was revised after comprehensive API research revealed blockers in the o
 
 The v0.2 spec represents a **shippable MVP**. Every service integration has a confirmed, publicly accessible API. No partnerships, no enterprise contracts, no waiting for approvals. This can be built and launched in 4 weeks.
 
+## Important File Locations
+
+### Core Implementation Files
+
+**CLI** (`packages/cli/src/`):
+- `cli.ts` - Entry point, command registration
+- `commands/init.ts` - Main initialization flow (interactive + non-interactive)
+- `lib/api-client.ts` - HTTP client for API communication
+- `lib/sse-client.ts` - Server-Sent Events client for real-time updates
+- `lib/validators.ts` - Input validation (email, domain, project name, GitHub org)
+- `lib/prompts.ts` - Inquirer prompt builders
+
+**API Server** (`packages/api/src/`):
+- `server.ts` - Fastify server setup, currently mounted routes
+- `routes/domains-namecheap.ts` - Production domain routes (NOT mounted yet)
+- `routes/stripe-webhooks.ts` - Stripe webhook handlers (NOT mounted yet)
+- `lib/pricing-cache.ts` - Redis-backed TLD pricing cache
+- `lib/database.ts` - Neon Postgres connection
+- `lib/redis.ts` - ioredis connection pooling
+- `lib/queues.ts` - BullMQ queue initialization
+
+**Shared Library** (`packages/shared/src/`):
+- `namecheap/client.ts` - Namecheap API client (8 methods)
+- `namecheap/xml-parser.ts` - Custom XML parser for Namecheap responses
+- `namecheap/rate-limiter.ts` - Redis-backed sliding window rate limiter
+- `namecheap/request-queue.ts` - 3-tier priority queue with fairness
+- `namecheap/errors.ts` - Error categorization (50+ error codes)
+- `domain-worker.ts` - State machine types and transitions
+- `index.ts` - Central export hub for all types
+
+**Workers** (`packages/workers/src/`):
+- `domain-worker.ts` - BullMQ worker for domain operations (CHECK, REGISTER, RENEW, SET_NAMESERVERS, GET_INFO)
+
+**Database**:
+- `packages/api/migrations/1741570800000_init-projects-table.cjs` - Projects table schema
+
+### Configuration Files
+- `tsconfig.json` (root) - Base TypeScript configuration
+- `packages/*/tsconfig.json` - Package-specific TypeScript configs
+- `packages/*/tsup.config.ts` - Build configuration (CLI, API, workers, shared)
+- `packages/landing/vite.config.ts` - Vite configuration for landing page
+- `jest.config.ts` (shared, workers) - Jest test configuration
+- `vercel.json` (root) - Vercel deployment config for landing page
+
+## Troubleshooting
+
+### Common Issues
+
+**"Module not found" errors in CLI:**
+- Ensure you're using `.js` extensions in imports: `import { foo } from './bar.js'`
+- CLI uses NodeNext module resolution which requires explicit extensions
+
+**Redis connection errors:**
+- Check Redis is running: `redis-cli ping` (should return `PONG`)
+- Verify `REDIS_URL` in `.env` matches your Redis setup
+- Default: `redis://localhost:6379`
+
+**Database migration errors:**
+- Ensure PostgreSQL is running and accessible
+- Check `DATABASE_URL` format: `postgresql://user:pass@host:port/database`
+- Run migrations: `npm run db:migrate -w packages/api`
+
+**"Rate limit exceeded" during development:**
+- Namecheap sandbox API has 20 req/min limit
+- Rate limiter is Redis-backed, persists across restarts
+- Clear Redis: `redis-cli FLUSHDB` (use cautiously)
+
+**BullMQ worker not processing jobs:**
+- Ensure Redis is running and connected
+- Check worker logs for errors
+- Verify queue name matches: `domainQueue` (defined in `packages/api/src/lib/queues.ts`)
+
+**CLI can't connect to API:**
+- Verify API server is running: `npm run dev -w packages/api`
+- Check API_URL matches CLI configuration (default: `http://localhost:3000`)
+- Test health endpoint: `curl http://localhost:3000/health`
+
+### Debug Mode
+
+**Enable verbose logging in CLI:**
+```bash
+# CLI has logger with different levels
+# Logs are output to console with chalk formatting
+FORJ_DEV=1 node packages/cli/dist/cli.js init test
+```
+
+**Enable Pino pretty-printing in API:**
+```bash
+# Already enabled in development mode
+NODE_ENV=development npm run dev -w packages/api
+```
+
+**Access Bull Board (queue monitoring):**
+```bash
+# Set in .env
+ENABLE_BULL_BOARD=true
+
+# Access at http://localhost:3000/queues
+# WARNING: No authentication - only use in local dev
+```
+
 ## References
 
 - Full specification: `project-docs/forj-spec.md` (v0.2 - March 2026)
-- No existing codebase — start from scratch following tech stack above
-- No git repository initialized yet
+- Namecheap integration spec: `project-docs/namecheap-integration-spec.md`
+- Build plan with phases: `project-docs/build-plan.md`
