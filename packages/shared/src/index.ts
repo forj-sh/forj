@@ -114,6 +114,7 @@ export type {
   DomainJobData,
   DomainWorkerConfig,
   DomainWorkerEvent,
+  IWorkerEventPublisher,
 } from './domain-worker.js';
 
 export {

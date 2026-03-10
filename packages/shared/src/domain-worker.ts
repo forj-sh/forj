@@ -279,6 +279,25 @@ export function isRetryableState(status: DomainJobStatus): boolean {
 }
 
 /**
+ * Minimal interface for Redis pub/sub client
+ *
+ * The worker uses this to publish events without depending on
+ * the full RedisPubSub implementation from @forj/api.
+ */
+export interface IWorkerEventPublisher {
+  /**
+   * Publish a worker event to a project channel
+   * @param projectId - Project ID to publish to
+   * @param event - Domain worker event to publish
+   * @returns Number of subscribers that received the message, or null if publish failed
+   */
+  publishWorkerEvent(
+    projectId: string,
+    event: DomainWorkerEvent
+  ): Promise<number | null>;
+}
+
+/**
  * Domain worker configuration
  */
 export interface DomainWorkerConfig {
@@ -308,6 +327,8 @@ export interface DomainWorkerConfig {
       backoffDelay: number;
     };
   };
+  /** Optional Redis pub/sub for real-time event streaming */
+  eventPublisher?: IWorkerEventPublisher;
 }
 
 /**

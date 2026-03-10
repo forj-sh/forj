@@ -15,6 +15,7 @@ import {
   type SetNameserversJobData,
   type GetDomainInfoJobData,
   type DomainWorkerConfig,
+  type IWorkerEventPublisher,
 } from '@forj/shared';
 
 // Mock BullMQ Worker
@@ -83,8 +84,8 @@ describe('DomainWorker', () => {
     worker = new DomainWorker(mockConfig, mockRedis);
 
     // Get reference to mocked request queue
-    const { NamecheapRequestQueue } = jest.requireMock('@forj/shared');
-    mockRequestQueue = NamecheapRequestQueue.mock.results[0]?.value;
+    const shared = jest.requireMock('@forj/shared') as any;
+    mockRequestQueue = shared.NamecheapRequestQueue.mock.results[0]?.value;
   });
 
   afterEach(async () => {
@@ -701,12 +702,232 @@ describe('DomainWorker', () => {
     });
   });
 
+  describe('Event Publisher Integration', () => {
+    it('should publish events via eventPublisher when configured', async () => {
+      const mockPublisher: IWorkerEventPublisher = {
+        publishWorkerEvent: jest.fn<() => Promise<number | null>>().mockResolvedValue(2), // 2 subscribers
+      };
+
+      const configWithPublisher: DomainWorkerConfig = {
+        ...mockConfig,
+        eventPublisher: mockPublisher,
+      };
+
+      const workerWithPublisher = new DomainWorker(configWithPublisher, mockRedis);
+
+      const jobData: CheckDomainJobData = {
+        jobId: 'job-123',
+        projectId: 'proj-456',
+        operation: DomainOperationType.CHECK,
+        status: DomainJobStatus.PENDING,
+        domains: ['example.com'],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        attempts: 0,
+      };
+
+      const mockJob = {
+        id: 'job-123',
+        data: jobData,
+        updateProgress: jest.fn(),
+      } as unknown as Job<CheckDomainJobData>;
+
+      mockRequestQueue.submit.mockResolvedValueOnce([
+        { domain: 'example.com', available: true },
+      ]);
+
+      await workerWithPublisher['processJob'](mockJob);
+
+      // Should have published JOB_STARTED event
+      expect(mockPublisher.publishWorkerEvent).toHaveBeenCalledWith(
+        'proj-456',
+        expect.objectContaining({
+          type: 'job_started',
+          jobId: 'job-123',
+          projectId: 'proj-456',
+        })
+      );
+
+      await workerWithPublisher.close();
+    });
+
+    it('should sanitize API keys in event error messages', async () => {
+      const mockPublisher: IWorkerEventPublisher = {
+        publishWorkerEvent: jest.fn<() => Promise<number | null>>().mockResolvedValue(1),
+      };
+
+      const configWithPublisher: DomainWorkerConfig = {
+        ...mockConfig,
+        eventPublisher: mockPublisher,
+      };
+
+      const workerWithPublisher = new DomainWorker(configWithPublisher, mockRedis);
+
+      const jobData: CheckDomainJobData = {
+        jobId: 'job-123',
+        projectId: 'proj-456',
+        operation: DomainOperationType.CHECK,
+        status: DomainJobStatus.PENDING,
+        domains: ['example.com'],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        attempts: 0,
+        error: 'Failed: https://api.namecheap.com?ApiKey=secret-key-12345',
+      };
+
+      const mockJob = {
+        id: 'job-123',
+        data: jobData,
+        updateProgress: jest.fn(),
+      } as unknown as Job<CheckDomainJobData>;
+
+      mockRequestQueue.submit.mockRejectedValueOnce(
+        new Error('API error with ApiKey=secret-key-12345')
+      );
+
+      await expect(workerWithPublisher['processJob'](mockJob)).rejects.toThrow();
+
+      // Event should have sanitized error
+      const publishCalls = mockPublisher.publishWorkerEvent.mock.calls;
+      const errorEvent = publishCalls.find((call: any) => call[1].error);
+
+      if (errorEvent) {
+        expect(errorEvent[1].error).toContain('***REDACTED***');
+        expect(errorEvent[1].error).not.toContain('secret-key-12345');
+      }
+
+      await workerWithPublisher.close();
+    });
+
+    it('should handle null return from publishWorkerEvent (publish failure)', async () => {
+      const mockPublisher: IWorkerEventPublisher = {
+        publishWorkerEvent: jest.fn<() => Promise<number | null>>().mockResolvedValue(null), // Publish failed
+      };
+
+      const configWithPublisher: DomainWorkerConfig = {
+        ...mockConfig,
+        eventPublisher: mockPublisher,
+      };
+
+      const workerWithPublisher = new DomainWorker(configWithPublisher, mockRedis);
+
+      const jobData: CheckDomainJobData = {
+        jobId: 'job-123',
+        projectId: 'proj-456',
+        operation: DomainOperationType.CHECK,
+        status: DomainJobStatus.PENDING,
+        domains: ['example.com'],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        attempts: 0,
+      };
+
+      const mockJob = {
+        id: 'job-123',
+        data: jobData,
+        updateProgress: jest.fn(),
+      } as unknown as Job<CheckDomainJobData>;
+
+      mockRequestQueue.submit.mockResolvedValueOnce([
+        { domain: 'example.com', available: true },
+      ]);
+
+      // Should not throw even if publish returns null
+      await expect(workerWithPublisher['processJob'](mockJob)).resolves.toBeDefined();
+
+      expect(mockPublisher.publishWorkerEvent).toHaveBeenCalled();
+
+      await workerWithPublisher.close();
+    });
+
+    it('should handle exceptions from publishWorkerEvent', async () => {
+      const mockPublisher: IWorkerEventPublisher = {
+        publishWorkerEvent: jest.fn<() => Promise<number | null>>().mockRejectedValue(new Error('Redis connection failed')),
+      };
+
+      const configWithPublisher: DomainWorkerConfig = {
+        ...mockConfig,
+        eventPublisher: mockPublisher,
+      };
+
+      const workerWithPublisher = new DomainWorker(configWithPublisher, mockRedis);
+
+      const jobData: CheckDomainJobData = {
+        jobId: 'job-123',
+        projectId: 'proj-456',
+        operation: DomainOperationType.CHECK,
+        status: DomainJobStatus.PENDING,
+        domains: ['example.com'],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        attempts: 0,
+      };
+
+      const mockJob = {
+        id: 'job-123',
+        data: jobData,
+        updateProgress: jest.fn(),
+      } as unknown as Job<CheckDomainJobData>;
+
+      mockRequestQueue.submit.mockResolvedValueOnce([
+        { domain: 'example.com', available: true },
+      ]);
+
+      // Should not throw even if publisher throws
+      await expect(workerWithPublisher['processJob'](mockJob)).resolves.toBeDefined();
+
+      expect(mockPublisher.publishWorkerEvent).toHaveBeenCalled();
+
+      await workerWithPublisher.close();
+    });
+
+    it('should handle zero subscribers (publish succeeds but no listeners)', async () => {
+      const mockPublisher: IWorkerEventPublisher = {
+        publishWorkerEvent: jest.fn<() => Promise<number | null>>().mockResolvedValue(0), // No subscribers
+      };
+
+      const configWithPublisher: DomainWorkerConfig = {
+        ...mockConfig,
+        eventPublisher: mockPublisher,
+      };
+
+      const workerWithPublisher = new DomainWorker(configWithPublisher, mockRedis);
+
+      const jobData: CheckDomainJobData = {
+        jobId: 'job-123',
+        projectId: 'proj-456',
+        operation: DomainOperationType.CHECK,
+        status: DomainJobStatus.PENDING,
+        domains: ['example.com'],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        attempts: 0,
+      };
+
+      const mockJob = {
+        id: 'job-123',
+        data: jobData,
+        updateProgress: jest.fn(),
+      } as unknown as Job<CheckDomainJobData>;
+
+      mockRequestQueue.submit.mockResolvedValueOnce([
+        { domain: 'example.com', available: true },
+      ]);
+
+      await workerWithPublisher['processJob'](mockJob);
+
+      expect(mockPublisher.publishWorkerEvent).toHaveBeenCalled();
+
+      await workerWithPublisher.close();
+    });
+  });
+
   describe('close', () => {
     it('should close worker and stop request queue', async () => {
       await worker.close();
 
-      const { Worker } = jest.requireMock('bullmq');
-      const mockWorkerInstance = Worker.mock.results[0]?.value;
+      const bullmq = jest.requireMock('bullmq') as any;
+      const mockWorkerInstance = bullmq.Worker.mock.results[0]?.value;
 
       expect(mockWorkerInstance.close).toHaveBeenCalled();
       expect(mockRequestQueue.stop).toHaveBeenCalled();
