@@ -126,7 +126,7 @@ Namecheap does not publish explicit rate limits, but the API FAQ recommends:
 - No more than **50 domains per single check call**
 - Batch operations where possible
 
-**Implementation**: Use a token bucket rate limiter (20 tokens/min, burst of 5).
+See [Section 4.5: Concurrency, Queuing & Rate Limiting](#45-concurrency-queuing--rate-limiting) for the full multi-user concurrency design.
 
 ---
 
@@ -489,7 +489,7 @@ packages/shared/
       types.ts            # TypeScript interfaces for all request/response types
       errors.ts           # Custom error classes with error code mapping
       xml-parser.ts       # XML response parsing utilities
-      rate-limiter.ts     # Token bucket rate limiter
+      request-queue.ts    # Redis-backed priority queue + sliding window rate limiter
       index.ts            # Public exports
 ```
 
@@ -653,33 +653,245 @@ function parseResponse<T>(xml: string): ApiResponse<T> {
 }
 ```
 
-### 4.5 Rate Limiter
+### 4.5 Concurrency, Queuing & Rate Limiting
+
+Namecheap enforces ~20 API requests/minute. With multiple users hitting Forj simultaneously, we need a centralized rate limiter that queues excess requests and communicates wait times back to users via SSE.
+
+#### Capacity Math
+
+| Operation | API calls per user | Max concurrent users at 20 req/min |
+|---|---|---|
+| **Availability check** | 1 call (up to 50 domains batched) | **20 users/min** |
+| **Registration flow** | 4 calls (`getBalances` + `create` + `setCustom` + `getInfo`) | **5 users/min** |
+| **Renewal** | 2 calls (`renew` + `getInfo`) | **10 users/min** |
+
+In practice, availability checks and registrations happen concurrently. A realistic budget: reserve 12 req/min for availability checks, 8 req/min for registration/renewal operations. This handles **12 concurrent lookups + 2 concurrent registrations per minute** — more than sufficient for V1.
+
+#### Architecture: Redis-Backed Priority Queue
+
+The rate limiter is **not** in-process. It's a shared Redis-backed queue so all API server instances and BullMQ workers share one rate limit against the Namecheap account.
 
 ```typescript
-class TokenBucketRateLimiter {
-  private tokens: number;
-  private lastRefill: number;
-  private readonly maxTokens: number;
-  private readonly refillRate: number; // tokens per ms
+/**
+ * Centralized Namecheap API request queue.
+ * All Namecheap calls go through this — never call the API directly.
+ *
+ * Uses a Redis sorted set as a sliding window rate limiter,
+ * plus a BullMQ queue for overflow requests.
+ */
 
-  constructor(maxPerMinute: number = 20, burst: number = 5) {
-    this.maxTokens = burst;
-    this.tokens = burst;
-    this.refillRate = maxPerMinute / 60000;
-    this.lastRefill = Date.now();
+enum RequestPriority {
+  /** Registration/renewal — user has already paid, don't make them wait */
+  CRITICAL = 1,
+  /** Availability checks — interactive user waiting in CLI */
+  INTERACTIVE = 2,
+  /** Pricing cache refresh, balance checks, domain list sync */
+  BACKGROUND = 3,
+}
+
+interface QueuedRequest<T> {
+  id: string;
+  command: string;           // e.g., 'namecheap.domains.check'
+  params: Record<string, string>;
+  priority: RequestPriority;
+  enqueuedAt: number;        // Unix ms
+  userId?: string;           // For per-user fairness
+  resolve: (result: T) => void;
+  reject: (error: Error) => void;
+}
+
+interface QueuePosition {
+  position: number;          // 0 = executing now
+  estimatedWaitMs: number;   // Based on current drain rate
+  ahead: number;             // Number of requests ahead in queue
+}
+
+class NamecheapRequestQueue {
+  private readonly WINDOW_MS = 60_000;
+  private readonly MAX_REQUESTS_PER_WINDOW = 20;
+  private readonly REDIS_KEY = 'namecheap:rate_limit:window';
+  private readonly QUEUE_KEY = 'namecheap:request_queue';
+
+  constructor(
+    private readonly redis: Redis,
+    private readonly requestQueue: Queue, // BullMQ queue for overflow
+  ) {}
+
+  /**
+   * Submit a request to the queue. Returns immediately with a queue position
+   * estimate, then resolves the promise when the request completes.
+   */
+  async submit<T>(request: Omit<QueuedRequest<T>, 'id' | 'enqueuedAt' | 'resolve' | 'reject'>): Promise<{
+    position: QueuePosition;
+    result: Promise<T>;
+  }> {
+    const position = await this.getQueuePosition(request.priority);
+    const result = new Promise<T>((resolve, reject) => {
+      this.enqueue({ ...request, id: generateId(), enqueuedAt: Date.now(), resolve, reject });
+    });
+    return { position, result };
   }
 
-  async acquire(): Promise<void> {
-    this.refill();
-    if (this.tokens < 1) {
-      const waitMs = (1 - this.tokens) / this.refillRate;
-      await new Promise(resolve => setTimeout(resolve, waitMs));
-      this.refill();
+  /**
+   * Get current queue depth and estimated wait time for a given priority.
+   * Called by the API layer to send SSE updates to the CLI.
+   */
+  async getQueuePosition(priority: RequestPriority): Promise<QueuePosition> {
+    const windowCount = await this.getCurrentWindowCount();
+    const queueDepth = await this.getQueueDepth();
+    const aheadOfMe = this.countAhead(queueDepth, priority);
+
+    // Each request takes ~3s avg (network round-trip to Namecheap)
+    // Plus rate limit spacing: 60s / 20 = 3s between requests
+    const estimatedWaitMs = aheadOfMe * 3000;
+
+    return {
+      position: aheadOfMe === 0 && windowCount < this.MAX_REQUESTS_PER_WINDOW ? 0 : aheadOfMe + 1,
+      estimatedWaitMs,
+      ahead: aheadOfMe,
+    };
+  }
+
+  /**
+   * Sliding window rate limiter using Redis sorted set.
+   * Returns true if the request can proceed immediately.
+   */
+  private async tryAcquire(): Promise<boolean> {
+    const now = Date.now();
+    const windowStart = now - this.WINDOW_MS;
+
+    // Atomic: remove expired entries, count remaining, add new if under limit
+    const result = await this.redis
+      .multi()
+      .zremrangebyscore(this.REDIS_KEY, 0, windowStart)
+      .zcard(this.REDIS_KEY)
+      .exec();
+
+    const currentCount = result[1][1] as number;
+
+    if (currentCount < this.MAX_REQUESTS_PER_WINDOW) {
+      await this.redis.zadd(this.REDIS_KEY, now, `${now}:${Math.random()}`);
+      return true;
     }
-    this.tokens -= 1;
+    return false;
   }
 }
 ```
+
+#### Priority Levels
+
+| Priority | When | Why |
+|---|---|---|
+| **CRITICAL (1)** | `domains.create`, `domains.renew`, `setCustomNameservers` | User has already paid. Registration delay = bad UX and potential race condition (someone else grabs the domain). |
+| **INTERACTIVE (2)** | `domains.check` (availability lookup) | User is actively waiting in the CLI. Delay is visible but tolerable. |
+| **BACKGROUND (3)** | `users.getPricing` (cache refresh), `users.getBalances` (monitoring), `domains.getList` (reconciliation) | No user is waiting. Can be deferred indefinitely. |
+
+Critical requests **always jump the queue** ahead of interactive and background requests. Within the same priority, requests are FIFO.
+
+#### CLI Wait Time UX
+
+When a user's request is queued, the SSE stream sends real-time position updates:
+
+```
+$ npx forj-cli init affirm
+
+  ? Desired domain: (checking 25 candidates...)
+  ⏳ High demand — your check is #3 in queue (~9s)
+  ⏳ Your check is #1 in queue (~3s)
+  ✓ Results ready
+
+    ✗ affirm.com           — taken
+   ─────────────────────────────────
+    ✓ getaffirm.com        — $12.95/yr
+    ...
+```
+
+For registrations (which have CRITICAL priority and almost never queue):
+
+```
+  Provisioning...
+    ◐ Registering domain...          getacme.com
+```
+
+If a registration does end up queued (very unlikely at V1 scale):
+
+```
+  Provisioning...
+    ◐ Registering domain...          getacme.com
+    ⏳ Registrar queue: #2 (~6s)
+    ✓ Domain registered              getacme.com
+```
+
+#### SSE Events for Queue Status
+
+```typescript
+interface DomainQueueEvent {
+  type: 'domain:queued';
+  data: {
+    operation: 'check' | 'register' | 'renew';
+    position: number;
+    estimatedWaitMs: number;
+    timestamp: number;
+  };
+}
+
+interface DomainQueueUpdateEvent {
+  type: 'domain:queue_update';
+  data: {
+    operation: 'check' | 'register' | 'renew';
+    position: number;       // Counts down as queue drains
+    estimatedWaitMs: number;
+    timestamp: number;
+  };
+}
+
+// Emitted when the request exits the queue and starts executing
+interface DomainProcessingEvent {
+  type: 'domain:processing';
+  data: {
+    operation: 'check' | 'register' | 'renew';
+    timestamp: number;
+  };
+}
+```
+
+#### Per-User Fairness
+
+Without fairness controls, a single user running a script could exhaust the entire rate limit. Two mechanisms prevent this:
+
+1. **Per-user concurrency cap**: Max 2 in-flight Namecheap requests per user (1 availability check + 1 registration). Additional requests from the same user queue behind other users' requests at the same priority level.
+
+2. **Round-robin within priority tiers**: When multiple users have queued INTERACTIVE requests, drain them round-robin (User A check, User B check, User A check...) rather than FIFO (all of User A's first).
+
+```typescript
+interface PerUserLimits {
+  maxConcurrentChecks: 1;        // One availability batch at a time
+  maxConcurrentRegistrations: 1; // One registration at a time
+  maxQueuedRequests: 5;          // Reject with 429 if user has 5+ pending
+}
+```
+
+If a user exceeds `maxQueuedRequests`, the API returns HTTP 429 with a `Retry-After` header.
+
+#### Scaling Beyond V1
+
+At V1 scale (~50 projects/month from spec), this is way over-engineered. But the design scales to ~200 registrations/month before needing changes. Beyond that:
+
+| Scale | Bottleneck | Solution |
+|---|---|---|
+| **0–200 reg/month** | None | Current design handles this easily |
+| **200–1000 reg/month** | 20 req/min rate limit | Contact Namecheap for higher rate limit (common for resellers with volume) |
+| **1000+ reg/month** | Single Namecheap account | Multiple reseller accounts with request routing, or negotiate dedicated API tier |
+
+#### Monitoring & Alerts
+
+| Metric | Alert threshold | Action |
+|---|---|---|
+| Queue depth (INTERACTIVE) | > 10 requests | Warn ops — users are waiting |
+| Queue depth (CRITICAL) | > 0 for > 30s | Page ops — paid users are blocked |
+| p95 wait time (INTERACTIVE) | > 15s | Investigate — may need rate limit increase |
+| Rate limit utilization | > 80% sustained for 5 min | Proactive alert — approaching capacity |
+| Rejected requests (429s) | > 5/min | Investigate — possible abuse or traffic spike |
 
 ---
 
@@ -883,7 +1095,9 @@ To enable API access on production:
 - [ ] Implement `renewDomain()` method
 - [ ] Implement `getBalances()` method
 - [ ] Implement `listDomains()` method
-- [ ] Implement token bucket rate limiter
+- [ ] Implement Redis-backed sliding window rate limiter
+- [ ] Implement priority request queue (CRITICAL / INTERACTIVE / BACKGROUND)
+- [ ] Implement per-user concurrency caps and round-robin fairness
 - [ ] Implement error classification (`NamecheapErrorCategory`)
 - [ ] Implement phone number formatter (`+NNN.NNNNNNNNNN`)
 - [ ] Write unit tests for all parsing and utility functions
@@ -898,6 +1112,7 @@ To enable API access on production:
 - [ ] Implement post-registration verification polling
 - [ ] Implement nameserver update (for when Cloudflare worker runs after domain worker)
 - [ ] Implement SSE event emission for each state transition
+- [ ] Implement SSE queue position updates (`domain:queued`, `domain:queue_update`, `domain:processing`)
 - [ ] Implement retry logic per error category
 - [ ] Implement renewal job handler (triggered by Stripe webhook)
 - [ ] Wire up ops alerts (low balance, registration failures)
@@ -920,6 +1135,8 @@ To enable API access on production:
 - [ ] Set up monitoring: balance alerts, registration failure alerts
 - [ ] Set up monthly reconciliation report (Namecheap charges vs. Stripe revenue)
 - [ ] Load test against sandbox (simulate 50 concurrent registrations)
+- [ ] Load test queue fairness: 10 concurrent users, verify round-robin drain
+- [ ] Set up queue depth and wait time monitoring dashboards
 - [ ] Security review: PII handling, credential rotation procedure
 
 ---
@@ -938,33 +1155,113 @@ Several community libraries exist but are **not recommended** for Forj's use cas
 
 ## Appendix B: Domain Candidate Generation
 
-When a user enters a project name (e.g., `acme`), Forj should generate and batch-check these candidate domains:
+When a user enters a project name (e.g., `affirm`), Forj should generate and batch-check a tiered set of candidate domains. The candidates are organized into tiers that reflect how founders actually think about domain selection — exact `.com` first, then close `.com` variants, then premium alt-TLDs, then budget options.
+
+### Candidate Generation
 
 ```typescript
-function generateCandidates(name: string): string[] {
+/** TLD tiers — controls display ordering and pricing expectations */
+const TLD_TIERS = {
+  /** Tier 1: The gold standard — always check first */
+  premium: ['.com'],
+  /** Tier 2: Established startup TLDs — credible alternatives to .com */
+  startup: ['.io', '.co', '.dev', '.sh', '.app', '.ai'],
+  /** Tier 3: Newer/cheaper TLDs — functional but less credible */
+  budget: ['.xyz', '.tech', '.so', '.run'],
+} as const;
+
+/** Prefix strategies — proven patterns founders actually use */
+const PREFIXES = ['get', 'try', 'use', 'with', 'join'] as const;
+
+/** Suffix strategies — common in startup naming */
+const SUFFIXES = ['app', 'hq', 'so', 'labs', 'dev'] as const;
+
+function generateCandidates(name: string): DomainCandidate[] {
   const sanitized = name.toLowerCase().replace(/[^a-z0-9-]/g, '');
-  return [
-    // Exact match — premium TLDs first
-    `${sanitized}.com`,
-    `${sanitized}.io`,
-    `${sanitized}.dev`,
-    `${sanitized}.sh`,
-    `${sanitized}.co`,
-    `${sanitized}.app`,
-    // Prefixed variations
-    `get${sanitized}.com`,
-    `try${sanitized}.com`,
-    `use${sanitized}.com`,
-    // Suffixed variations
-    `${sanitized}app.com`,
-    `${sanitized}hq.com`,
-    `${sanitized}.xyz`,
-    `${sanitized}.tech`,
-  ];
+  const candidates: DomainCandidate[] = [];
+
+  // --- Tier 1: Exact .com (always show, even if taken) ---
+  candidates.push({ domain: `${sanitized}.com`, tier: 1, strategy: 'exact' });
+
+  // --- Tier 2: .com variants with prefixes/suffixes ---
+  for (const prefix of PREFIXES) {
+    candidates.push({ domain: `${prefix}${sanitized}.com`, tier: 2, strategy: 'prefix' });
+  }
+  for (const suffix of SUFFIXES) {
+    candidates.push({ domain: `${sanitized}${suffix}.com`, tier: 2, strategy: 'suffix' });
+  }
+
+  // --- Tier 3: Exact match on startup TLDs ---
+  for (const tld of TLD_TIERS.startup) {
+    candidates.push({ domain: `${sanitized}${tld}`, tier: 3, strategy: 'alt-tld' });
+  }
+
+  // --- Tier 4: Budget TLDs ---
+  for (const tld of TLD_TIERS.budget) {
+    candidates.push({ domain: `${sanitized}${tld}`, tier: 4, strategy: 'budget-tld' });
+  }
+
+  return candidates;
+}
+
+interface DomainCandidate {
+  domain: string;
+  tier: 1 | 2 | 3 | 4;
+  strategy: 'exact' | 'prefix' | 'suffix' | 'alt-tld' | 'budget-tld';
 }
 ```
 
-Sort results for CLI display: available first, then by price ascending, then by TLD preference (`.com` > `.io` > `.dev` > `.sh` > others).
+### Example: `affirm`
+
+Running `generateCandidates('affirm')` produces ~25 candidates, batched into a single `domains.check` call (well under the 50-domain limit):
+
+| Tier | Domains |
+|---|---|
+| **1 — Exact .com** | `affirm.com` |
+| **2 — .com variants** | `getaffirm.com`, `tryaffirm.com`, `useaffirm.com`, `withaffirm.com`, `joinaffirm.com`, `affirmapp.com`, `affirmhq.com`, `affirmso.com`, `affirmlabs.com`, `affirmdev.com` |
+| **3 — Startup TLDs** | `affirm.io`, `affirm.co`, `affirm.dev`, `affirm.sh`, `affirm.app`, `affirm.ai` |
+| **4 — Budget TLDs** | `affirm.xyz`, `affirm.tech`, `affirm.so`, `affirm.run` |
+
+### CLI Display Order
+
+Results are **NOT** sorted by price. They're sorted by **tier, then availability, then price** — which matches how founders actually evaluate domains:
+
+```
+$ npx forj-cli init affirm
+
+  ? Desired domain: (checking 25 candidates...)
+
+    ✗ affirm.com           — taken
+   ─────────────────────────────────
+    ✓ getaffirm.com        — $12.95/yr
+    ✓ useaffirm.com        — $12.95/yr
+    ✓ affirmhq.com         — $12.95/yr
+    ✗ tryaffirm.com        — taken
+   ─────────────────────────────────
+    ✓ affirm.io            — $32.98/yr
+    ✓ affirm.dev           — $12.00/yr
+    ✓ affirm.sh            — $9.95/yr
+    ✓ affirm.ai            — $69.00/yr
+    ✗ affirm.co            — taken
+   ─────────────────────────────────
+    ✓ affirm.xyz           — $1.00/yr
+    ✓ affirm.tech          — $5.98/yr
+```
+
+**Key UX decisions:**
+- **Always show exact `.com`** even when taken — founders want to know
+- **Group by tier with visual separators** — don't let a $1 `.xyz` outrank a $12 `.com` variant
+- **Show taken domains** within each tier (grayed out) so founders see the full picture
+- **Limit display to ~12 results** — show top 3-4 from each tier, hide the rest behind "show more"
+- **Pre-select the best available option** — first available Tier 2 `.com` variant, or first available Tier 3 if no Tier 2 available
+
+### Extensibility (V2+)
+
+The prefix/suffix/TLD lists are intentionally defined as constants at the top of the file. Future improvements:
+- **User-configurable**: `forj config set domain.prefixes get,try,use,with`
+- **AI-suggested**: Use the project name + description to generate creative domain suggestions
+- **Regional TLDs**: Add `.de`, `.fr`, `.uk` variants for non-US founders
+- **Industry TLDs**: Add `.finance`, `.health`, `.legal` for vertical-specific projects
 
 ## Appendix C: Phone Number Formatting
 
