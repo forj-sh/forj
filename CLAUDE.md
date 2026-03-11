@@ -2,11 +2,92 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Quick Reference
+
+**Current Status (March 11, 2026):**
+- **Phase:** 4 (Integration + Security) - ✅ COMPLETE (PRs #31-#41 merged)
+- **Next Phase:** 5 (GitHub + Cloudflare Workers)
+- **Branch:** main (Graphite stacks merged)
+- **Ready for:** End-to-end testing
+
+### Essential Commands
+```bash
+# Development
+npm run dev -w packages/api          # Start API server (localhost:3000)
+npm run dev -w packages/cli          # CLI watch mode
+cd packages/workers && npm run dev   # Start domain worker
+
+# Testing Phase 4
+npm test -w packages/api -- sse-streaming.test.ts  # Integration test
+curl http://localhost:3000/health                   # API health check
+
+# Graphite workflow
+gt create -m "Stack N: Description"  # Create new stack
+gt modify                             # Amend current stack
+gt restack                            # Rebase all stacks
+gt submit                             # Push + create PRs
+```
+
+### Critical Information
+
+**Phase 4 Completion Checklist:**
+- ✅ Redis pub/sub + SSE streaming (Stack 1-3)
+- ✅ Namecheap routes mounted (Stack 4)
+- ✅ JWT auth middleware (Stack 6)
+- ✅ Authorization/IDOR fixes (Stack 7)
+- ✅ Stripe SDK integration (Stack 8)
+- ✅ Webhook signature verification (Stack 9)
+- ✅ Checkout routes (Stack 10)
+- ✅ Server-side pricing validation (Stack 11)
+
+**Security Status:**
+- ✅ JWT authentication protects all domain routes
+- ✅ IDOR vulnerability fixed (ownership checks)
+- ✅ Stripe webhook forgery prevented (signature verification)
+- ✅ Price manipulation prevented (server-side validation)
+- ⚠️ Per-user/per-IP rate limiting still needed
+
+**Environment Variables Required for Testing:**
+```bash
+# Minimum for development
+DATABASE_URL=postgresql://...
+REDIS_URL=redis://localhost:6379
+JWT_SECRET=$(openssl rand -base64 32)
+
+# Enable production Namecheap routes
+ENABLE_NAMECHEAP_ROUTES=true
+NAMECHEAP_API_USER=...
+NAMECHEAP_API_KEY=...
+NAMECHEAP_USERNAME=...
+NAMECHEAP_CLIENT_IP=...
+NAMECHEAP_SANDBOX=true
+```
+
+**Key Constraints:**
+- ALL Namecheap API calls MUST use `requestQueue.submit()` for rate limiting
+- CLI package requires `.js` extensions in imports (ESM requirement)
+- NEVER bypass Graphite CLI (`gt`) for branch management
+- Routes require `ENABLE_NAMECHEAP_ROUTES=true` to mount production endpoints
+
+### Navigation Guide
+
+This file is 900+ lines. Jump to relevant sections:
+- **[Testing Phase 4](#testing-phase-4-integration--security)** - Comprehensive testing guide (NEW)
+- **[Build Progress](#build-progress)** - Current phase status
+- **[Architecture](#architecture-implemented)** - System design
+- **[API Contracts](#api-contracts-defined-by-cli)** - Endpoint reference
+- **[Security Considerations](#security-considerations)** - Updated with Phase 4 fixes
+- **[Development Workflow](#development-workflow)** - Graphite stacking guide
+- **[Common Commands](#common-commands)** - npm workspace commands
+- **[Troubleshooting](#troubleshooting)** - Common issues
+
+---
+
 ## Project Overview
 
 **Forj** is an infrastructure provisioning CLI tool that creates production-ready project infrastructure with a single command. The value proposition is: `npx forj-cli init my-startup` provisions domain registration (Namecheap), GitHub repos, Cloudflare DNS zone, and automatically wires all DNS records (MX, SPF, DKIM, DMARC) correctly in under 2 minutes.
 
-This project is currently in **active MVP development**. The landing page with waitlist is live and deployed. The CLI client is fully implemented. The API server scaffold and Namecheap domain integration (including rate limiting, priority queuing, and Stripe webhook stubs) are complete and merged. Next milestone: integration glue (route mounting, auth middleware, Stripe signature verification) then GitHub + Cloudflare workers. The complete product specification is in `project-docs/forj-spec.md` (currently v0.2 - updated after API feasibility assessment).
+This project is currently in **active MVP development**. Phase 4 (Integration + Security) is complete and merged (11-stack PR sequence #31-#41, March 10-11, 2026). The system is now **ready for end-to-end testing** with real Namecheap API integration, JWT authentication, Stripe payment flow, and SSE streaming. Next milestone: Phase 5 (GitHub + Cloudflare workers). The complete product specification is in `project-docs/forj-spec.md` (currently v0.2 - updated after API feasibility assessment).
 
 ## Branding & Naming
 
@@ -96,10 +177,10 @@ The CLI client defines these endpoints (all expect `{ success, data, error, mess
 
 | Endpoint | Method | Purpose | Status |
 |----------|--------|---------|--------|
-| `/domains/check` (Namecheap) | POST | Domain availability + pricing | ⚠️ Defined in `routes/domains-namecheap.ts`, NOT mounted in `server.ts` |
-| `/domains/register` (Namecheap) | POST | Create registration job | ⚠️ Defined in `routes/domains-namecheap.ts`, NOT mounted in `server.ts` |
-| `/domains/jobs/:jobId` (Namecheap) | GET | Job status polling | ⚠️ Defined in `routes/domains-namecheap.ts`, NOT mounted in `server.ts` |
-| `/domains/check` (Mock) | POST | Domain availability (mock) | ✅ Mounted in `server.ts` (temporary) |
+| `/domains/check` (Namecheap) | POST | Domain availability + pricing | ✅ Mounted (requires auth + `ENABLE_NAMECHEAP_ROUTES=true`) |
+| `/domains/register` (Namecheap) | POST | Create registration job | ✅ Mounted (requires auth + `ENABLE_NAMECHEAP_ROUTES=true`) |
+| `/domains/jobs/:jobId` (Namecheap) | GET | Job status polling | ✅ Mounted (requires auth + ownership check) |
+| `/domains/check` (Mock) | POST | Domain availability (mock) | ✅ Mounted (fallback if Namecheap not configured) |
 | `/projects/init` | POST | Create project record | ✅ Mounted (returns mock project ID) |
 | `/projects/:id/stream` | GET (SSE) | Real-time provisioning events | ✅ Mounted (simulated flow) |
 | `/projects/:id/status` | GET | Project + service status | ✅ Mounted (mock data) |
@@ -107,13 +188,17 @@ The CLI client defines these endpoints (all expect `{ success, data, error, mess
 | `/projects/:id/dns/health` | GET | DNS record validation | ✅ Mounted (mock) |
 | `/projects/:id/dns/fix` | POST | Auto-repair DNS issues | ✅ Mounted (mock) |
 | `/auth/cli` | GET | OAuth flow initiation | ✅ Mounted (mock implementation) |
-| `/events/stream/:projectId` | GET (SSE) | SSE endpoint for provisioning | ✅ Mounted |
-| `/webhooks/stripe` | POST | Stripe payment webhooks | ⚠️ Defined in `routes/stripe-webhooks.ts`, NOT mounted in `server.ts` |
+| `/events/stream/:projectId` | GET (SSE) | SSE endpoint for provisioning | ✅ Mounted (real Redis pub/sub streaming) |
+| `/webhooks/stripe` | POST | Stripe payment webhooks | ✅ Mounted (requires `STRIPE_WEBHOOK_SECRET`) |
+| `/checkout/create-session` | POST | Create Stripe checkout session | ✅ Mounted (requires pricing cache + auth) |
 
-**IMPORTANT - Integration Status:**
-- **Mock routes** in `server.ts` are MOUNTED and working (used for CLI development)
-- **Production routes** in `routes/domains-namecheap.ts` and `routes/stripe-webhooks.ts` are DEFINED but NOT MOUNTED
-- **Phase 4 task**: Remove mock routes, mount production routes with auth middleware
+**IMPORTANT - Integration Status (Updated March 11, 2026):**
+- ✅ **Production Namecheap routes** are MOUNTED with JWT auth middleware (Stack 4-7)
+- ✅ **Stripe webhook routes** are MOUNTED with signature verification (Stack 9)
+- ✅ **Stripe checkout routes** are MOUNTED with server-side pricing validation (Stack 11)
+- ✅ **Real SSE streaming** via Redis pub/sub is LIVE (Stack 2-3)
+- ✅ **Authorization checks** prevent IDOR attacks on job endpoints (Stack 7)
+- ⚠️ **Mock routes** still available as fallback when Namecheap credentials not configured
 
 ## Tech Stack
 
@@ -293,13 +378,334 @@ forj dns check              # Verify DNS configuration
 | 1. CLI Client | ✅ Complete | All 6 commands, interactive + non-interactive modes |
 | 2. API Server Scaffold | ✅ Complete | Fastify + Postgres + BullMQ + Redis (PRs #12-#18) |
 | 3. Namecheap Domain Integration | ✅ Complete | Full API client, rate limiter, priority queue, domain worker (PRs #19-#30) |
-| 4. Integration + Security | 🔲 Next | Route mounting, auth middleware, Stripe verification, SSE wiring |
-| 5. GitHub + Cloudflare Workers | 🔲 Planned | GitHub OAuth + repos, Cloudflare OAuth + zones |
+| 4. Integration + Security | ✅ Complete | Route mounting, auth middleware, Stripe verification, SSE wiring (PRs #31-#41) |
+| 5. GitHub + Cloudflare Workers | 🔲 Next | GitHub OAuth + repos, Cloudflare OAuth + zones |
 | 6. DNS Wiring Worker | 🔲 Planned | MX, SPF, DKIM, DMARC auto-configuration |
 | 7. Auth + Credential Security | 🔲 Planned | Agent API keys, credential encryption, MCP definition |
 | 8. Ship | 🔲 Planned | npm publish, demo, launch |
 
-**Full build plan with details, environment variables, and security gaps:** `project-docs/build-plan.md`
+**Latest:** Phase 4 completed March 10-11, 2026 (11-stack PR sequence #31-#41). System is now **ready for end-to-end testing**.
+
+**Full build plan with details, environment variables, and security gaps:** `project-docs/build-plan.md` (NOTE: This may be outdated - Phase 4 is complete)
+
+## Testing Phase 4 (Integration + Security)
+
+Phase 4 is now complete and ready for end-to-end testing. Here's how to test each component:
+
+### Prerequisites
+
+Ensure you have the following services running:
+```bash
+# Check Redis is running
+redis-cli ping  # Should return PONG
+
+# Check Postgres is accessible
+psql $DATABASE_URL -c "SELECT 1"  # Should return 1
+
+# Generate JWT secret if not set
+openssl rand -base64 32  # Copy to .env as JWT_SECRET
+```
+
+### Environment Setup for Testing
+
+**Required environment variables** (`packages/api/.env`):
+```bash
+# Core services (REQUIRED)
+DATABASE_URL=postgresql://user:pass@localhost:5432/forj_dev
+REDIS_URL=redis://localhost:6379
+JWT_SECRET=<output from openssl rand -base64 32>
+
+# Namecheap testing (OPTIONAL - uses mock routes if not set)
+NAMECHEAP_API_USER=your_username
+NAMECHEAP_API_KEY=your_api_key
+NAMECHEAP_USERNAME=your_username
+NAMECHEAP_CLIENT_IP=127.0.0.1
+NAMECHEAP_SANDBOX=true
+ENABLE_NAMECHEAP_ROUTES=true  # CRITICAL: Must be 'true' to mount production routes
+
+# Stripe testing (OPTIONAL - uses test mode)
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PUBLISHABLE_KEY=pk_test_...
+```
+
+### Test 1: Run Integration Tests
+
+```bash
+# Run the SSE streaming integration test (Stack 5)
+npm test -w packages/api -- sse-streaming.test.ts
+
+# Expected output:
+# ✓ should publish and receive worker events via Redis pub/sub
+# ✓ should convert worker events to SSE format correctly
+```
+
+### Test 2: Start API Server
+
+```bash
+# Terminal 1: Start API server
+npm run dev -w packages/api
+
+# Expected console output:
+# ✓ Namecheap domain routes registered (production mode) OR
+#   ⚠ Namecheap credentials not configured - using mock domain routes
+# ✓ Stripe checkout routes registered with server-side pricing validation
+# ✓ Stripe webhook routes registered
+# Server listening at http://localhost:3000
+```
+
+### Test 3: Test Authentication (Stack 6)
+
+```bash
+# Terminal 2: Test JWT auth
+
+# 1. Try accessing protected route without auth (should fail)
+curl -X POST http://localhost:3000/domains/check \
+  -H "Content-Type: application/json" \
+  -d '{"domains": ["example.com"]}'
+
+# Expected: 401 Unauthorized
+# {"success":false,"error":"Missing authorization header"}
+
+# 2. Get a JWT token (mock auth endpoint)
+TOKEN=$(curl -s http://localhost:3000/auth/cli | jq -r '.data.token')
+
+# 3. Access protected route with auth (should succeed)
+curl -X POST http://localhost:3000/domains/check \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"domains": ["example.com"]}'
+
+# Expected: 200 OK with domain availability data
+```
+
+### Test 4: Test Domain Check (Stack 4)
+
+```bash
+# With Namecheap configured:
+curl -X POST http://localhost:3000/domains/check \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"domains": ["example.com", "example.net"]}'
+
+# Expected response (Namecheap API):
+# {
+#   "success": true,
+#   "data": {
+#     "results": [
+#       {"domain": "example.com", "available": false, "price": null},
+#       {"domain": "example.net", "available": false, "price": null}
+#     ]
+#   }
+# }
+
+# Without Namecheap (mock routes):
+# Same response structure but from mock data
+```
+
+### Test 5: Test Domain Registration Job Creation (Stack 4)
+
+```bash
+# Create a domain registration job
+curl -X POST http://localhost:3000/domains/register \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "domain": "test-forj-domain.com",
+    "userId": "test-user-123",
+    "projectId": "test-project-123",
+    "years": 1,
+    "contactInfo": {
+      "firstName": "John",
+      "lastName": "Doe",
+      "email": "john@example.com",
+      "phone": "+1.5551234567",
+      "address1": "123 Main St",
+      "city": "San Francisco",
+      "stateProvince": "CA",
+      "postalCode": "94102",
+      "country": "US"
+    }
+  }'
+
+# Expected response:
+# {
+#   "success": true,
+#   "data": {
+#     "jobId": "domain:register:<uuid>",
+#     "domain": "test-forj-domain.com",
+#     "status": "pending"
+#   }
+# }
+```
+
+### Test 6: Test Authorization Checks (Stack 7)
+
+```bash
+# Get your userId from the token
+USER_ID=$(echo $TOKEN | jwt decode - | jq -r '.userId')
+
+# Try to access another user's job (should fail)
+curl -X GET "http://localhost:3000/domains/jobs/domain:check:another-users-job" \
+  -H "Authorization: Bearer $TOKEN"
+
+# Expected: 403 Forbidden
+# {"success":false,"error":"Unauthorized to access this job"}
+
+# Access your own job (should succeed)
+JOB_ID="<jobId from Test 5>"
+curl -X GET "http://localhost:3000/domains/jobs/$JOB_ID" \
+  -H "Authorization: Bearer $TOKEN"
+
+# Expected: 200 OK with job details
+```
+
+### Test 7: Test SSE Streaming (Stack 2-3)
+
+```bash
+# Terminal 3: Start domain worker
+cd packages/workers
+npm run dev
+
+# Terminal 2: Subscribe to SSE events
+curl -N http://localhost:3000/events/stream/test-project-123
+
+# Expected: SSE stream connection established
+# data: {"type":"connection","message":"Connected to event stream"}
+
+# Terminal 4: Trigger a domain check to generate events
+curl -X POST http://localhost:3000/domains/check \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"domains": ["example.com"], "projectId": "test-project-123"}'
+
+# Terminal 3: Should see SSE events flowing:
+# data: {"type":"domain_check","status":"queued",...}
+# data: {"type":"domain_check","status":"checking",...}
+# data: {"type":"domain_check","status":"complete",...}
+```
+
+### Test 8: Test Stripe Checkout (Stack 10-11)
+
+```bash
+# Create a Stripe checkout session with server-side pricing validation
+curl -X POST http://localhost:3000/checkout/create-session \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "domain": "example.com",
+    "tld": "com",
+    "years": 1,
+    "userId": "test-user-123",
+    "projectId": "test-project-123"
+  }'
+
+# Expected response:
+# {
+#   "success": true,
+#   "data": {
+#     "sessionId": "cs_test_...",
+#     "url": "https://checkout.stripe.com/c/pay/cs_test_..."
+#   }
+# }
+
+# Stack 11 validation: Try to manipulate pricing (should fail)
+curl -X POST http://localhost:3000/checkout/create-session \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "domain": "example.com",
+    "tld": "com",
+    "years": 1,
+    "userId": "test-user-123",
+    "projectId": "test-project-123",
+    "price": 0.01
+  }'
+
+# Expected: Server ignores client-provided price and uses PricingCache
+```
+
+### Test 9: Test Stripe Webhooks (Stack 9)
+
+```bash
+# Use Stripe CLI to forward webhooks to local server
+stripe listen --forward-to localhost:3000/webhooks/stripe
+
+# In another terminal, trigger a test webhook
+stripe trigger checkout.session.completed
+
+# Expected in API server logs:
+# ✓ Webhook signature verified
+# ✓ Processing checkout.session.completed event
+# ✓ Domain registration job created
+
+# Try forged webhook (should fail)
+curl -X POST http://localhost:3000/webhooks/stripe \
+  -H "Content-Type: application/json" \
+  -d '{"type":"checkout.session.completed",...}'
+
+# Expected: 400 Bad Request
+# {"success":false,"error":"Invalid webhook signature"}
+```
+
+### Test 10: End-to-End CLI Test
+
+```bash
+# Terminal 1: API server running
+npm run dev -w packages/api
+
+# Terminal 2: Worker running
+cd packages/workers && npm run dev
+
+# Terminal 3: Run CLI
+cd packages/cli
+npm run build
+node dist/cli.js init test-project --non-interactive --json
+
+# Expected: Full provisioning flow with real-time SSE updates
+```
+
+### Testing Checklist
+
+Use this checklist to verify Phase 4 completion:
+
+- [ ] ✅ **Stack 1-3**: Redis pub/sub + SSE streaming works end-to-end
+- [ ] ✅ **Stack 4**: Namecheap routes are mounted and functional
+- [ ] ✅ **Stack 6**: JWT auth protects all domain routes
+- [ ] ✅ **Stack 7**: Authorization checks prevent IDOR attacks
+- [ ] ✅ **Stack 8**: Stripe SDK installed and client wrapper works
+- [ ] ✅ **Stack 9**: Webhook signature verification rejects forged webhooks
+- [ ] ✅ **Stack 10**: Stripe checkout routes create valid sessions
+- [ ] ✅ **Stack 11**: Server-side pricing validation prevents manipulation
+
+### Known Limitations (Expected)
+
+- **Project/user management**: Still using mock data (Phase 5 will add real GitHub OAuth)
+- **DNS routes**: Still mock (Phase 6 will add Cloudflare integration)
+- **Credential handoff**: Not yet implemented (Phase 7)
+- **CLI OAuth**: Uses mock token endpoint (Phase 5 will add real OAuth)
+
+### Troubleshooting Tests
+
+**"Namecheap credentials not configured"**
+- Set `ENABLE_NAMECHEAP_ROUTES=true` in `.env`
+- Verify all 4 Namecheap env vars are set
+- Check API server logs for initialization errors
+
+**"Invalid webhook signature"**
+- Use `stripe listen` to get test webhook secret
+- Set `STRIPE_WEBHOOK_SECRET` in `.env` to the output from `stripe listen`
+- Restart API server after changing env vars
+
+**"Redis connection failed"**
+- Verify Redis is running: `redis-cli ping`
+- Check `REDIS_URL` format: `redis://localhost:6379`
+- Integration tests will skip if Redis unavailable
+
+**"JWT verification failed"**
+- Ensure `JWT_SECRET` is set in `.env`
+- Token expires after 30 days (configurable in `lib/jwt.ts`)
+- Generate new token with `/auth/cli` endpoint
 
 ## Development Workflow
 
@@ -710,12 +1116,21 @@ npm run type-check -w packages/landing # TypeScript validation for landing
 2. **Audit all OAuth token access** — Log every read/use of GitHub/Cloudflare tokens
 3. **Validate all external API responses** — Never trust GitHub/Cloudflare/Namecheap API data without schema validation
 4. **Namecheap API keys** — Store encrypted at rest, rotate regularly, use separate keys per environment
-5. **Rate limiting** — ✅ Redis-backed sliding window rate limiter implemented for Namecheap API (20 req/min). Per-user/per-IP API rate limiting still needed on Fastify routes.
-6. **Stripe webhook verification** — ⚠️ **CRITICAL: Not yet implemented.** Current webhook handler parses body without signature verification. Must implement `stripe.webhooks.constructEvent()` with raw body before production. Without this, anyone can forge webhooks and trigger registrations without payment.
-7. **Authorization (IDOR)** — ⚠️ **CRITICAL: `/domains/jobs/:jobId` has no ownership check.** Job IDs are enumerable; attacker could iterate and access other users' domain job data. Must verify `request.user.id` owns the job before returning data.
-8. **Authentication middleware** — ⚠️ Domain routes have TODO comments noting auth is missing. JWT verification must be added to all domain routes before production.
-9. **Penetration test before public launch** — Credential handoff flow is primary attack surface
-10. **Error sanitization** — ✅ Namecheap API keys are sanitized in error messages to prevent credential leakage in logs
+5. **Rate limiting** — ✅ Redis-backed sliding window rate limiter implemented for Namecheap API (20 req/min). ⚠️ Per-user/per-IP API rate limiting still needed on Fastify routes.
+6. **Stripe webhook verification** — ✅ **FIXED (Stack 9).** Webhook signature verification implemented using `stripe.webhooks.constructEvent()` with raw body. All webhook events are now verified before processing.
+7. **Authorization (IDOR)** — ✅ **FIXED (Stack 7).** `/domains/jobs/:jobId` now has ownership checks via `verifyProjectOwnership()`. Users can only access their own job data.
+8. **Authentication middleware** — ✅ **FIXED (Stack 6).** JWT verification middleware (`requireAuth`) is applied to all protected domain routes. Uses `jose` library for token verification.
+9. **Server-side pricing validation** — ✅ **FIXED (Stack 11).** All Stripe checkout sessions validate pricing server-side using PricingCache to prevent price manipulation attacks.
+10. **Penetration test before public launch** — Credential handoff flow is primary attack surface
+11. **Error sanitization** — ✅ Namecheap API keys are sanitized in error messages to prevent credential leakage in logs
+
+**Phase 4 Security Summary (March 2026):**
+- ✅ All critical security gaps identified in Phase 3 have been addressed
+- ✅ JWT authentication protects all financial operations
+- ✅ IDOR vulnerabilities patched with ownership verification
+- ✅ Stripe webhooks cannot be forged (signature verification)
+- ✅ Price manipulation attacks prevented (server-side validation)
+- ⚠️ Additional rate limiting recommended for production (per-user/per-IP)
 
 ## Target Users
 

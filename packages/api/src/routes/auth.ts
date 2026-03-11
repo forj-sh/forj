@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { SignJWT } from 'jose';
 import type { CLIAuthRequest, CLIAuthResponse } from '@forj/shared';
 
 // Token expiration constants
@@ -24,15 +25,25 @@ export async function authRoutes(server: FastifyInstance) {
     const iat = Math.floor(now / 1000);
     const exp = iat + ONE_DAY_IN_SECONDS;
 
-    // Mock JWT token (in production, use proper JWT signing)
-    const mockToken = Buffer.from(
-      JSON.stringify({
-        userId: mockUserId,
-        email: mockEmail,
-        iat,
-        exp,
-      })
-    ).toString('base64');
+    // Get JWT secret from environment
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      return reply.status(500).send({
+        success: false,
+        error: 'JWT_SECRET not configured',
+      });
+    }
+
+    // Generate proper JWT token using jose
+    const secret = new TextEncoder().encode(jwtSecret);
+    const mockToken = await new SignJWT({
+      userId: mockUserId,
+      email: mockEmail,
+    })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt(iat)
+      .setExpirationTime(exp)
+      .sign(secret);
 
     request.log.info({
       userId: mockUserId,
