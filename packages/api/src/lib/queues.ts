@@ -6,6 +6,7 @@ import { logger } from './logger.js';
  * Queue names
  */
 export const QUEUE_NAMES = {
+  DOMAIN: 'domain', // Main domain queue for worker (CHECK, REGISTER, RENEW, etc.)
   DOMAIN_CHECK: 'domain-check',
   PROJECT_INIT: 'project-init',
   SERVICE_PROVISION: 'service-provision',
@@ -27,6 +28,7 @@ function createQueues(): Record<string, Queue> | Record<string, never> {
   const connection = redis.options;
 
   return {
+    domain: new Queue(QUEUE_NAMES.DOMAIN, { connection }),
     domainCheck: new Queue(QUEUE_NAMES.DOMAIN_CHECK, { connection }),
     projectInit: new Queue(QUEUE_NAMES.PROJECT_INIT, { connection }),
     serviceProvision: new Queue(QUEUE_NAMES.SERVICE_PROVISION, { connection }),
