@@ -47,3 +47,13 @@ export async function closeRedis(): Promise<void> {
     logger.info('Redis connection closed');
   }
 }
+
+/**
+ * Get Redis instance
+ */
+export function getRedis(): Redis {
+  if (!redis) {
+    throw new Error('Redis not initialized');
+  }
+  return redis;
+}
