@@ -128,12 +128,16 @@ export class CloudflareClient {
    * Reference: https://developers.cloudflare.com/api/operations/zones-get
    *
    * @param accountId - Optional account ID to filter zones
+   * @param name - Optional zone name to filter by exact match
    * @returns Array of zones
    */
-  async listZones(accountId?: string): Promise<CloudflareZone[]> {
+  async listZones(accountId?: string, name?: string): Promise<CloudflareZone[]> {
     const params = new URLSearchParams();
     if (accountId) {
       params.set('account.id', accountId);
+    }
+    if (name) {
+      params.set('name', name);
     }
 
     const endpoint = `/zones${params.toString() ? `?${params.toString()}` : ''}`;

@@ -149,6 +149,28 @@ export {
   isRetryableState as isGitHubRetryableState,
 } from './github-worker.js';
 
+// Cloudflare worker types
+export type {
+  BaseCloudflareJobData,
+  CreateZoneJobData,
+  UpdateNameserversJobData,
+  VerifyNameserversJobData,
+  CloudflareJobData,
+  CloudflareWorkerConfig,
+  CloudflareWorkerEvent,
+  ICloudflareWorkerEventPublisher,
+} from './cloudflare-worker.js';
+
+export {
+  CloudflareOperationType,
+  CloudflareJobStatus,
+  CloudflareWorkerEventType,
+  CLOUDFLARE_STATE_TRANSITIONS,
+  isValidStateTransition as isValidCloudflareStateTransition,
+  isTerminalState as isCloudflareTerminalState,
+  isRetryableState as isCloudflareRetryableState,
+} from './cloudflare-worker.js';
+
 // Stripe payment types
 export type {
   StripeCheckoutMetadata,

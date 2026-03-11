@@ -6,3 +6,4 @@
 
 export { DomainWorker } from './domain-worker.js';
 export { GitHubWorker } from './github-worker.js';
+export { CloudflareWorker } from './cloudflare-worker.js';
