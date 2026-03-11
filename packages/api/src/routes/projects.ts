@@ -7,7 +7,10 @@ import type {
   AddServiceRequest,
   DNSHealthResult,
   DNSFixResponse,
+  DNSRecordType,
+  EmailProvider,
 } from '@forj/shared';
+import { DNSHealthChecker, type ExpectedDNSConfig } from '../lib/dns-health-checker.js';
 
 /**
  * Project routes
@@ -147,77 +150,132 @@ export async function projectRoutes(server: FastifyInstance) {
 
   /**
    * GET /projects/:id/dns/health
-   * Check DNS health - returns mock DNS status
+   * Check DNS health - verifies DNS records are properly configured
    *
    * TODO (SECURITY): Add authentication middleware before production
    * TODO (SECURITY): Verify user owns this project (check user_id in database)
+   * TODO: Fetch project configuration from database instead of using mock data
    */
-  server.get<{ Params: { id: string } }>('/projects/:id/dns/health', async (request, reply) => {
-    const { id } = request.params;
+  server.get<{ Params: { id: string }; Querystring: { domain: string; zoneId: string } }>(
+    '/projects/:id/dns/health',
+    async (request, reply) => {
+      const { id } = request.params;
+      const { domain, zoneId } = request.query;
 
-    const health: DNSHealthResult = {
-      domain: 'getdemo.com',
-      overall: 'healthy',
-      records: [
-        {
-          type: 'MX',
-          name: '@',
-          value: 'aspmx.l.google.com',
-          status: 'valid',
-        },
-        {
-          type: 'TXT',
-          name: '@',
-          value: 'v=spf1 include:_spf.google.com ~all',
-          status: 'valid',
-        },
-        {
-          type: 'TXT',
-          name: '_dmarc',
-          value: 'v=DMARC1; p=none; rua=mailto:dmarc@getdemo.com',
-          status: 'valid',
-        },
-        {
-          type: 'CNAME',
-          name: 'www',
-          value: 'getdemo.com',
-          status: 'valid',
-        },
-      ],
-      checkedAt: new Date().toISOString(),
-    };
+      // TODO: Fetch from database once project storage is implemented
+      // For now, require domain and zoneId as query params for testing
+      if (!domain || !zoneId) {
+        return reply.status(400).send({
+          success: false,
+          error: 'Missing required query parameters: domain, zoneId',
+          message:
+            'Query params required until project database integration is complete. Example: ?domain=example.com&zoneId=abc123',
+        });
+      }
 
-    request.log.info({ projectId: id }, 'DNS health check');
+      const config: ExpectedDNSConfig = {
+        domain,
+        zoneId,
+        // TODO: Pull from database - this is a mock value
+        emailProvider: 'GOOGLE_WORKSPACE' as EmailProvider,
+      };
 
-    return {
-      success: true,
-      data: health,
-    };
-  });
+      try {
+        const checker = new DNSHealthChecker();
+
+        const health = await checker.checkHealth(config);
+
+        request.log.info(
+          {
+            projectId: id,
+            domain,
+            overall: health.overall,
+            recordCount: health.records.length,
+          },
+          'DNS health check'
+        );
+
+        return {
+          success: true,
+          data: health,
+        };
+      } catch (error) {
+        request.log.error({ projectId: id, error }, 'DNS health check failed');
+
+        return reply.status(500).send({
+          success: false,
+          error: 'DNS health check failed',
+        });
+      }
+    }
+  );
 
   /**
    * POST /projects/:id/dns/fix
-   * Fix DNS issues - returns mock fix results
+   * Auto-repair DNS issues by recreating missing/invalid records
    *
    * TODO (SECURITY): Add authentication middleware before production
    * TODO (SECURITY): Verify user owns this project (check user_id in database)
    * TODO (SECURITY): Rate limit DNS fix operations to prevent abuse
+   * TODO: Fetch project configuration and API token from database
    */
-  server.post<{ Params: { id: string } }>('/projects/:id/dns/fix', async (request, reply) => {
+  server.post<{
+    Params: { id: string };
+    Body: { domain: string; zoneId: string; cloudflareApiToken: string; recordTypes?: DNSRecordType[] };
+  }>('/projects/:id/dns/fix', async (request, reply) => {
     const { id } = request.params;
+    const { domain, zoneId, cloudflareApiToken, recordTypes } = request.body;
 
-    // Mock fix results
-    const result: DNSFixResponse = {
-      fixed: [],
-      failed: [],
+    // TODO: Fetch from database once project storage is implemented
+    // For now, require domain, zoneId, and cloudflareApiToken in request body for testing
+    if (!domain || !zoneId || !cloudflareApiToken) {
+      return reply.status(400).send({
+        success: false,
+        error: 'Missing required fields: domain, zoneId, cloudflareApiToken',
+        message:
+          'These fields required until project database integration is complete. Example: {"domain":"example.com","zoneId":"abc123","cloudflareApiToken":"xxx"}',
+      });
+    }
+
+    const config: ExpectedDNSConfig = {
+      domain,
+      zoneId,
+      // TODO: Pull from database - this is a mock value
+      emailProvider: 'GOOGLE_WORKSPACE' as EmailProvider,
     };
 
-    request.log.info({ projectId: id }, 'DNS fix attempt');
+    try {
+      const checker = new DNSHealthChecker();
 
-    return {
-      success: true,
-      data: result,
-      message: 'No DNS issues found to fix',
-    };
+      const result = await checker.autoRepair(config, cloudflareApiToken, recordTypes);
+
+      request.log.info(
+        {
+          projectId: id,
+          domain,
+          fixed: result.fixed.length,
+          failed: result.failed.length,
+        },
+        'DNS auto-repair complete'
+      );
+
+      const message =
+        result.fixed.length === 0 && result.failed.length === 0
+          ? 'No DNS issues found to fix'
+          : `Fixed ${result.fixed.length} record(s), ${result.failed.length} failed`;
+
+      return {
+        success: true,
+        data: result,
+        message,
+      };
+    } catch (error) {
+      request.log.error({ projectId: id, error }, 'DNS auto-repair failed');
+
+      return reply.status(500).send({
+        success: false,
+        error: 'DNS auto-repair failed',
+      });
+    }
   });
 }
