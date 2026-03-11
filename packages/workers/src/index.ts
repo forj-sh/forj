@@ -5,3 +5,4 @@
  */
 
 export { DomainWorker } from './domain-worker.js';
+export { GitHubWorker } from './github-worker.js';
