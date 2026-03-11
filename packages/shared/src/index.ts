@@ -144,3 +144,37 @@ export {
   dollarsToCents,
   centsToDollars,
 } from './stripe.js';
+
+// Cloudflare API types and utilities
+export type {
+  CloudflareConfig,
+  CloudflareApiResponse,
+  CloudflareResultInfo,
+  CloudflareApiErrorType,
+  CloudflareZone,
+  ZoneStatus,
+  ZoneType,
+  DNSRecordType as CloudflareDNSRecordType,
+  DNSRecord as CloudflareDNSRecord,
+  DNSRecordInput,
+  ZoneCreateParams,
+  TokenVerification,
+  TokenPolicy,
+  PermissionGroup,
+  TokenCondition,
+  CloudflareAccount,
+} from './cloudflare/index.js';
+
+export {
+  CloudflareApiError,
+  CloudflareErrorCategory,
+  categorizeError as categorizeCloudflareError,
+  ERROR_CODE_MAP as CLOUDFLARE_ERROR_CODE_MAP,
+  CloudflareClient,
+  CLOUDFLARE_API_URL,
+  REQUEST_TIMEOUT_MS as CLOUDFLARE_REQUEST_TIMEOUT_MS,
+  USER_AGENT as CLOUDFLARE_USER_AGENT,
+  RATE_LIMITS as CLOUDFLARE_RATE_LIMITS,
+  DEFAULT_DNS_TTL,
+  CLOUDFLARE_NS_PATTERN,
+} from './cloudflare/index.js';
