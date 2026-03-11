@@ -5,10 +5,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Quick Reference
 
 **Current Status (March 11, 2026):**
-- **Phase:** 4 (Integration + Security) - ✅ COMPLETE (PRs #31-#41 merged)
-- **Next Phase:** 5 (GitHub + Cloudflare Workers)
+- **Phase:** 5 (GitHub + Cloudflare + DNS Wiring) - 🔲 IN PROGRESS
+- **Previous Phase:** 4 (Integration + Security) - ✅ COMPLETE & VERIFIED (PRs #31-#41)
 - **Branch:** main (Graphite stacks merged)
-- **Ready for:** End-to-end testing
+- **Architecture:** Cloudflare as DNS authority. Namecheap is registrar only.
 
 ### Essential Commands
 ```bash
@@ -17,7 +17,7 @@ npm run dev -w packages/api          # Start API server (localhost:3000)
 npm run dev -w packages/cli          # CLI watch mode
 cd packages/workers && npm run dev   # Start domain worker
 
-# Testing Phase 4
+# Testing
 npm test -w packages/api -- sse-streaming.test.ts  # Integration test
 curl http://localhost:3000/health                   # API health check
 
@@ -253,14 +253,15 @@ The CLI client defines these endpoints (all expect `{ success, data, error, mess
 - OAuth scope: `admin:org` for repo management (NOT org creation)
 - **The value is in configuration automation, not org creation**
 
-**Cloudflare DNS** (User's Own Account)
-- User creates free Cloudflare account (or uses existing)
-- User grants OAuth access for zone management
-- Worker creates zone + auto-configures DNS records
-- No reseller model - user's account, Forj just orchestrates
+**Cloudflare as DNS Authority** (User's Own Account)
+- Namecheap is registrar only — Cloudflare manages all DNS
+- User creates Cloudflare API token via guided flow (Cloudflare does not support standard OAuth2 for third-party zone management)
+- Forj creates zone → extracts nameserver pair → updates NS on Namecheap via `setCustomNameservers()` → wires DNS records via Cloudflare API
+- Provisioning order: domain (Namecheap) → zone (Cloudflare) → NS update (Namecheap) → DNS records (Cloudflare)
+- No reseller model — user's account, Forj orchestrates
 
-**DNS Wiring** (Highest Value Operation - V1)
-Auto-configures records that founders commonly misconfigure:
+**DNS Wiring via Cloudflare API** (Highest Value Operation - V1)
+Auto-configures records that founders commonly misconfigure (all via Cloudflare API after zone is active):
 - MX records for email routing
 - SPF: `v=spf1 include:_spf.google.com ~all`
 - DKIM for Google Workspace (auto-fetched keys)
@@ -379,14 +380,13 @@ forj dns check              # Verify DNS configuration
 | 2. API Server Scaffold | ✅ Complete | Fastify + Postgres + BullMQ + Redis (PRs #12-#18) |
 | 3. Namecheap Domain Integration | ✅ Complete | Full API client, rate limiter, priority queue, domain worker (PRs #19-#30) |
 | 4. Integration + Security | ✅ Complete | Route mounting, auth middleware, Stripe verification, SSE wiring (PRs #31-#41) |
-| 5. GitHub + Cloudflare Workers | 🔲 Next | GitHub OAuth + repos, Cloudflare OAuth + zones |
-| 6. DNS Wiring Worker | 🔲 Planned | MX, SPF, DKIM, DMARC auto-configuration |
-| 7. Auth + Credential Security | 🔲 Planned | Agent API keys, credential encryption, MCP definition |
-| 8. Ship | 🔲 Planned | npm publish, demo, launch |
+| 5. GitHub + Cloudflare + DNS Wiring | 🔲 Next | Cloudflare API + zones, GitHub Device Flow + repos, DNS wiring, orchestrator (12 stacks) |
+| 6. Auth + Credential Security | 🔲 Planned | Agent API keys, credential encryption, MCP definition |
+| 7. Ship | 🔲 Planned | npm publish, demo, launch |
 
-**Latest:** Phase 4 completed March 10-11, 2026 (11-stack PR sequence #31-#41). System is now **ready for end-to-end testing**.
+**Latest:** Phase 4 verified complete March 11, 2026 (all 11 stacks tested with live Namecheap sandbox). Phase 5 planning complete — 12 stacks broken out in build plan.
 
-**Full build plan with details, environment variables, and security gaps:** `project-docs/build-plan.md` (NOTE: This may be outdated - Phase 4 is complete)
+**Full build plan:** `project-docs/build-plan.md` — Phase 5 stack breakdown, architecture decisions, env vars, security tracking.
 
 ## Testing Phase 4 (Integration + Security)
 
