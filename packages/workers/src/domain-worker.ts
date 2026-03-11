@@ -29,6 +29,7 @@ import {
   DomainWorkerEventType,
   type DomainWorkerConfig,
   type DomainWorkerEvent,
+  type IWorkerEventPublisher,
   isValidStateTransition,
   splitDomain,
 } from '@forj/shared';
@@ -64,9 +65,11 @@ export class DomainWorker {
   private readonly namecheapClient: NamecheapClient;
   private readonly requestQueue: NamecheapRequestQueue;
   private readonly config: DomainWorkerConfig;
+  private readonly eventPublisher?: IWorkerEventPublisher;
 
   constructor(config: DomainWorkerConfig, redis: Redis) {
     this.config = config;
+    this.eventPublisher = config.eventPublisher;
 
     // Initialize Namecheap client
     this.namecheapClient = new NamecheapClient({
@@ -90,6 +93,7 @@ export class DomainWorker {
 
     // Create BullMQ worker with retry configuration
     // Note: Pass connection options, not Redis instance, to avoid ioredis version conflicts
+    // Note: Retry configuration is set on the Queue when jobs are added, not on the Worker
     this.worker = new Worker(
       config.queue.name,
       async (job: Job<DomainJobData>) => {
@@ -102,28 +106,22 @@ export class DomainWorker {
           password: config.redis.password,
         },
         concurrency: config.queue.concurrency,
-        defaultJobOptions: config.queue.retry
-          ? {
-              attempts: config.queue.retry.maxAttempts,
-              backoff: {
-                type: config.queue.retry.backoffType,
-                delay: config.queue.retry.backoffDelay,
-              },
-            }
-          : undefined,
       }
     );
 
     // Worker event listeners
+    // Note: Using void to explicitly ignore promise (emitEvent handles its own errors)
     this.worker.on('completed', (job) => {
       console.log(`Job ${job.id} completed`);
-      this.emitEvent({
+      void this.emitEvent({
         type: DomainWorkerEventType.JOB_COMPLETED,
         jobId: job.id || '',
         projectId: job.data.projectId,
         operation: job.data.operation,
         status: DomainJobStatus.COMPLETE,
         timestamp: Date.now(),
+      }).catch((err) => {
+        console.error('Failed to emit job completed event:', err);
       });
     });
 
@@ -133,7 +131,7 @@ export class DomainWorker {
       console.error(`Job ${job?.id} failed:`, sanitizedError);
 
       if (job) {
-        this.emitEvent({
+        void this.emitEvent({
           type: DomainWorkerEventType.JOB_FAILED,
           jobId: job.id || '',
           projectId: job.data.projectId,
@@ -141,6 +139,8 @@ export class DomainWorker {
           status: DomainJobStatus.FAILED,
           timestamp: Date.now(),
           error: sanitizedError,
+        }).catch((err) => {
+          console.error('Failed to emit job failed event:', err);
         });
       }
     });
@@ -156,7 +156,7 @@ export class DomainWorker {
     const data = job.data;
 
     // Emit job started event
-    this.emitEvent({
+    await this.emitEvent({
       type: DomainWorkerEventType.JOB_STARTED,
       jobId: data.jobId,
       projectId: data.projectId,
@@ -241,7 +241,7 @@ export class DomainWorker {
     data.updatedAt = Date.now();
     await job.updateProgress(25);
 
-    this.emitEvent({
+    await this.emitEvent({
       type: DomainWorkerEventType.JOB_PROGRESS,
       jobId: data.jobId,
       projectId: data.projectId,
@@ -273,7 +273,7 @@ export class DomainWorker {
     data.status = DomainJobStatus.REGISTERING;
     data.updatedAt = Date.now();
 
-    this.emitEvent({
+    await this.emitEvent({
       type: DomainWorkerEventType.JOB_PROGRESS,
       jobId: data.jobId,
       projectId: data.projectId,
@@ -360,7 +360,7 @@ export class DomainWorker {
       data.status = DomainJobStatus.CONFIGURING;
       data.updatedAt = Date.now();
 
-      this.emitEvent({
+      await this.emitEvent({
         type: DomainWorkerEventType.JOB_PROGRESS,
         jobId: data.jobId,
         projectId: data.projectId,
@@ -492,19 +492,43 @@ export class DomainWorker {
   /**
    * Emit worker event
    *
-   * In production, this would publish to Redis pub/sub or similar
-   * for consumption by API server for SSE streaming to CLI.
-   *
-   * TODO: Implement Redis pub/sub for real-time event streaming
+   * Publishes events to Redis pub/sub for real-time SSE streaming to CLI.
+   * Falls back to console.log if Redis pub/sub is not configured.
    */
-  private emitEvent(event: DomainWorkerEvent): void {
-    // TODO: Publish to Redis pub/sub or event bus
-    // For now, just log (sanitized)
+  private async emitEvent(event: DomainWorkerEvent): Promise<void> {
+    // Sanitize error messages to prevent API key leakage
     const sanitizedEvent = {
       ...event,
       error: event.error ? sanitizeErrorMessage(event.error) : undefined,
     };
-    console.log('Worker event:', sanitizedEvent);
+
+    if (this.eventPublisher) {
+      try {
+        const subscriberCount = await this.eventPublisher.publishWorkerEvent(
+          event.projectId,
+          sanitizedEvent
+        );
+
+        // Log outcome with subscriber count (useful for debugging)
+        if (subscriberCount === null) {
+          // Null indicates publish failure (per IWorkerEventPublisher interface)
+          console.error('Failed to publish worker event (publisher returned null)');
+          console.log('Worker event (Redis failed):', sanitizedEvent);
+        } else if (subscriberCount > 0) {
+          console.log(`Worker event published to ${subscriberCount} subscriber(s):`, sanitizedEvent);
+        } else {
+          // 0 subscribers, but publication succeeded (expected if CLI not connected yet)
+          console.log('Worker event published (no subscribers):', sanitizedEvent);
+        }
+      } catch (error) {
+        // Redis publish failed, log error but don't throw (worker should continue)
+        console.error('Failed to publish worker event:', error);
+        console.log('Worker event (Redis failed):', sanitizedEvent);
+      }
+    } else {
+      // No event publisher configured, fallback to console.log
+      console.log('Worker event (no publisher):', sanitizedEvent);
+    }
   }
 
   /**

@@ -57,7 +57,7 @@ export class NamecheapClient {
    * @returns Parsed API response
    * @throws NamecheapApiError on API errors
    */
-  protected async executeRequest<T>(
+  public async executeRequest<T>(
     command: string,
     params: Record<string, string | undefined> = {}
   ): Promise<NamecheapApiResponse<T>> {
