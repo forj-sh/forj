@@ -28,6 +28,7 @@ import {
 } from '@forj/shared';
 import { PricingCache } from '../lib/pricing-cache.js';
 import { requireAuth } from '../middleware/auth.js';
+import { verifyProjectOwnership } from '../lib/authorization.js';
 
 /**
  * Enhanced domain routes with real Namecheap integration
@@ -121,11 +122,8 @@ export async function domainNamecheapRoutes(
    * Register a domain - creates BullMQ job for async processing
    *
    * SECURITY: Authentication middleware applied (Stack 6)
-   * TODO (SECURITY): Add authorization check (user owns projectId) - Stack 7
-   * TODO (SECURITY): Enforce userId from request.user instead of trusting request body - Stack 7
-   *   Currently the endpoint accepts userId from the request body, which allows user spoofing.
-   *   Should override jobData.userId with request.user.userId to prevent attackers from
-   *   attributing domain registrations to other users.
+   * SECURITY: Authorization check implemented (Stack 7) - verifies user owns project
+   * SECURITY: userId enforced from request.user (Stack 7) - prevents user spoofing
    * TODO (SECURITY): Add payment verification (Stripe checkout completed)
    * TODO (SECURITY): Add rate limiting (prevent abuse)
    */
@@ -136,6 +134,7 @@ export async function domainNamecheapRoutes(
     { preHandler: requireAuth },
     async (request, reply) => {
     const jobData = request.body;
+    const userId = request.user!.userId; // Guaranteed by requireAuth
 
     if (!jobData.domainName) {
       return reply.status(400).send({
@@ -151,12 +150,34 @@ export async function domainNamecheapRoutes(
       });
     }
 
+    if (!jobData.projectId) {
+      return reply.status(400).send({
+        success: false,
+        error: 'Project ID is required',
+      });
+    }
+
+    // AUTHORIZATION CHECK: Verify user owns this project
+    // TODO: Currently depends on projects existing in the DB. Mock/dev environments
+    // may use temporary project IDs (e.g., "proj_<uuid>") that aren't persisted.
+    // Consider adding NAMECHEAP_MOCK_MODE bypass or ensuring projects are persisted
+    // before domain registration in production flow.
+    const ownsProject = await verifyProjectOwnership(jobData.projectId, userId, request.log);
+    if (!ownsProject) {
+      return reply.status(403).send({
+        success: false,
+        error: 'Forbidden - you do not own this project',
+        code: 'FORBIDDEN',
+      });
+    }
+
     try {
       // Create BullMQ job for domain registration
       const job = await domainQueue.add(
         'register',
         {
           ...jobData,
+          userId, // Add userId for authorization checks
           jobId: '', // Placeholder - will be overwritten with actual BullMQ job ID
           operation: 'register' as DomainOperationType,
           status: 'pending' as DomainJobStatus,
@@ -211,11 +232,11 @@ export async function domainNamecheapRoutes(
    * Get domain job status
    *
    * SECURITY: Authentication middleware applied (Stack 6)
-   * TODO (SECURITY - CRITICAL): Add authorization check (verify user owns this job) - Stack 7
-   * SECURITY WARNING: This endpoint is vulnerable to IDOR. BullMQ job IDs are often
-   * enumerable (e.g., sequential integers), allowing attackers to iterate through
-   * job IDs and exfiltrate PII (registrant contact info). Authorization check in Stack 7
-   * will verify user owns this job before returning data.
+   * SECURITY: Authorization check implemented (Stack 7) - IDOR vulnerability FIXED
+   *
+   * The authorization check verifies that request.user.userId matches job.data.userId
+   * before returning any job data. Returns 404 (not 403) to prevent job ID enumeration.
+   * This prevents attackers from iterating through job IDs to access other users' PII.
    */
   server.get<{
     Params: { jobId: string };
@@ -224,6 +245,7 @@ export async function domainNamecheapRoutes(
     { preHandler: requireAuth },
     async (request, reply) => {
     const { jobId } = request.params;
+    const userId = request.user!.userId; // Guaranteed by requireAuth
 
     try {
       const job = await domainQueue.getJob(jobId);
@@ -235,14 +257,15 @@ export async function domainNamecheapRoutes(
         });
       }
 
-      // TODO (SECURITY): Verify that request.user.id matches job.data.userId
-      // Example:
-      // if (!request.user || request.user.id !== job.data.userId) {
-      //   return reply.status(403).send({
-      //     success: false,
-      //     error: 'Forbidden - you do not own this job',
-      //   });
-      // }
+      // AUTHORIZATION CHECK: Verify user owns this job (fixes IDOR vulnerability)
+      const jobData = job.data as { userId?: string };
+      if (!jobData.userId || jobData.userId !== userId) {
+        // Return 404 instead of 403 to prevent job ID enumeration
+        return reply.status(404).send({
+          success: false,
+          error: 'Job not found',
+        });
+      }
 
       const state = await job.getState();
       const progress = job.progress;
