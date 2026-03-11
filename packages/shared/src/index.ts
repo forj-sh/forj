@@ -171,6 +171,31 @@ export {
   isRetryableState as isCloudflareRetryableState,
 } from './cloudflare-worker.js';
 
+// DNS worker types
+export type {
+  BaseDNSJobData,
+  WireDNSRecordsJobData,
+  VerifyDNSRecordsJobData,
+  DNSJobData,
+  DNSWorkerConfig,
+  DNSWorkerEvent,
+  IWorkerEventPublisher as IDNSWorkerEventPublisher,
+} from './dns-worker.js';
+
+export {
+  DNSOperationType,
+  DNSJobStatus,
+  EmailProvider,
+  DNSWorkerEventType,
+  DNS_STATE_TRANSITIONS,
+  isValidStateTransition as isValidDNSStateTransition,
+  isTerminalState as isDNSTerminalState,
+  isRetryableState as isDNSRetryableState,
+  DEFAULT_MX_RECORDS,
+  DEFAULT_SPF_RECORDS,
+  DEFAULT_DMARC_RECORD,
+} from './dns-worker.js';
+
 // Stripe payment types
 export type {
   StripeCheckoutMetadata,
