@@ -27,6 +27,7 @@ import {
   type DomainJobStatus,
 } from '@forj/shared';
 import { PricingCache } from '../lib/pricing-cache.js';
+import { requireAuth } from '../middleware/auth.js';
 
 /**
  * Enhanced domain routes with real Namecheap integration
@@ -41,12 +42,15 @@ export async function domainNamecheapRoutes(
    * POST /domains/check
    * Check domain availability with real Namecheap API
    *
-   * TODO (SECURITY): Add authentication middleware
+   * SECURITY: Authentication middleware applied (Stack 6)
    * TODO (SECURITY): Add rate limiting (prevent enumeration attacks)
    */
   server.post<{
     Body: { domains: string[]; userId?: string };
-  }>('/domains/check', async (request, reply) => {
+  }>(
+    '/domains/check',
+    { preHandler: requireAuth },
+    async (request, reply) => {
     const { domains, userId } = request.body || {};
 
     if (!domains || domains.length === 0) {
@@ -109,20 +113,28 @@ export async function domainNamecheapRoutes(
         error: 'Failed to check domain availability',
       });
     }
-  });
+  }
+  );
 
   /**
    * POST /domains/register
    * Register a domain - creates BullMQ job for async processing
    *
-   * TODO (SECURITY): Add authentication middleware (CRITICAL - financial operation)
-   * TODO (SECURITY): Add authorization check (user owns projectId)
+   * SECURITY: Authentication middleware applied (Stack 6)
+   * TODO (SECURITY): Add authorization check (user owns projectId) - Stack 7
+   * TODO (SECURITY): Enforce userId from request.user instead of trusting request body - Stack 7
+   *   Currently the endpoint accepts userId from the request body, which allows user spoofing.
+   *   Should override jobData.userId with request.user.userId to prevent attackers from
+   *   attributing domain registrations to other users.
    * TODO (SECURITY): Add payment verification (Stripe checkout completed)
    * TODO (SECURITY): Add rate limiting (prevent abuse)
    */
   server.post<{
     Body: Omit<RegisterDomainJobData, 'jobId' | 'operation' | 'status' | 'createdAt' | 'updatedAt' | 'attempts'>;
-  }>('/domains/register', async (request, reply) => {
+  }>(
+    '/domains/register',
+    { preHandler: requireAuth },
+    async (request, reply) => {
     const jobData = request.body;
 
     if (!jobData.domainName) {
@@ -191,22 +203,26 @@ export async function domainNamecheapRoutes(
         error: 'Failed to create registration job',
       });
     }
-  });
+  }
+  );
 
   /**
    * GET /domains/jobs/:jobId
    * Get domain job status
    *
-   * TODO (SECURITY - CRITICAL): Add authentication middleware
-   * TODO (SECURITY - CRITICAL): Add authorization check (verify user owns this job)
+   * SECURITY: Authentication middleware applied (Stack 6)
+   * TODO (SECURITY - CRITICAL): Add authorization check (verify user owns this job) - Stack 7
    * SECURITY WARNING: This endpoint is vulnerable to IDOR. BullMQ job IDs are often
    * enumerable (e.g., sequential integers), allowing attackers to iterate through
-   * job IDs and exfiltrate PII (registrant contact info). MUST add authorization
-   * before production deployment.
+   * job IDs and exfiltrate PII (registrant contact info). Authorization check in Stack 7
+   * will verify user owns this job before returning data.
    */
   server.get<{
     Params: { jobId: string };
-  }>('/domains/jobs/:jobId', async (request, reply) => {
+  }>(
+    '/domains/jobs/:jobId',
+    { preHandler: requireAuth },
+    async (request, reply) => {
     const { jobId } = request.params;
 
     try {
@@ -261,18 +277,23 @@ export async function domainNamecheapRoutes(
         error: 'Failed to get job status',
       });
     }
-  });
+  }
+  );
 
   /**
    * GET /domains/pricing/:tld
    * Get pricing for a specific TLD
    *
+   * SECURITY: Authentication middleware applied (Stack 6)
    * TODO (SECURITY): Add rate limiting (prevent scraping)
    */
   server.get<{
     Params: { tld: string };
     Querystring: { action?: 'REGISTER' | 'RENEW' };
-  }>('/domains/pricing/:tld', async (request, reply) => {
+  }>(
+    '/domains/pricing/:tld',
+    { preHandler: requireAuth },
+    async (request, reply) => {
     const { tld } = request.params;
     const { action = 'REGISTER' } = request.query;
 
@@ -297,5 +318,6 @@ export async function domainNamecheapRoutes(
         error: 'Failed to get pricing',
       });
     }
-  });
+  }
+  );
 }
