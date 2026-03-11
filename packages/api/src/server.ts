@@ -57,6 +57,7 @@ export async function createServer() {
   const enableNamecheapRoutes = process.env.ENABLE_NAMECHEAP_ROUTES === 'true';
 
   let namecheapRoutesRegistered = false;
+  let pricingCache: PricingCache | undefined = undefined;
 
   if (hasNamecheapCredentials && enableNamecheapRoutes) {
     try {
@@ -72,7 +73,7 @@ export async function createServer() {
 
       // Initialize pricing cache (only if Redis is available)
       if (redis) {
-        const pricingCache = new PricingCache({
+        pricingCache = new PricingCache({
           redis,
           namecheapClient,
           logger,
@@ -90,7 +91,8 @@ export async function createServer() {
         if (domainQueue) {
           // Register production Namecheap routes
           await server.register(async (instance) => {
-            await domainNamecheapRoutes(instance, namecheapClient, domainQueue, pricingCache);
+            // Non-null assertion safe here: pricingCache was just assigned above in the if (redis) block
+            await domainNamecheapRoutes(instance, namecheapClient, domainQueue, pricingCache!);
           });
 
           logger.info('Namecheap domain routes registered (production mode)');
@@ -124,9 +126,19 @@ export async function createServer() {
   const stripeWebhookSecret = getStripeWebhookSecret();
 
   if (stripeClient) {
-    // Register Stripe checkout routes (available whenever Stripe client is configured)
-    await server.register(stripeCheckoutRoutes);
-    logger.info('Stripe checkout routes registered');
+    // Register Stripe checkout routes ONLY if PricingCache is available
+    // Stack 11: Server-side pricing validation is now MANDATORY for security
+    // Without PricingCache, we cannot validate pricing and prevent price manipulation attacks
+    if (pricingCache) {
+      await server.register(async (instance) => {
+        await stripeCheckoutRoutes(instance, pricingCache);
+      });
+      logger.info('Stripe checkout routes registered with server-side pricing validation');
+    } else {
+      logger.warn(
+        'Stripe checkout routes NOT registered - PricingCache unavailable (CRITICAL: Cannot validate pricing securely)'
+      );
+    }
 
     // Register Stripe webhook routes only if webhook secret and domain queue are available
     if (stripeWebhookSecret) {

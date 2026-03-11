@@ -189,6 +189,38 @@ export class PricingCache {
   }
 
   /**
+   * Check domain for premium pricing
+   *
+   * Stack 11: Added to support premium domain pricing in Stripe checkout
+   *
+   * @param domainName - Full domain name (e.g., 'premium.com')
+   * @returns Domain check result with premium pricing, or null if unavailable
+   */
+  async checkDomainPremiumPrice(
+    domainName: string
+  ): Promise<{ isPremium: boolean; premiumPrice?: number; icannFee?: number } | null> {
+    try {
+      const results = await this.namecheapClient.checkDomains([domainName]);
+
+      if (results.length === 0) {
+        this.logger.warn({ domainName }, 'No results from domain check');
+        return null;
+      }
+
+      const result = results[0];
+
+      return {
+        isPremium: result.isPremium,
+        premiumPrice: result.isPremium ? result.premiumRegistrationPrice : undefined,
+        icannFee: result.icannFee,
+      };
+    } catch (error) {
+      this.logger.error({ error, domainName }, 'Failed to check domain for premium pricing');
+      return null;
+    }
+  }
+
+  /**
    * Warm up cache with common TLDs
    *
    * Preloads pricing for popular TLDs to reduce latency.
