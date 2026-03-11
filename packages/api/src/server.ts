@@ -14,6 +14,9 @@ import { domainRoutes } from './routes/domains.js';
 import { domainNamecheapRoutes } from './routes/domains-namecheap.js';
 import { projectRoutes } from './routes/projects.js';
 import { eventRoutes } from './routes/events.js';
+import { stripeWebhookRoutes } from './routes/stripe-webhooks.js';
+import { stripeCheckoutRoutes } from './routes/stripe-checkout.js';
+import { getStripeClient, getStripeWebhookSecret } from './lib/stripe-client.js';
 
 /**
  * Create and configure Fastify server
@@ -114,6 +117,36 @@ export async function createServer() {
     }
     // Register mock routes for development
     await server.register(domainRoutes);
+  }
+
+  // Initialize Stripe integration (if credentials available)
+  const stripeClient = getStripeClient();
+  const stripeWebhookSecret = getStripeWebhookSecret();
+
+  if (stripeClient) {
+    // Register Stripe checkout routes (available whenever Stripe client is configured)
+    await server.register(stripeCheckoutRoutes);
+    logger.info('Stripe checkout routes registered');
+
+    // Register Stripe webhook routes only if webhook secret and domain queue are available
+    if (stripeWebhookSecret) {
+      const domainQueue = queues.domain;
+
+      if (domainQueue) {
+        // Register Stripe webhook routes
+        await server.register(async (instance) => {
+          await stripeWebhookRoutes(instance, stripeClient, domainQueue, stripeWebhookSecret);
+        });
+
+        logger.info('Stripe webhook routes registered');
+      } else {
+        logger.warn('Domain queue not available - Stripe webhooks not registered');
+      }
+    } else {
+      logger.warn('Stripe webhook secret not configured - Stripe webhooks not registered');
+    }
+  } else {
+    logger.info('Stripe not configured - Stripe routes not registered');
   }
 
   // Routes
