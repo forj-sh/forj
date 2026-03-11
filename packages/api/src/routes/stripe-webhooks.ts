@@ -6,21 +6,21 @@
  * Handles Stripe webhooks for domain payment processing.
  *
  * INTEGRATION STATUS:
- * These routes are defined but NOT YET REGISTERED with the Fastify server.
- * They require:
- * - Stripe SDK initialization (npm install stripe)
- * - Domain job queue setup
- * - Route registration in server.ts
- * - Raw body parser configuration for signature verification
+ * ✅ Webhook signature verification logic implemented in this route (Stack 9)
+ * 🔧 Stripe SDK instance is REQUIRED and must be injected by the caller (server.ts)
+ * 🔧 Raw body parser (@fastify/raw-body) is REQUIRED at server level for signature verification
+ * TODO: Register these routes and configure @fastify/raw-body plugin in server.ts (Stack 10)
+ * TODO: Domain job queue integration (Stack 10)
  *
- * SECURITY NOTE:
- * Webhook signature verification is CRITICAL. Without it, anyone can forge
- * webhook requests and trigger domain registrations without payment.
- * The Stripe SDK's constructEvent() method MUST be used to verify signatures.
+ * SECURITY (Stack 9):
+ * Webhook signature verification is now IMPLEMENTED using Stripe SDK's
+ * constructEvent() method. This prevents forged webhook requests.
+ * All webhooks are verified before processing.
  */
 
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Queue } from 'bullmq';
+import Stripe from 'stripe';
 import type {
   StripeWebhookPayload,
   StripeCheckoutMetadata,
@@ -31,9 +31,12 @@ import { DomainOperationType, DomainJobStatus, parseCheckoutMetadata } from '@fo
 
 /**
  * Stripe webhook routes
+ *
+ * Stack 9: Signature verification implemented
  */
 export async function stripeWebhookRoutes(
   server: FastifyInstance,
+  stripe: Stripe,
   domainQueue: Queue,
   stripeWebhookSecret: string
 ) {
@@ -41,51 +44,66 @@ export async function stripeWebhookRoutes(
    * POST /webhooks/stripe
    * Handle Stripe webhook events
    *
-   * SECURITY (CRITICAL):
-   * - Webhook signature verification is REQUIRED (currently TODO)
-   * - Raw request body is needed for signature verification
-   * - Without verification, anyone can forge webhooks and trigger registrations
+   * SECURITY (Stack 9): Webhook signature verification IMPLEMENTED
+   * - Verifies HMAC signature using Stripe SDK
+   * - Uses raw request body for signature verification
+   * - Prevents forged webhook requests
    *
-   * TODO (CRITICAL - BEFORE PRODUCTION):
-   * 1. Install Stripe SDK: npm install stripe
-   * 2. Import Stripe: import Stripe from 'stripe';
-   * 3. Initialize client: const stripe = new Stripe(secretKey);
-   * 4. Verify signature in request handler (see example below)
-   * 5. Configure Fastify raw body parser
+   * NOTE: Requires @fastify/raw-body plugin to be registered at server level
+   * with { runFirst: true, encoding: false } to capture the raw body bytes
+   * needed for signature verification.
    */
-  server.post('/webhooks/stripe', async (request, reply) => {
-    // Normalize signature header (can be string or string array)
-    const signatureHeader = request.headers['stripe-signature'];
-    const signature = Array.isArray(signatureHeader) ? signatureHeader[0] : signatureHeader;
+  server.post<{ Body: string }>(
+    '/webhooks/stripe',
+    {
+      config: {
+        // Tell Fastify to preserve raw body as Buffer for signature verification
+        rawBody: true,
+      },
+    },
+    async (request, reply) => {
+      // Get signature from headers
+      const signatureHeader = request.headers['stripe-signature'];
+      const signature = Array.isArray(signatureHeader) ? signatureHeader[0] : signatureHeader;
 
-    if (!signature) {
-      return reply.status(400).send({
-        success: false,
-        error: 'Missing Stripe signature',
-      });
-    }
+      if (!signature) {
+        return reply.status(400).send({
+          success: false,
+          error: 'Missing Stripe signature header',
+        });
+      }
 
-    // CRITICAL TODO: Verify webhook signature before processing
-    // Example implementation (requires Stripe SDK):
-    //
-    // try {
-    //   const rawBody = request.rawBody; // Fastify rawBody plugin
-    //   const event = stripe.webhooks.constructEvent(
-    //     rawBody,
-    //     signature,
-    //     stripeWebhookSecret
-    //   );
-    //   payload = event as StripeWebhookPayload;
-    // } catch (err) {
-    //   server.log.error({ err, signature }, 'Webhook signature verification failed');
-    //   return reply.status(401).send({
-    //     success: false,
-    //     error: 'Invalid signature',
-    //   });
-    // }
+      // Get raw body for signature verification
+      // Fastify provides this via @fastify/raw-body plugin when configured
+      const rawBody = (request as { rawBody?: Buffer }).rawBody;
 
-    // TEMPORARY: Parse body directly (INSECURE - replace with signature verification)
-    const payload = request.body as StripeWebhookPayload;
+      if (!rawBody) {
+        server.log.error('Raw body not available for webhook signature verification');
+        return reply.status(400).send({
+          success: false,
+          error: 'Unable to verify webhook signature - raw body missing',
+        });
+      }
+
+      // Verify webhook signature using Stripe SDK
+      let event: Stripe.Event;
+      try {
+        event = stripe.webhooks.constructEvent(
+          rawBody,
+          signature,
+          stripeWebhookSecret
+        ) as Stripe.Event;
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        server.log.error({ error, signature }, 'Webhook signature verification failed');
+        return reply.status(400).send({
+          success: false,
+          error: 'Invalid webhook signature',
+        });
+      }
+
+      // Signature verified - safe to process
+      const payload = event as unknown as StripeWebhookPayload;
 
     try {
       switch (payload.type) {
@@ -117,7 +135,8 @@ export async function stripeWebhookRoutes(
         error: 'Webhook processing failed',
       });
     }
-  });
+  }
+  );
 }
 
 /**
