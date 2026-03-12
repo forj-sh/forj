@@ -127,6 +127,28 @@ export {
   isRetryableState,
 } from './domain-worker.js';
 
+// GitHub worker types
+export type {
+  BaseGitHubJobData,
+  VerifyOrgJobData,
+  CreateRepoJobData,
+  ConfigureRepoJobData,
+  GitHubJobData,
+  GitHubWorkerConfig,
+  GitHubWorkerEvent,
+  IGitHubWorkerEventPublisher,
+} from './github-worker.js';
+
+export {
+  GitHubOperationType,
+  GitHubJobStatus,
+  GitHubWorkerEventType,
+  GITHUB_STATE_TRANSITIONS,
+  isValidStateTransition as isValidGitHubStateTransition,
+  isTerminalState as isGitHubTerminalState,
+  isRetryableState as isGitHubRetryableState,
+} from './github-worker.js';
+
 // Stripe payment types
 export type {
   StripeCheckoutMetadata,
