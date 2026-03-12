@@ -11,6 +11,7 @@ import { healthRoutes } from './routes/health.js';
 import { queueRoutes } from './routes/queues.js';
 import { authRoutes } from './routes/auth.js';
 import { cloudflareAuthRoutes } from './routes/auth-cloudflare.js';
+import { githubAuthRoutes } from './routes/auth-github.js';
 import { domainRoutes } from './routes/domains.js';
 import { domainNamecheapRoutes } from './routes/domains-namecheap.js';
 import { projectRoutes } from './routes/projects.js';
@@ -167,6 +168,7 @@ export async function createServer() {
   await server.register(queueRoutes);
   await server.register(authRoutes);
   await server.register(cloudflareAuthRoutes);
+  await server.register(githubAuthRoutes);
   await server.register(projectRoutes);
   await server.register(eventRoutes);
 
