@@ -13,6 +13,8 @@ export interface ForjConfig {
   apiUrl?: string;
   authToken?: string;
   currentProject?: string;
+  githubToken?: string;
+  cloudflareToken?: string;
 }
 
 /**
@@ -35,6 +37,8 @@ function isValidConfig(obj: unknown): obj is ForjConfig {
   if (config.apiUrl !== undefined && typeof config.apiUrl !== 'string') return false;
   if (config.authToken !== undefined && typeof config.authToken !== 'string') return false;
   if (config.currentProject !== undefined && typeof config.currentProject !== 'string') return false;
+  if (config.githubToken !== undefined && typeof config.githubToken !== 'string') return false;
+  if (config.cloudflareToken !== undefined && typeof config.cloudflareToken !== 'string') return false;
 
   return true;
 }
@@ -123,4 +127,48 @@ export function setAuthToken(token: string): void {
  */
 export function clearAuthToken(): void {
   updateConfig({ authToken: undefined });
+}
+
+/**
+ * Get GitHub token from config
+ */
+export function getGitHubToken(): string | undefined {
+  const config = readConfig();
+  return config.githubToken;
+}
+
+/**
+ * Set GitHub token in config
+ */
+export function setGitHubToken(token: string): void {
+  updateConfig({ githubToken: token });
+}
+
+/**
+ * Clear GitHub token from config
+ */
+export function clearGitHubToken(): void {
+  updateConfig({ githubToken: undefined });
+}
+
+/**
+ * Get Cloudflare token from config
+ */
+export function getCloudflareToken(): string | undefined {
+  const config = readConfig();
+  return config.cloudflareToken;
+}
+
+/**
+ * Set Cloudflare token in config
+ */
+export function setCloudflareToken(token: string): void {
+  updateConfig({ cloudflareToken: token });
+}
+
+/**
+ * Clear Cloudflare token from config
+ */
+export function clearCloudflareToken(): void {
+  updateConfig({ cloudflareToken: undefined });
 }
