@@ -178,3 +178,35 @@ export {
   DEFAULT_DNS_TTL,
   CLOUDFLARE_NS_PATTERN,
 } from './cloudflare/index.js';
+
+// GitHub API types and utilities
+export type {
+  GitHubConfig,
+  GitHubOrg,
+  GitHubRepo,
+  RepoCreateParams,
+  BranchProtectionParams,
+  FileContent,
+  GitHubPagesConfig,
+  GitHubAuthenticatedUser,
+} from './github/index.js';
+
+export {
+  GitHubClient,
+  GitHubError,
+  GitHubErrorCategory,
+  categorizeErrorByStatus as categorizeGitHubError,
+  createErrorFromResponse as createGitHubErrorFromResponse,
+  createNetworkError as createGitHubNetworkError,
+  GITHUB_API_BASE_URL,
+  GITHUB_OAUTH,
+  GITHUB_RATE_LIMITS,
+  GITHUB_SCOPES,
+  FORJ_GITHUB_SCOPES,
+  REPO_VISIBILITY,
+  GITIGNORE_TEMPLATES,
+  LICENSE_TEMPLATES,
+  PAGES_PATHS,
+  DEFAULT_BRANCH_PROTECTION,
+  FORJ_USER_AGENT as GITHUB_USER_AGENT,
+} from './github/index.js';
