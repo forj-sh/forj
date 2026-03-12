@@ -12,6 +12,9 @@ export const QUEUE_NAMES = {
   SERVICE_PROVISION: 'service-provision',
   DNS_CHECK: 'dns-check',
   DNS_FIX: 'dns-fix',
+  GITHUB: 'github', // GitHub worker queue
+  CLOUDFLARE: 'cloudflare', // Cloudflare worker queue
+  DNS: 'dns', // DNS wiring worker queue
 } as const;
 
 /**
@@ -34,6 +37,9 @@ function createQueues(): Record<string, Queue> | Record<string, never> {
     serviceProvision: new Queue(QUEUE_NAMES.SERVICE_PROVISION, { connection }),
     dnsCheck: new Queue(QUEUE_NAMES.DNS_CHECK, { connection }),
     dnsFix: new Queue(QUEUE_NAMES.DNS_FIX, { connection }),
+    github: new Queue(QUEUE_NAMES.GITHUB, { connection }),
+    cloudflare: new Queue(QUEUE_NAMES.CLOUDFLARE, { connection }),
+    dns: new Queue(QUEUE_NAMES.DNS, { connection }),
   };
 }
 
@@ -89,4 +95,35 @@ export async function closeQueues(): Promise<void> {
     }
   }
   logger.info('All queues closed');
+}
+
+/**
+ * Queue getter functions for orchestrator
+ */
+export function getDomainQueue(): Queue {
+  if (!queues.domain) {
+    throw new Error('Domain queue not initialized');
+  }
+  return queues.domain;
+}
+
+export function getGitHubQueue(): Queue {
+  if (!queues.github) {
+    throw new Error('GitHub queue not initialized');
+  }
+  return queues.github;
+}
+
+export function getCloudflareQueue(): Queue {
+  if (!queues.cloudflare) {
+    throw new Error('Cloudflare queue not initialized');
+  }
+  return queues.cloudflare;
+}
+
+export function getDNSQueue(): Queue {
+  if (!queues.dns) {
+    throw new Error('DNS queue not initialized');
+  }
+  return queues.dns;
 }
