@@ -171,10 +171,11 @@ export class ProvisioningOrchestrator {
       domainName: config.domain,
       years: config.years,
       // Use the same contact info for all roles (standard for small teams)
-      registrant: config.contactInfo,
-      tech: config.contactInfo,
-      admin: config.contactInfo,
-      auxBilling: config.contactInfo,
+      // Map 'email' to 'emailAddress' for Namecheap API
+      registrant: { ...config.contactInfo, emailAddress: config.contactInfo.email },
+      tech: { ...config.contactInfo, emailAddress: config.contactInfo.email },
+      admin: { ...config.contactInfo, emailAddress: config.contactInfo.email },
+      auxBilling: { ...config.contactInfo, emailAddress: config.contactInfo.email },
       // WhoisGuard settings (enabled by default for privacy)
       addFreeWhoisguard: true,
       wgEnabled: true,

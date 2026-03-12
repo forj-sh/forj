@@ -5,9 +5,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Quick Reference
 
 **Current Status (March 11, 2026):**
-- **Phase:** 5 (GitHub + Cloudflare + DNS Wiring) - 🔲 IN PROGRESS
-- **Previous Phase:** 4 (Integration + Security) - ✅ COMPLETE & VERIFIED (PRs #31-#41)
-- **Branch:** main (Graphite stacks merged)
+- **Phase:** 5 (GitHub + Cloudflare + DNS Wiring) - ✅ COMPLETE (PRs #42-#53)
+- **Next Phase:** 6 (Auth + Credential Security)
+- **Branch:** main (all Graphite stacks merged)
 - **Architecture:** Cloudflare as DNS authority. Namecheap is registrar only.
 
 ### Essential Commands
@@ -30,22 +30,29 @@ gt submit                             # Push + create PRs
 
 ### Critical Information
 
-**Phase 4 Completion Checklist:**
-- ✅ Redis pub/sub + SSE streaming (Stack 1-3)
-- ✅ Namecheap routes mounted (Stack 4)
-- ✅ JWT auth middleware (Stack 6)
-- ✅ Authorization/IDOR fixes (Stack 7)
-- ✅ Stripe SDK integration (Stack 8)
-- ✅ Webhook signature verification (Stack 9)
-- ✅ Checkout routes (Stack 10)
-- ✅ Server-side pricing validation (Stack 11)
+**Phase 5 Completion Checklist:**
+- ✅ Cloudflare API client + types (Stack 1)
+- ✅ Cloudflare token verification + encrypted storage (Stack 2)
+- ✅ GitHub OAuth Device Flow (Stack 3)
+- ✅ GitHub API client + types (Stack 4)
+- ✅ GitHub worker — org verification + repo creation (Stack 5)
+- ✅ Cloudflare worker — zone creation + NS handoff (Stack 6)
+- ✅ DNS wiring worker — MX, SPF, DKIM, DMARC, CNAME (Stack 7)
+- ✅ DNS health checker + auto-repair (Stack 8)
+- ✅ CLI auth flows — Cloudflare + GitHub (Stack 9)
+- ✅ Provisioning orchestrator — parallel execution (Stack 10)
+- ✅ End-to-end integration testing (Stack 11)
+- ✅ Documentation + security review (Stack 12)
 
 **Security Status:**
 - ✅ JWT authentication protects all domain routes
 - ✅ IDOR vulnerability fixed (ownership checks)
 - ✅ Stripe webhook forgery prevented (signature verification)
 - ✅ Price manipulation prevented (server-side validation)
+- ✅ Cloudflare/GitHub tokens encrypted at rest (AES-256-GCM)
 - ⚠️ Per-user/per-IP rate limiting still needed
+- ⚠️ Agent API key auth not yet implemented
+- ⚠️ Credential rotation support needed
 
 **Environment Variables Required for Testing:**
 ```bash
@@ -71,15 +78,15 @@ NAMECHEAP_SANDBOX=true
 
 ### Navigation Guide
 
-This file is 900+ lines. Jump to relevant sections:
-- **[Testing Phase 4](#testing-phase-4-integration--security)** - Comprehensive testing guide (NEW)
+Quick links to key sections:
 - **[Build Progress](#build-progress)** - Current phase status
 - **[Architecture](#architecture-implemented)** - System design
-- **[API Contracts](#api-contracts-defined-by-cli)** - Endpoint reference
-- **[Security Considerations](#security-considerations)** - Updated with Phase 4 fixes
 - **[Development Workflow](#development-workflow)** - Graphite stacking guide
 - **[Common Commands](#common-commands)** - npm workspace commands
-- **[Troubleshooting](#troubleshooting)** - Common issues
+
+For detailed guides, see:
+- Testing: `project-docs/testing-guide.md`
+- Troubleshooting: `project-docs/troubleshooting.md`
 
 ---
 
@@ -202,24 +209,10 @@ The CLI client defines these endpoints (all expect `{ success, data, error, mess
 
 ## Tech Stack
 
-| Layer | Technology | Status | Why |
-|-------|-----------|--------|-----|
-| Runtime | Node.js 18+ TypeScript | ✅ | Native fit for API integrations, strong typing |
-| API Framework | Fastify 4 | ✅ | Fast, schema-native, good SSE support |
-| Queue | BullMQ 5 + Redis (ioredis) | ✅ | Reliable job processing, retry semantics |
-| Database | Neon Postgres (serverless) | ✅ | JSONB for flexible state, WebSocket connections |
-| CLI | commander.js 12 + inquirer 9 | ✅ | Interactive CLI standard |
-| CLI Build | tsup 8 (esbuild) | ✅ | ESM output with shebang, Node 18+ target |
-| CLI UX | chalk 5 + ora 8 | ✅ | Styled output + spinners for streaming progress |
-| SSE Client | eventsource 2 | ✅ | Real-time provisioning updates in CLI |
-| XML Parsing | fast-xml-parser | ✅ | Namecheap's attribute-based XML responses |
-| Phone Validation | libphonenumber-js | ✅ | Contact info formatting for domain registration |
-| Logging | Pino 8 | ✅ | Structured logging with pretty-printing in dev |
-| Auth | jose (JWT) + Node crypto AES-256-GCM | 🔲 | Token encryption, short-lived sessions |
-| Deployment | Railway or Render | 🔲 | Low ops, managed Postgres + Redis |
-| Domain API | Namecheap Reseller API | ✅ | 8 methods implemented, rate limited, priority queued |
-| Payments | Stripe Checkout | ⚠️ | Webhook handlers defined, signature verification pending |
-| DNS Validation | dns.resolve() + dnspropagation.net API | 🔲 | Post-provision record verification |
+**Backend:** Fastify 4, BullMQ + Redis, Neon Postgres (serverless), Pino logging
+**CLI:** commander.js, inquirer, chalk, ora, eventsource (SSE)
+**Integrations:** Namecheap Reseller API, Stripe Checkout, jose (JWT)
+**Build:** tsup (esbuild), TypeScript strict mode, Node.js 18+
 
 ## Key Service Integrations (by Phase)
 
@@ -298,46 +291,17 @@ Auto-configures records that founders commonly misconfigure (all via Cloudflare 
 - Forj configures via CloudFormation templates
 - Not needed for V1 target users (0→1 stage founders)
 
-## CLI Modes
+## CLI Usage
 
-### Interactive Mode (Human Developers)
+**Interactive mode:**
 ```bash
-$ npx forj-cli init acme
-
-✦ forj — project infrastructure provisioning
-
-? Company / project name: Acme Inc
-? Desired domain: (checking availability...)
-  ✓ acme.io         — $9.95/yr
-  ✓ getacme.com     — $12.95/yr
-  ✗ acme.com        — taken
-? Select domain: getacme.com
-
-? Services to provision:
-  ✓ Domain registration   (Namecheap reseller)
-  ✓ GitHub org + repos    (github.com/getacme)
-  ✓ Cloudflare zone + DNS wiring
-  ✓ Vercel project        (linked to GitHub)
-
-! GitHub org must be created manually — takes 15 seconds.
-  Opening github.com/organizations/new ...
-? GitHub org name (confirm when created): getacme
-  ✓ GitHub org confirmed
-
-Provisioning...
-  ✓ Domain registered          getacme.com
-  ✓ GitHub repos created       github.com/getacme/app
-  ✓ Cloudflare zone active     getacme.com
-  ✓ DNS wired                  MX · SPF · DKIM · CNAME
-  ✓ Vercel project linked      getacme.vercel.app
-
-Credentials → .forj/credentials.json (gitignored ✓)
-
-Setup complete in 2m 14s
-Run `forj status` to see your stack.
+npx forj-cli init acme
+# Guided prompts for domain selection, service configuration
+# Provisions: domain (Namecheap) → GitHub repos → Cloudflare DNS → DNS wiring
+# Output: .forj/credentials.json (gitignored)
 ```
 
-### Non-Interactive Mode (AI Coding Agents)
+**Non-interactive mode (for AI agents):**
 ```bash
 npx forj-cli init acme \
   --domain getacme.com \
@@ -345,31 +309,15 @@ npx forj-cli init acme \
   --github-org getacme \
   --non-interactive \
   --json
-
-# Returns structured JSON
-{
-  "status": "complete",
-  "project": "acme",
-  "duration_ms": 134200,
-  "services": {
-    "domain":     { "status": "ok", "value": "getacme.com" },
-    "github":     { "status": "ok", "value": "github.com/getacme" },
-    "cloudflare": { "status": "ok", "zone_id": "abc123" },
-    "dns":        { "status": "ok", "records": ["MX", "SPF", "DKIM", "CNAME"] }
-  },
-  "credentials_path": ".forj/credentials.json"
-}
+# Returns structured JSON with service status
 ```
 
-**Note for agents**: `--github-org` flag assumes org already exists. For new orgs, interactive mode required.
-
-**After global install:**
+**Global install:**
 ```bash
 npm install -g forj-cli
-forj init acme              # Simplified invocation
-forj status                 # Check project status
-forj add vercel             # Add services post-init
-forj dns check              # Verify DNS configuration
+forj init acme    # Simplified invocation
+forj status       # Check project status
+forj dns check    # Verify DNS configuration
 ```
 
 ## Build Progress
@@ -380,332 +328,30 @@ forj dns check              # Verify DNS configuration
 | 2. API Server Scaffold | ✅ Complete | Fastify + Postgres + BullMQ + Redis (PRs #12-#18) |
 | 3. Namecheap Domain Integration | ✅ Complete | Full API client, rate limiter, priority queue, domain worker (PRs #19-#30) |
 | 4. Integration + Security | ✅ Complete | Route mounting, auth middleware, Stripe verification, SSE wiring (PRs #31-#41) |
-| 5. GitHub + Cloudflare + DNS Wiring | 🔲 Next | Cloudflare API + zones, GitHub Device Flow + repos, DNS wiring, orchestrator (12 stacks) |
-| 6. Auth + Credential Security | 🔲 Planned | Agent API keys, credential encryption, MCP definition |
+| 5. GitHub + Cloudflare + DNS Wiring | ✅ Complete | Cloudflare API + zones, GitHub Device Flow + repos, DNS wiring, orchestrator (PRs #42-#53) |
+| 6. Auth + Credential Security | 🔲 Next | Agent API keys, per-user rate limiting, credential rotation, MCP definition |
 | 7. Ship | 🔲 Planned | npm publish, demo, launch |
 
-**Latest:** Phase 4 verified complete March 11, 2026 (all 11 stacks tested with live Namecheap sandbox). Phase 5 planning complete — 12 stacks broken out in build plan.
+**Latest:** Phase 5 complete March 11, 2026 (12-stack PR sequence #42-#53). Full provisioning pipeline now operational: domain registration → GitHub repos → Cloudflare zones → DNS wiring.
 
-**Full build plan:** `project-docs/build-plan.md` — Phase 5 stack breakdown, architecture decisions, env vars, security tracking.
+**Full build plan:** `project-docs/build-plan.md`
 
-## Testing Phase 4 (Integration + Security)
+## Testing
 
-Phase 4 is now complete and ready for end-to-end testing. Here's how to test each component:
+Phase 4 (Integration + Security) is complete. For comprehensive testing instructions, see `project-docs/testing-guide.md`.
 
-### Prerequisites
-
-Ensure you have the following services running:
+**Quick verification:**
 ```bash
-# Check Redis is running
-redis-cli ping  # Should return PONG
-
-# Check Postgres is accessible
-psql $DATABASE_URL -c "SELECT 1"  # Should return 1
-
-# Generate JWT secret if not set
-openssl rand -base64 32  # Copy to .env as JWT_SECRET
-```
-
-### Environment Setup for Testing
-
-**Required environment variables** (`packages/api/.env`):
-```bash
-# Core services (REQUIRED)
-DATABASE_URL=postgresql://user:pass@localhost:5432/forj_dev
-REDIS_URL=redis://localhost:6379
-JWT_SECRET=<output from openssl rand -base64 32>
-
-# Namecheap testing (OPTIONAL - uses mock routes if not set)
-NAMECHEAP_API_USER=your_username
-NAMECHEAP_API_KEY=your_api_key
-NAMECHEAP_USERNAME=your_username
-NAMECHEAP_CLIENT_IP=127.0.0.1
-NAMECHEAP_SANDBOX=true
-ENABLE_NAMECHEAP_ROUTES=true  # CRITICAL: Must be 'true' to mount production routes
-
-# Stripe testing (OPTIONAL - uses test mode)
-STRIPE_SECRET_KEY=sk_test_...
-STRIPE_WEBHOOK_SECRET=whsec_...
-STRIPE_PUBLISHABLE_KEY=pk_test_...
-```
-
-### Test 1: Run Integration Tests
-
-```bash
-# Run the SSE streaming integration test (Stack 5)
+# Run integration tests
 npm test -w packages/api -- sse-streaming.test.ts
 
-# Expected output:
-# ✓ should publish and receive worker events via Redis pub/sub
-# ✓ should convert worker events to SSE format correctly
+# Start services
+npm run dev -w packages/api          # Terminal 1
+cd packages/workers && npm run dev   # Terminal 2
+
+# Health check
+curl http://localhost:3000/health
 ```
-
-### Test 2: Start API Server
-
-```bash
-# Terminal 1: Start API server
-npm run dev -w packages/api
-
-# Expected console output:
-# ✓ Namecheap domain routes registered (production mode) OR
-#   ⚠ Namecheap credentials not configured - using mock domain routes
-# ✓ Stripe checkout routes registered with server-side pricing validation
-# ✓ Stripe webhook routes registered
-# Server listening at http://localhost:3000
-```
-
-### Test 3: Test Authentication (Stack 6)
-
-```bash
-# Terminal 2: Test JWT auth
-
-# 1. Try accessing protected route without auth (should fail)
-curl -X POST http://localhost:3000/domains/check \
-  -H "Content-Type: application/json" \
-  -d '{"domains": ["example.com"]}'
-
-# Expected: 401 Unauthorized
-# {"success":false,"error":"Missing authorization header"}
-
-# 2. Get a JWT token (mock auth endpoint)
-TOKEN=$(curl -s http://localhost:3000/auth/cli | jq -r '.data.token')
-
-# 3. Access protected route with auth (should succeed)
-curl -X POST http://localhost:3000/domains/check \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"domains": ["example.com"]}'
-
-# Expected: 200 OK with domain availability data
-```
-
-### Test 4: Test Domain Check (Stack 4)
-
-```bash
-# With Namecheap configured:
-curl -X POST http://localhost:3000/domains/check \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"domains": ["example.com", "example.net"]}'
-
-# Expected response (Namecheap API):
-# {
-#   "success": true,
-#   "data": {
-#     "results": [
-#       {"domain": "example.com", "available": false, "price": null},
-#       {"domain": "example.net", "available": false, "price": null}
-#     ]
-#   }
-# }
-
-# Without Namecheap (mock routes):
-# Same response structure but from mock data
-```
-
-### Test 5: Test Domain Registration Job Creation (Stack 4)
-
-```bash
-# Create a domain registration job
-curl -X POST http://localhost:3000/domains/register \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{
-    "domain": "test-forj-domain.com",
-    "userId": "test-user-123",
-    "projectId": "test-project-123",
-    "years": 1,
-    "contactInfo": {
-      "firstName": "John",
-      "lastName": "Doe",
-      "email": "john@example.com",
-      "phone": "+1.5551234567",
-      "address1": "123 Main St",
-      "city": "San Francisco",
-      "stateProvince": "CA",
-      "postalCode": "94102",
-      "country": "US"
-    }
-  }'
-
-# Expected response:
-# {
-#   "success": true,
-#   "data": {
-#     "jobId": "domain:register:<uuid>",
-#     "domain": "test-forj-domain.com",
-#     "status": "pending"
-#   }
-# }
-```
-
-### Test 6: Test Authorization Checks (Stack 7)
-
-```bash
-# Get your userId from the token
-USER_ID=$(echo $TOKEN | jwt decode - | jq -r '.userId')
-
-# Try to access another user's job (should fail)
-curl -X GET "http://localhost:3000/domains/jobs/domain:check:another-users-job" \
-  -H "Authorization: Bearer $TOKEN"
-
-# Expected: 403 Forbidden
-# {"success":false,"error":"Unauthorized to access this job"}
-
-# Access your own job (should succeed)
-JOB_ID="<jobId from Test 5>"
-curl -X GET "http://localhost:3000/domains/jobs/$JOB_ID" \
-  -H "Authorization: Bearer $TOKEN"
-
-# Expected: 200 OK with job details
-```
-
-### Test 7: Test SSE Streaming (Stack 2-3)
-
-```bash
-# Terminal 3: Start domain worker
-cd packages/workers
-npm run dev
-
-# Terminal 2: Subscribe to SSE events
-curl -N http://localhost:3000/events/stream/test-project-123
-
-# Expected: SSE stream connection established
-# data: {"type":"connection","message":"Connected to event stream"}
-
-# Terminal 4: Trigger a domain check to generate events
-curl -X POST http://localhost:3000/domains/check \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"domains": ["example.com"], "projectId": "test-project-123"}'
-
-# Terminal 3: Should see SSE events flowing:
-# data: {"type":"domain_check","status":"queued",...}
-# data: {"type":"domain_check","status":"checking",...}
-# data: {"type":"domain_check","status":"complete",...}
-```
-
-### Test 8: Test Stripe Checkout (Stack 10-11)
-
-```bash
-# Create a Stripe checkout session with server-side pricing validation
-curl -X POST http://localhost:3000/checkout/create-session \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{
-    "domain": "example.com",
-    "tld": "com",
-    "years": 1,
-    "userId": "test-user-123",
-    "projectId": "test-project-123"
-  }'
-
-# Expected response:
-# {
-#   "success": true,
-#   "data": {
-#     "sessionId": "cs_test_...",
-#     "url": "https://checkout.stripe.com/c/pay/cs_test_..."
-#   }
-# }
-
-# Stack 11 validation: Try to manipulate pricing (should fail)
-curl -X POST http://localhost:3000/checkout/create-session \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{
-    "domain": "example.com",
-    "tld": "com",
-    "years": 1,
-    "userId": "test-user-123",
-    "projectId": "test-project-123",
-    "price": 0.01
-  }'
-
-# Expected: Server ignores client-provided price and uses PricingCache
-```
-
-### Test 9: Test Stripe Webhooks (Stack 9)
-
-```bash
-# Use Stripe CLI to forward webhooks to local server
-stripe listen --forward-to localhost:3000/webhooks/stripe
-
-# In another terminal, trigger a test webhook
-stripe trigger checkout.session.completed
-
-# Expected in API server logs:
-# ✓ Webhook signature verified
-# ✓ Processing checkout.session.completed event
-# ✓ Domain registration job created
-
-# Try forged webhook (should fail)
-curl -X POST http://localhost:3000/webhooks/stripe \
-  -H "Content-Type: application/json" \
-  -d '{"type":"checkout.session.completed",...}'
-
-# Expected: 400 Bad Request
-# {"success":false,"error":"Invalid webhook signature"}
-```
-
-### Test 10: End-to-End CLI Test
-
-```bash
-# Terminal 1: API server running
-npm run dev -w packages/api
-
-# Terminal 2: Worker running
-cd packages/workers && npm run dev
-
-# Terminal 3: Run CLI
-cd packages/cli
-npm run build
-node dist/cli.js init test-project --non-interactive --json
-
-# Expected: Full provisioning flow with real-time SSE updates
-```
-
-### Testing Checklist
-
-Use this checklist to verify Phase 4 completion:
-
-- [ ] ✅ **Stack 1-3**: Redis pub/sub + SSE streaming works end-to-end
-- [ ] ✅ **Stack 4**: Namecheap routes are mounted and functional
-- [ ] ✅ **Stack 6**: JWT auth protects all domain routes
-- [ ] ✅ **Stack 7**: Authorization checks prevent IDOR attacks
-- [ ] ✅ **Stack 8**: Stripe SDK installed and client wrapper works
-- [ ] ✅ **Stack 9**: Webhook signature verification rejects forged webhooks
-- [ ] ✅ **Stack 10**: Stripe checkout routes create valid sessions
-- [ ] ✅ **Stack 11**: Server-side pricing validation prevents manipulation
-
-### Known Limitations (Expected)
-
-- **Project/user management**: Still using mock data (Phase 5 will add real GitHub OAuth)
-- **DNS routes**: Still mock (Phase 6 will add Cloudflare integration)
-- **Credential handoff**: Not yet implemented (Phase 7)
-- **CLI OAuth**: Uses mock token endpoint (Phase 5 will add real OAuth)
-
-### Troubleshooting Tests
-
-**"Namecheap credentials not configured"**
-- Set `ENABLE_NAMECHEAP_ROUTES=true` in `.env`
-- Verify all 4 Namecheap env vars are set
-- Check API server logs for initialization errors
-
-**"Invalid webhook signature"**
-- Use `stripe listen` to get test webhook secret
-- Set `STRIPE_WEBHOOK_SECRET` in `.env` to the output from `stripe listen`
-- Restart API server after changing env vars
-
-**"Redis connection failed"**
-- Verify Redis is running: `redis-cli ping`
-- Check `REDIS_URL` format: `redis://localhost:6379`
-- Integration tests will skip if Redis unavailable
-
-**"JWT verification failed"**
-- Ensure `JWT_SECRET` is set in `.env`
-- Token expires after 30 days (configurable in `lib/jwt.ts`)
-- Generate new token with `/auth/cli` endpoint
 
 ## Development Workflow
 
@@ -819,23 +465,66 @@ gt restack                 # Automatically rebases stacks 3-12
 gt submit
 ```
 
-**5. PR template for stacks**
+**5. Write clear PR descriptions**
 
-Each PR should include:
+**CRITICAL:** When using `gt submit`, Graphite will prompt for PR descriptions. Always provide a clear, detailed description for each stack following this template:
+
 ```markdown
 ## Summary
-Brief description of changes in this stack
+[2-3 sentences explaining WHAT this stack does and WHY it's needed]
 
-## Stack Position
+## Changes
+- [Specific change 1]
+- [Specific change 2]
+- [Specific change 3]
+
+## Stack Context
 **Stack X of Y** - Builds on Stack X-1
 
 ## Dependencies
-- **Requires**: Stack X-1 (PR #N)
-- **Required by**: Stack X+1 (PR #N+1)
+- **Requires**: Stack X-1 (PR #N) - [what it provides]
+- **Required by**: Stack X+1 (PR #N+1) - [what will build on this]
+
+## Testing
+- [ ] Integration tests pass
+- [ ] Manual testing completed: [describe what you tested]
 
 ## Next Stack
-Brief preview of what Stack X+1 will add
+[1 sentence preview of what Stack X+1 will add]
 ```
+
+**Example for Stack 6 (JWT Auth Middleware):**
+```markdown
+## Summary
+Implements JWT authentication middleware to protect all domain routes. Uses `jose` library for token verification and adds `requireAuth` decorator to Fastify routes. This prevents unauthorized access to Namecheap API operations and job status endpoints.
+
+## Changes
+- Added `lib/jwt.ts` with token generation and verification
+- Created `requireAuth` middleware in `middleware/auth.ts`
+- Applied middleware to all domain routes in `routes/domains-namecheap.ts`
+- Added mock `/auth/cli` endpoint for development
+
+## Stack Context
+**Stack 6 of 11** - Builds on Stack 4 (Namecheap routes)
+
+## Dependencies
+- **Requires**: Stack 4 (PR #34) - Mounted Namecheap routes that need protection
+- **Required by**: Stack 7 (PR #36) - Authorization checks that verify ownership
+
+## Testing
+- [x] Integration tests pass
+- [x] Manual testing: Verified 401 on protected routes without token
+- [x] Manual testing: Verified 200 with valid JWT token
+
+## Next Stack
+Stack 7 will add ownership verification to prevent IDOR attacks on job endpoints.
+```
+
+**Why detailed descriptions matter:**
+- Helps reviewers understand context quickly
+- Documents decision-making for future reference
+- Makes it easier to debug issues later
+- Shows AI agents (like Claude Code) the reasoning behind changes
 
 **6. Merging stacks**
 
@@ -844,15 +533,11 @@ Use Graphite's merge queue or merge from GitHub:
 2. Merge Stack 2 → main
 3. Continue up the stack
 
-**7. What NOT to do**
+**7. Common mistakes to avoid**
 
-❌ **Don't use `git checkout -b` for stacked branches** — use `gt create`
-❌ **Don't manually rebase stacks** — use `gt restack`
-❌ **Don't use `gh pr create` with manual base branches** — use `gt submit`
-❌ **Don't commit everything to main first, then create PRs** (defeats the purpose)
-❌ **Don't make stacks too large** (> 500 lines of changes)
-❌ **Don't make stacks too granular** (< 50 lines, unless critical)
-❌ **Don't create stacks with unclear dependencies**
+❌ Don't use raw `git` commands — always use `gt create`, `gt modify`, `gt restack`, `gt submit`
+❌ Don't make stacks too large (> 500 lines) or too granular (< 50 lines)
+❌ Don't skip PR descriptions — they're critical for context and review
 
 ### Current Repository State
 
@@ -975,67 +660,16 @@ npm run clean                    # Remove all node_modules and dist folders
 
 ### Landing Page (`packages/landing`)
 
+**Stack:** Vite + TypeScript, deployed on Vercel
+**Database:** Neon PostgreSQL (waitlist storage)
+**Spam protection:** Cloudflare Turnstile + rate limiting
+
 ```bash
-# Development
-npm run dev -w packages/landing        # Start Vite dev server (http://localhost:5173)
-npm run build -w packages/landing      # Build for production (outputs to dist/)
-npm run preview -w packages/landing    # Preview production build locally
-npm run type-check -w packages/landing # Run TypeScript type checking
-npm run db:migrate -w packages/landing # Run database migrations
-
-# Deployment (handled automatically by Vercel on push to main)
+npm run dev -w packages/landing        # Start dev server (:5173)
+npm run build -w packages/landing      # Build for production
 ```
 
-### Landing Page Architecture
-
-The landing page is a **Vite + TypeScript** application with the following structure:
-
-```
-packages/landing/
-├── src/
-│   ├── components/     # UI components (header, hero, waitlist form, etc.)
-│   ├── services/       # API integrations (waitlist submission)
-│   ├── styles/         # CSS modules
-│   ├── utils/          # Utilities (validation, observers)
-│   ├── lib/            # Shared libraries (Turnstile integration)
-│   └── main.ts         # Entry point
-├── api/                # Vercel serverless functions (waitlist form handler)
-├── public/             # Static assets (images, fonts)
-└── scripts/            # Database migration scripts
-```
-
-**Key components:**
-- **Waitlist form** (`src/components/waitlist-form.ts`): Email capture with client-side validation
-- **Turnstile integration** (`src/lib/turnstile.ts`): Cloudflare CAPTCHA for spam protection
-- **API handler** (`/api/submit-form.ts`): Vercel serverless function for form submissions
-- **Database utilities** (`/lib/database.ts`): Neon PostgreSQL helpers for storing signups
-
-**Tech stack:**
-- **Build**: Vite 5 + TypeScript
-- **Database**: Neon PostgreSQL (serverless, managed)
-- **Email**: Resend (notification emails to admin)
-- **Spam protection**: Cloudflare Turnstile + rate limiting + disposable email blocking
-- **Deployment**: Vercel (auto-deploys on push to main)
-
-**Environment variables** (see `packages/landing/.env.local.example`):
-- `VITE_TURNSTILE_SITEKEY`: Public Cloudflare Turnstile site key (optional for dev)
-- `TURNSTILE_SECRET_KEY`: Secret Turnstile key for server-side verification (optional for dev)
-- `RESEND_API_KEY`: Resend API key for email notifications (optional for dev)
-- `DATABASE_URL`: Neon PostgreSQL connection string (required for production)
-
-**Important: Root-level `/api` and `/lib` directories**
-
-Due to Vercel deployment constraints, the landing page has two directories at the monorepo root:
-- `/api/submit-form.ts`: Vercel serverless function for waitlist form submission
-- `/lib/database.ts`: Shared database utilities used by the API function
-
-These are logically part of the landing page but must live at the root because Vercel expects API routes at `/api` when deploying. The `vercel.json` at the root configures the deployment to treat `packages/landing` as the build directory while keeping API routes accessible.
-
-**When working on the landing page**, remember that:
-- Frontend code lives in `packages/landing/src/`
-- API code lives in `/api/` (root level)
-- Shared utilities live in `/lib/` (root level)
-- All three work together as a single deployed application on Vercel
+**Important:** Due to Vercel constraints, API routes live at `/api/` (root) and shared utils at `/lib/` (root). Frontend code is in `packages/landing/src/`. See `packages/landing/.env.local.example` for env vars.
 
 ### Package Architecture (Implemented)
 
@@ -1175,52 +809,15 @@ Forj is merchant of record for billable services. User pays Forj once via Stripe
 
 **Note**: Do NOT apply for Google Workspace reseller before launch. Google wants to see business activity (100+ customers) before approval is likely.
 
-## Pre-Build Validation (IMPORTANT)
+## Technical Feasibility
 
-Before implementing, validate demand:
-1. **Developer demand:** Post landing page, get 200 waitlist signups
-2. **Willingness to pay:** Scrape Delaware incorporation filings, cold email 50 technical founders, get 5+ genuine responses
+✅ **V1 MVP is 100% buildable** with publicly available APIs:
+- Namecheap Reseller API (domain registration)
+- GitHub REST API (repo automation, org creation is guided manual)
+- Cloudflare API (DNS zone management via user's account)
+- Stripe Checkout (payment processing)
 
-**Two weeks of validation before two weeks of build.**
-
-## Key Changes from v0.1 → v0.2 (Post-Feasibility Assessment)
-
-The spec was revised after comprehensive API research revealed blockers in the original plan. Here's what changed:
-
-### What Changed ✏️
-
-| Component | v0.1 (Original) | v0.2 (Current) | Reason |
-|-----------|-----------------|----------------|---------|
-| **Domain registration** | Cloudflare Registrar | Namecheap Reseller API | Cloudflare has no reseller program/API |
-| **GitHub org creation** | Fully automated via API | Guided manual step (15s) | GitHub.com doesn't support org creation via API |
-| **Deployment platform** | AWS (V1) | Vercel + Railway (V2) | V1 users are 0→1 founders, not AWS scale |
-| **Google Workspace** | V2 | V3 | Requires 100+ seats + 4+ week approval |
-| **Payment model** | Unclear | Hybrid: reseller for domains, BYOA for GitHub/CF | Clarified based on API capabilities |
-
-### What Stayed the Same ✓
-
-- **DNS wiring** remains the highest-value operation (fully feasible)
-- **CLI architecture** (thin client + server-side workers + SSE streaming)
-- **State machine design** (Postgres JSONB + BullMQ workers)
-- **Target users** (vibe-coders, founders, AI agents, serial builders)
-- **Core value prop** ("opinionated correctness" for startup infrastructure)
-
-### Technical Feasibility Confirmed ✅
-
-**V1 MVP (4 weeks) is 100% buildable** with no blockers:
-- ✅ Namecheap Reseller API is proven, documented, $50 barrier to entry
-- ✅ GitHub guided flow is acceptable UX (15s browser step)
-- ✅ Cloudflare DNS API fully accessible via user OAuth
-- ✅ DNS wiring is pure API calls (no external dependencies)
-- ✅ Stripe payment flow is standard SaaS integration
-
-**V2 (Vercel/Railway) is confirmed feasible** via official APIs.
-
-**V3 (Google Workspace/AWS) is aspirational** but not required for product validation.
-
-### Why This Matters
-
-The v0.2 spec represents a **shippable MVP**. Every service integration has a confirmed, publicly accessible API. No partnerships, no enterprise contracts, no waiting for approvals. This can be built and launched in 4 weeks.
+See `project-docs/forj-spec.md` for complete feasibility assessment and v0.1 → v0.2 changes.
 
 ## Important File Locations
 
@@ -1268,60 +865,13 @@ The v0.2 spec represents a **shippable MVP**. Every service integration has a co
 
 ## Troubleshooting
 
-### Common Issues
+**Common issues:**
+- **Redis connection errors:** Verify `redis-cli ping` returns `PONG`, check `REDIS_URL`
+- **Module not found in CLI:** Use `.js` extensions in imports (ESM requirement)
+- **Rate limit exceeded:** Namecheap sandbox has 20 req/min, clear Redis: `redis-cli FLUSHDB`
+- **Worker not processing:** Check Redis connection, verify queue name matches
 
-**"Module not found" errors in CLI:**
-- Ensure you're using `.js` extensions in imports: `import { foo } from './bar.js'`
-- CLI uses NodeNext module resolution which requires explicit extensions
-
-**Redis connection errors:**
-- Check Redis is running: `redis-cli ping` (should return `PONG`)
-- Verify `REDIS_URL` in `.env` matches your Redis setup
-- Default: `redis://localhost:6379`
-
-**Database migration errors:**
-- Ensure PostgreSQL is running and accessible
-- Check `DATABASE_URL` format: `postgresql://user:pass@host:port/database`
-- Run migrations: `npm run db:migrate -w packages/api`
-
-**"Rate limit exceeded" during development:**
-- Namecheap sandbox API has 20 req/min limit
-- Rate limiter is Redis-backed, persists across restarts
-- Clear Redis: `redis-cli FLUSHDB` (use cautiously)
-
-**BullMQ worker not processing jobs:**
-- Ensure Redis is running and connected
-- Check worker logs for errors
-- Verify queue name matches: `domainQueue` (defined in `packages/api/src/lib/queues.ts`)
-
-**CLI can't connect to API:**
-- Verify API server is running: `npm run dev -w packages/api`
-- Check API_URL matches CLI configuration (default: `http://localhost:3000`)
-- Test health endpoint: `curl http://localhost:3000/health`
-
-### Debug Mode
-
-**Enable verbose logging in CLI:**
-```bash
-# CLI has logger with different levels
-# Logs are output to console with chalk formatting
-FORJ_DEV=1 node packages/cli/dist/cli.js init test
-```
-
-**Enable Pino pretty-printing in API:**
-```bash
-# Already enabled in development mode
-NODE_ENV=development npm run dev -w packages/api
-```
-
-**Access Bull Board (queue monitoring):**
-```bash
-# Set in .env
-ENABLE_BULL_BOARD=true
-
-# Access at http://localhost:3000/queues
-# WARNING: No authentication - only use in local dev
-```
+For detailed troubleshooting, see `project-docs/troubleshooting.md`.
 
 ## References
 

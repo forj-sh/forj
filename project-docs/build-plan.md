@@ -1,6 +1,6 @@
 # Forj Build Plan
 
-Last updated: 2026-03-11
+Last updated: 2026-03-11 (Phase 5 complete)
 
 ## V1 — MVP (Core Infrastructure)
 
@@ -56,7 +56,7 @@ Last updated: 2026-03-11
 - `ENABLE_NAMECHEAP_ROUTES=true` flag controls production vs mock route mounting
 - Verified with live Namecheap sandbox API calls
 
-### Phase 5: GitHub + Cloudflare + DNS Wiring 🔲 NEXT
+### Phase 5: GitHub + Cloudflare + DNS Wiring ✅ COMPLETE (Stacks 1-12, PRs #42-#53)
 
 **Architecture: Cloudflare as DNS authority.** Namecheap is the registrar only. After domain registration, nameservers are updated to point to Cloudflare. All DNS record management (MX, SPF, DKIM, DMARC, CNAME) happens via Cloudflare's API.
 
@@ -233,7 +233,7 @@ Note: No Cloudflare OAuth client ID/secret needed — users provide their own AP
 | Gap | Severity | Phase |
 |-----|----------|-------|
 | Per-user/per-IP rate limiting on API routes | MEDIUM | Phase 6 |
-| Credential encryption at rest (Cloudflare/GitHub tokens) | HIGH | Phase 5 (Stack 2) |
+| Credential encryption at rest (Cloudflare/GitHub tokens) | ✅ Fixed | Phase 5 (Stack 2) |
 | Credential rotation support | MEDIUM | Phase 6 |
 
 ---
