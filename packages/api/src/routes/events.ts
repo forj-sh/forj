@@ -2,18 +2,20 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { ServiceEvent, CompleteEvent, ErrorEvent, DomainWorkerEvent, ProvisioningEvent } from '@forj/shared';
 import { DomainWorkerEventType } from '@forj/shared';
 import { redisPubSub } from '../lib/redis-pubsub.js';
+import { requireAuth } from '../middleware/auth.js';
+import { ipRateLimit } from '../middleware/ip-rate-limit.js';
+import { verifyProjectOwnership } from '../lib/authorization.js';
 
 /**
  * Server-Sent Events (SSE) routes for real-time provisioning updates
  *
- * Stack 3: Real SSE streaming from Redis worker events
+ * Stack 3: Real SSE streaming from Redis worker events with authentication
  *
- * SECURITY NOTE: Authentication not yet implemented.
- * Before production deployment, implement:
- * - Authentication middleware (verify JWT tokens from /auth/cli)
- * - Authorization checks (verify user owns this project via database)
- * - Rate limiting per user to prevent SSE abuse
- * - Input validation for projectId parameter
+ * SECURITY:
+ * - Authentication middleware (JWT required)
+ * - Authorization checks (user must own project)
+ * - IP-based rate limiting (max 10 streams per minute)
+ * - Returns 404 for unauthorized projects (prevents enumeration)
  */
 export async function eventRoutes(server: FastifyInstance) {
   /**
@@ -22,15 +24,44 @@ export async function eventRoutes(server: FastifyInstance) {
    *
    * Subscribes to Redis pub/sub channel for worker events and streams them to the CLI.
    *
-   * TODO (SECURITY): Add authentication middleware before production
-   * TODO (SECURITY): Verify user owns this project (check user_id in database)
-   * TODO (SECURITY): Return 404 for non-existent projects (don't leak existence)
-   * TODO (SECURITY): Add rate limiting to prevent SSE connection abuse
+   * SECURITY: Stack 3 implementation
+   * - requireAuth: Verifies JWT token
+   * - verifyProjectOwnership: Ensures user owns the project
+   * - ipRateLimit: Max 10 concurrent streams per IP per minute
+   * - 404 response for unauthorized access (prevents project ID enumeration)
    */
   server.get<{ Params: { projectId: string } }>(
     '/events/stream/:projectId',
+    {
+      preHandler: [
+        requireAuth,
+        ipRateLimit('sse-stream', { maxRequests: 10, windowMs: 60000 })
+      ]
+    },
     async (request: FastifyRequest<{ Params: { projectId: string } }>, reply: FastifyReply) => {
       const { projectId } = request.params;
+      const userId = request.user!.userId; // Guaranteed by requireAuth
+
+      // AUTHORIZATION CHECK: Verify user owns this project
+      const ownsProject = await verifyProjectOwnership(projectId, userId, request.log);
+      if (!ownsProject) {
+        // Return 404 instead of 403 to prevent project ID enumeration
+        request.log.warn({
+          projectId,
+          userId,
+        }, 'SSE stream blocked - project not found or unauthorized');
+
+        return reply.status(404).send({
+          success: false,
+          error: 'Project not found',
+          code: 'PROJECT_NOT_FOUND',
+        });
+      }
+
+      request.log.info({
+        projectId,
+        userId,
+      }, 'SSE stream authorized - user owns project');
 
       // Set SSE headers
       reply.raw.writeHead(200, {
