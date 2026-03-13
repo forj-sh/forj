@@ -1,7 +1,23 @@
 /**
  * Cloudflare authentication routes
  *
- * Handles storage and verification of Cloudflare API tokens
+ * Handles storage and verification of Cloudflare API tokens.
+ *
+ * TOKEN ROTATION WORKFLOW:
+ * 1. User creates new API token in Cloudflare dashboard with required permissions
+ * 2. User calls POST /auth/cloudflare with new token
+ * 3. Server verifies token, encrypts it, and stores in database (replaces old token)
+ * 4. User should manually revoke old token in Cloudflare dashboard
+ *
+ * To completely remove credentials:
+ * - Call DELETE /auth/cloudflare to clear stored token
+ * - Manually revoke token in Cloudflare dashboard
+ *
+ * ENCRYPTION:
+ * - Tokens are encrypted using AES-256-GCM before storage
+ * - Encryption key: CLOUDFLARE_ENCRYPTION_KEY environment variable (shared credential encryption key)
+ * - Format: salt:iv:authTag:ciphertext (all base64)
+ * - TODO: Consider using separate encryption keys per service for better security isolation
  */
 
 import type { FastifyInstance } from 'fastify';
