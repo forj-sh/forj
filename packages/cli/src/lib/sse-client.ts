@@ -17,6 +17,7 @@ export interface SSEClientOptions {
   onServiceUpdate?: (event: ServiceEvent) => void;
   onComplete?: (data: unknown) => void;
   onError?: (error: Error) => void;
+  timeoutMs?: number; // Optional timeout in milliseconds
 }
 
 /**
@@ -26,7 +27,7 @@ export function createSSEClient(options: SSEClientOptions): {
   start: () => void;
   close: () => void;
 } {
-  const { endpoint, onEvent, onServiceUpdate, onComplete, onError } = options;
+  const { endpoint, onEvent, onServiceUpdate, onComplete, onError, timeoutMs } = options;
 
   const apiUrl = getApiUrl();
   const token = getAuthToken();
@@ -40,6 +41,35 @@ export function createSSEClient(options: SSEClientOptions): {
 
   const url = `${apiUrl}${endpoint}`;
   let eventSource: EventSource | null = null;
+  let timeoutId: NodeJS.Timeout | null = null;
+
+  /**
+   * Reset inactivity timeout - called when connection starts and on each received event
+   * This implements an inactivity timeout (not total connection duration)
+   */
+  function resetTimeout() {
+    // Clear existing timeout if any
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+
+    // Set new timeout if specified
+    if (timeoutMs && timeoutMs > 0) {
+      timeoutId = setTimeout(() => {
+        const timeoutError = new ForjError(
+          `No events received for ${Math.floor(timeoutMs / 1000)} seconds. Provisioning may still be in progress on the server.`,
+          'SSE_TIMEOUT'
+        );
+
+        if (onError) {
+          onError(timeoutError);
+        }
+
+        close();
+      }, timeoutMs);
+    }
+  }
 
   function start() {
     eventSource = new EventSource(url, {
@@ -48,9 +78,15 @@ export function createSSEClient(options: SSEClientOptions): {
       },
     });
 
+    // Start inactivity timeout
+    resetTimeout();
+
     // Handle incoming messages
     eventSource.onmessage = (event) => {
       try {
+        // Reset inactivity timeout on each received event
+        resetTimeout();
+
         const data = JSON.parse(event.data);
 
         // Validate parsed data is not null/undefined
@@ -107,6 +143,12 @@ export function createSSEClient(options: SSEClientOptions): {
   }
 
   function close() {
+    // Clear timeout on close
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+
     if (eventSource) {
       eventSource.close();
       eventSource = null;
@@ -116,12 +158,16 @@ export function createSSEClient(options: SSEClientOptions): {
   return { start, close };
 }
 
+// Default timeout: 10 minutes
+const DEFAULT_PROVISIONING_TIMEOUT_MS = 10 * 60 * 1000;
+
 /**
  * Stream provisioning progress with visual feedback
  */
 export async function streamProvisioningProgress(
   endpoint: string,
-  spinnerText: string = 'Provisioning...'
+  spinnerText: string = 'Provisioning...',
+  timeoutMs: number = DEFAULT_PROVISIONING_TIMEOUT_MS
 ): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const spinner = logger.spinner(spinnerText);
@@ -131,6 +177,7 @@ export async function streamProvisioningProgress(
 
     const client = createSSEClient({
       endpoint,
+      timeoutMs,
       onServiceUpdate: (event) => {
         const { service, status, message, error } = event;
 
@@ -176,6 +223,9 @@ export async function streamProvisioningProgress(
 
         // Only fail spinners that are still running
         serviceSpinners.forEach((s) => s.isSpinning && s.fail());
+
+        // Close the client to clean up timers and sockets
+        client.close();
 
         reject(error);
       },
