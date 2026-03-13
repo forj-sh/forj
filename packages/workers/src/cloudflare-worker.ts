@@ -7,7 +7,7 @@
  * - Nameserver verification (DNS propagation checks)
  */
 
-import { Worker, Job } from 'bullmq';
+import { Worker, Job, Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import { promises as dns } from 'dns';
 import {
@@ -15,6 +15,7 @@ import {
   CloudflareApiError,
   CloudflareErrorCategory,
   NamecheapClient,
+  splitDomain,
   type CloudflareJobData,
   type CloudflareWorkerConfig,
   type CloudflareWorkerEvent,
@@ -35,10 +36,41 @@ export class CloudflareWorker {
   private worker: Worker<CloudflareJobData>;
   private redis: Redis;
   private eventPublisher?: ICloudflareWorkerEventPublisher;
+  private cloudflareQueue: Queue;
+  private namecheapConfig: {
+    apiUser: string;
+    apiKey: string;
+    userName: string;
+    clientIp: string;
+    sandbox: boolean;
+  };
 
   constructor(config: CloudflareWorkerConfig) {
     this.redis = new Redis(config.redis);
     this.eventPublisher = config.eventPublisher;
+
+    // Validate Namecheap credentials (required for NS updates)
+    const requiredEnvVars = [
+      'NAMECHEAP_API_USER',
+      'NAMECHEAP_API_KEY',
+      'NAMECHEAP_USERNAME',
+      'NAMECHEAP_CLIENT_IP',
+    ];
+    const missingVars = requiredEnvVars.filter((v) => !process.env[v]);
+    if (missingVars.length > 0) {
+      throw new Error(
+        `CloudflareWorker requires Namecheap credentials for nameserver updates. Missing environment variables: ${missingVars.join(', ')}`
+      );
+    }
+
+    // Get Namecheap credentials from environment for NS updates
+    this.namecheapConfig = {
+      apiUser: process.env.NAMECHEAP_API_USER!,
+      apiKey: process.env.NAMECHEAP_API_KEY!,
+      userName: process.env.NAMECHEAP_USERNAME!,
+      clientIp: process.env.NAMECHEAP_CLIENT_IP!,
+      sandbox: process.env.NAMECHEAP_SANDBOX === 'true',
+    };
 
     this.worker = new Worker<CloudflareJobData>(
       'cloudflare',
@@ -48,6 +80,11 @@ export class CloudflareWorker {
         concurrency: config.concurrency || 3,
       }
     );
+
+    // Create Queue instance for queuing nameserver update jobs (reused across all calls)
+    this.cloudflareQueue = new Queue('cloudflare', {
+      connection: config.redis,
+    });
 
     this.setupEventHandlers();
   }
@@ -122,30 +159,9 @@ export class CloudflareWorker {
         jump_start: true, // Auto-scan for DNS records
       });
 
-      // Update state: CREATING_ZONE → ZONE_CREATED
-      await this.updateJobState(job, currentState, CloudflareJobStatus.ZONE_CREATED);
+      // Handle successful zone creation (new zone)
+      await this.handleZoneCreationSuccess(job, currentState, zone, false);
       currentState = CloudflareJobStatus.ZONE_CREATED;
-      await this.publishEvent({
-        type: CloudflareWorkerEventType.ZONE_CREATION_COMPLETE,
-        projectId,
-        userId,
-        jobId: job.id!,
-        timestamp: new Date().toISOString(),
-        data: {
-          domain,
-          zoneId: zone.id,
-          nameservers: zone.name_servers,
-          status: CloudflareJobStatus.ZONE_CREATED,
-        },
-      });
-
-      // Store zone details in job data (extend runtime data)
-      await job.updateData({
-        ...job.data,
-        zoneId: zone.id,
-        nameservers: zone.name_servers,
-        zoneStatus: zone.status,
-      } as CreateZoneJobData);
     } catch (error) {
       // If zone already exists, consider it a success (idempotent)
       if (error instanceof CloudflareApiError && error.category === CloudflareErrorCategory.ZONE_EXISTS) {
@@ -156,29 +172,9 @@ export class CloudflareWorker {
         const existingZone = zones.find((z) => z.name === domain);
 
         if (existingZone) {
-          await this.updateJobState(job, currentState, CloudflareJobStatus.ZONE_CREATED);
+          // Handle successful zone creation (existing zone)
+          await this.handleZoneCreationSuccess(job, currentState, existingZone, true);
           currentState = CloudflareJobStatus.ZONE_CREATED;
-          await this.publishEvent({
-            type: CloudflareWorkerEventType.ZONE_CREATION_COMPLETE,
-            projectId,
-            userId,
-            jobId: job.id!,
-            timestamp: new Date().toISOString(),
-            data: {
-              domain,
-              zoneId: existingZone.id,
-              nameservers: existingZone.name_servers,
-              status: CloudflareJobStatus.ZONE_CREATED,
-              alreadyExisted: true,
-            },
-          });
-
-          await job.updateData({
-            ...job.data,
-            zoneId: existingZone.id,
-            nameservers: existingZone.name_servers,
-            zoneStatus: existingZone.status,
-          } as CreateZoneJobData);
         } else {
           throw new Error(`Zone exists but could not be found for domain: ${domain}`);
         }
@@ -224,15 +220,17 @@ export class CloudflareWorker {
     try {
       // Update nameservers at domain registrar (Namecheap)
       // This is where we hand off DNS authority from registrar to Cloudflare
-      if (namecheapAccessToken) {
-        // TODO: Get Namecheap config from environment or job data
-        // For now, we'll assume the job data includes enough info
-        // In production, this would need Namecheap API credentials
-        console.log(`Would update nameservers for ${domain} to:`, nameservers);
-        console.log('Namecheap integration not yet implemented in this stack');
-        // const namecheapClient = new NamecheapClient({...});
-        // await namecheapClient.setCustomNameservers(domain, nameservers);
-      }
+      const namecheapClient = new NamecheapClient(this.namecheapConfig);
+
+      console.log(`Updating nameservers for ${domain} to Cloudflare NS:`, nameservers);
+
+      // Split domain into SLD and TLD using shared utility (handles multi-part TLDs like .co.uk)
+      const { sld, tld } = splitDomain(domain);
+
+      // Call Namecheap API to update nameservers
+      await namecheapClient.setCustomNameservers(sld, tld, nameservers);
+
+      console.log(`✅ Nameservers updated successfully for ${domain}`);
 
       // Update state: UPDATING_NAMESERVERS → NAMESERVERS_UPDATED
       await this.updateJobState(job, currentState, CloudflareJobStatus.NAMESERVERS_UPDATED);
@@ -411,10 +409,102 @@ export class CloudflareWorker {
   }
 
   /**
-   * Close worker and Redis connection
+   * Handle successful zone creation (new or existing)
+   * Shared logic for updating job state, publishing events, and queuing nameserver updates
+   */
+  private async handleZoneCreationSuccess(
+    job: Job<CreateZoneJobData>,
+    currentState: CloudflareJobStatus,
+    zone: { id: string; name_servers: string[]; status: string },
+    alreadyExisted: boolean = false
+  ): Promise<void> {
+    const { userId, projectId, domain, apiToken, accountId } = job.data;
+
+    // Update state: CREATING_ZONE → ZONE_CREATED
+    await this.updateJobState(job, currentState, CloudflareJobStatus.ZONE_CREATED);
+
+    // Publish zone creation complete event
+    await this.publishEvent({
+      type: CloudflareWorkerEventType.ZONE_CREATION_COMPLETE,
+      projectId,
+      userId,
+      jobId: job.id!,
+      timestamp: new Date().toISOString(),
+      data: {
+        domain,
+        zoneId: zone.id,
+        nameservers: zone.name_servers,
+        status: CloudflareJobStatus.ZONE_CREATED,
+        ...(alreadyExisted && { alreadyExisted: true }),
+      },
+    });
+
+    // Store zone details in job data
+    await job.updateData({
+      ...job.data,
+      zoneId: zone.id,
+      nameservers: zone.name_servers,
+      zoneStatus: zone.status,
+    } as CreateZoneJobData);
+
+    // Auto-queue nameserver update job to hand off DNS authority to Cloudflare
+    await this.queueNameserverUpdate({
+      userId,
+      projectId,
+      domain,
+      zoneId: zone.id,
+      nameservers: zone.name_servers,
+      apiToken,
+      accountId,
+    });
+  }
+
+  /**
+   * Queue nameserver update job
+   *
+   * After zone creation, we need to update the domain's nameservers at the registrar
+   * (Namecheap) to point to Cloudflare's nameservers. This hands off DNS authority.
+   */
+  private async queueNameserverUpdate(data: {
+    userId: string;
+    projectId: string;
+    domain: string;
+    zoneId: string;
+    nameservers: string[];
+    apiToken: string;
+    accountId?: string;
+  }): Promise<void> {
+    const { userId, projectId, domain, zoneId, nameservers, apiToken, accountId } = data;
+
+    const jobData: UpdateNameserversJobData = {
+      operation: CloudflareOperationType.UPDATE_NAMESERVERS,
+      userId,
+      projectId,
+      domain,
+      apiToken,
+      accountId,
+      zoneId,
+      nameservers,
+      namecheapAccessToken: undefined, // Not used - we get creds from env
+    };
+
+    await this.cloudflareQueue.add('update-nameservers', jobData, {
+      attempts: 3,
+      backoff: {
+        type: 'exponential',
+        delay: 5000,
+      },
+    });
+
+    console.log(`✅ Queued nameserver update job for ${domain} (zone: ${zoneId})`);
+  }
+
+  /**
+   * Close worker, queue, and Redis connection
    */
   async close(): Promise<void> {
     await this.worker.close();
+    await this.cloudflareQueue.close();
     await this.redis.quit();
   }
 }
