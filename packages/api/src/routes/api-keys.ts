@@ -1,6 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '../middleware/auth.js';
-import { ApiKeyService, type ApiKeyScope } from '../lib/api-key-service.js';
+import {
+  ApiKeyService,
+  ApiKeyNotFoundError,
+  ApiKeyRevokedError,
+  type ApiKeyScope,
+} from '../lib/api-key-service.js';
 import { db } from '../lib/database.js';
 import { ipRateLimit } from '../middleware/ip-rate-limit.js';
 import { rateLimit } from '../middleware/rate-limit.js';
@@ -313,6 +318,71 @@ export async function apiKeyRoutes(server: FastifyInstance) {
         return reply.status(500).send({
           success: false,
           error: 'Failed to revoke API key',
+          code: 'SERVER_ERROR',
+        });
+      }
+    }
+  );
+
+  /**
+   * POST /api-keys/:id/rotate
+   * Rotate an API key (revoke old, create new with same scopes)
+   *
+   * SECURITY: Critical operation - rate limited, audited, atomic
+   * The old key is revoked before the new key is returned
+   */
+  server.post<{ Params: { id: string } }>(
+    '/api-keys/:id/rotate',
+    { preHandler: [requireAuth, ipRateLimit('api-keys'), rateLimit('api-keys')] },
+    async (request, reply) => {
+      const { id } = request.params;
+      const userId = request.user!.userId;
+
+      try {
+        const result = await apiKeyService.rotateApiKey(id, userId);
+
+        request.log.info({
+          userId,
+          oldKeyId: id,
+          newKeyId: result.id,
+          scopes: result.scopes,
+        }, 'API key rotated');
+
+        return reply.status(201).send({
+          success: true,
+          data: {
+            id: result.id,
+            key: result.key, // IMPORTANT: Only returned once!
+            name: result.name,
+            scopes: result.scopes,
+            createdAt: result.createdAt.toISOString(),
+            expiresAt: result.expiresAt ? result.expiresAt.toISOString() : null,
+            oldKeyId: result.oldKeyId,
+          },
+          message: 'API key rotated successfully. Old key has been revoked.',
+        });
+      } catch (error) {
+        // Use custom error classes for robust error handling
+        if (error instanceof ApiKeyNotFoundError) {
+          return reply.status(404).send({
+            success: false,
+            error: 'API key not found',
+            code: 'NOT_FOUND',
+          });
+        }
+
+        if (error instanceof ApiKeyRevokedError) {
+          return reply.status(400).send({
+            success: false,
+            error: error.message,
+            code: 'INVALID_REQUEST',
+          });
+        }
+
+        request.log.error({ error, userId, keyId: id }, 'Failed to rotate API key');
+        return reply.status(500).send({
+          success: false,
+          error: 'Failed to rotate API key',
           code: 'SERVER_ERROR',
         });
       }
