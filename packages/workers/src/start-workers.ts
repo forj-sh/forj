@@ -15,7 +15,8 @@ import { fileURLToPath } from 'url';
 import Redis from 'ioredis';
 import { DomainWorker } from './domain-worker.js';
 import { CloudflareWorker } from './cloudflare-worker.js';
-import type { DomainWorkerConfig, CloudflareWorkerConfig } from '@forj/shared';
+import { DNSWorker } from './dns-worker.js';
+import type { DomainWorkerConfig, CloudflareWorkerConfig, DNSWorkerConfig, DNSWorkerEvent } from '@forj/shared';
 
 // Load environment variables from API package
 // Workers share the same .env as the API server
@@ -83,6 +84,18 @@ const eventPublisher = {
   },
 };
 
+// Factory function to create project event publishers for workers
+const createProjectEventPublisher = (workerName: string) => ({
+  async publishEvent(event: { projectId: string } & Record<string, any>): Promise<void> {
+    try {
+      const channel = `project:${event.projectId}:events`;
+      await redis.publish(channel, JSON.stringify(event));
+    } catch (error) {
+      console.error(`Failed to publish ${workerName} event:`, error);
+    }
+  },
+});
+
 // Domain worker configuration
 const domainWorkerConfig: DomainWorkerConfig = {
   namecheap: {
@@ -119,12 +132,22 @@ const cloudflareWorkerConfig: CloudflareWorkerConfig = {
 const cloudflareWorker = new CloudflareWorker(cloudflareWorkerConfig);
 console.log(`✅ Cloudflare worker started (concurrency: ${cloudflareWorkerConfig.concurrency})`);
 
-// TODO: Initialize GitHub and DNS workers
-// GitHub and DNS workers will be added in upcoming stacks
+// DNS worker configuration
+const dnsWorkerConfig: DNSWorkerConfig = {
+  redis: redisConfig,
+  concurrency: parseInt(process.env.DNS_WORKER_CONCURRENCY || '3', 10),
+  eventPublisher: createProjectEventPublisher('DNS'),
+};
+
+const dnsWorker = new DNSWorker(dnsWorkerConfig);
+console.log(`✅ DNS worker started (concurrency: ${dnsWorkerConfig.concurrency})`);
+
+// TODO: Initialize GitHub worker
+// GitHub worker will be added in upcoming stacks
 
 console.log('\n✨ Workers ready. Listening for jobs...\n');
-console.log('ℹ️  Active: Domain, Cloudflare');
-console.log('ℹ️  Pending: GitHub, DNS');
+console.log('ℹ️  Active: Domain, Cloudflare, DNS');
+console.log('ℹ️  Pending: GitHub');
 
 // Graceful shutdown
 const shutdown = async () => {
@@ -134,13 +157,14 @@ const shutdown = async () => {
   const results = await Promise.allSettled([
     domainWorker.close(),
     cloudflareWorker.close(),
+    dnsWorker.close(),
     redis.disconnect(),
   ]);
 
   // Log any shutdown failures
   results.forEach((result, index) => {
     if (result.status === 'rejected') {
-      const workerNames = ['Domain worker', 'Cloudflare worker', 'Redis connection'];
+      const workerNames = ['Domain worker', 'Cloudflare worker', 'DNS worker', 'Redis connection'];
       console.error(`❌ Failed to close ${workerNames[index]}:`, result.reason);
     }
   });
