@@ -6,6 +6,8 @@ import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import { Pool } from 'pg';
 import {
   ApiKeyService,
+  ApiKeyNotFoundError,
+  ApiKeyRevokedError,
   API_KEY_SCOPES,
   API_KEY_PREFIXES,
   KEY_HINT_LENGTH,
@@ -489,6 +491,186 @@ describe('ApiKeyService', () => {
 
       const [, params] = mockQuery.mock.calls[0];
       expect(params).toEqual(['key-id-123', 'user-999']);
+    });
+  });
+
+  describe('rotateApiKey', () => {
+    const mockExistingKey: ApiKeyRecord = {
+      id: 'key-id-123',
+      user_id: 'user-123',
+      key_hash: 'hash123',
+      key_hint: 'forj_liv', // First 8 chars of live key (used to infer environment)
+      scopes: [API_KEY_SCOPES.AGENT_PROVISION],
+      name: 'Production Key',
+      created_at: new Date('2024-01-01'),
+      expires_at: new Date('2025-01-01'),
+      last_used_at: null,
+      revoked_at: null,
+    };
+
+    it('should rotate an API key successfully', async () => {
+      // Mock getApiKey (verify ownership)
+      mockQuery.mockResolvedValueOnce({ rows: [mockExistingKey] });
+
+      // Mock revokeApiKey
+      mockQuery.mockResolvedValueOnce({ rowCount: 1 });
+
+      // Mock createApiKey
+      const mockNewKeyId = 'new-key-id-456';
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            id: mockNewKeyId,
+            user_id: 'user-123',
+            scopes: [API_KEY_SCOPES.AGENT_PROVISION],
+            name: 'Production Key',
+            created_at: new Date(),
+            expires_at: new Date('2025-01-01'),
+          },
+        ],
+      });
+
+      const result = await service.rotateApiKey('key-id-123', 'user-123');
+
+      expect(result.id).toBe(mockNewKeyId);
+      expect(result.oldKeyId).toBe('key-id-123');
+      expect(result.scopes).toEqual([API_KEY_SCOPES.AGENT_PROVISION]);
+      expect(result.name).toBe('Production Key');
+      expect(result.key).toMatch(/^forj_live_/);
+
+      // Verify query calls: getApiKey, revokeApiKey, createApiKey
+      expect(mockQuery).toHaveBeenCalledTimes(3);
+    });
+
+    it('should throw error if key not found', async () => {
+      // Mock getApiKey returns null
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+
+      await expect(service.rotateApiKey('key-id-999', 'user-123')).rejects.toThrow(
+        ApiKeyNotFoundError
+      );
+
+      expect(mockQuery).toHaveBeenCalledTimes(1); // Only getApiKey called
+    });
+
+    it('should throw error if key belongs to different user', async () => {
+      // Mock getApiKey returns empty (no match for user-999)
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+
+      await expect(service.rotateApiKey('key-id-123', 'user-999')).rejects.toThrow(
+        ApiKeyNotFoundError
+      );
+    });
+
+    it('should throw error if key is already revoked', async () => {
+      const revokedKey = { ...mockExistingKey, revoked_at: new Date() };
+      mockQuery.mockResolvedValueOnce({ rows: [revokedKey] });
+
+      await expect(service.rotateApiKey('key-id-123', 'user-123')).rejects.toThrow(
+        ApiKeyRevokedError
+      );
+
+      expect(mockQuery).toHaveBeenCalledTimes(1); // Only getApiKey called
+    });
+
+    it('should preserve expiration date from old key', async () => {
+      const expiresAt = new Date('2025-06-01');
+      const keyWithExpiry = { ...mockExistingKey, expires_at: expiresAt };
+
+      // Mock getApiKey
+      mockQuery.mockResolvedValueOnce({ rows: [keyWithExpiry] });
+
+      // Mock revokeApiKey
+      mockQuery.mockResolvedValueOnce({ rowCount: 1 });
+
+      // Mock createApiKey
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'new-key-id-456',
+            user_id: 'user-123',
+            scopes: [API_KEY_SCOPES.AGENT_PROVISION],
+            name: 'Production Key',
+            created_at: new Date(),
+            expires_at: expiresAt,
+          },
+        ],
+      });
+
+      const result = await service.rotateApiKey('key-id-123', 'user-123');
+
+      expect(result.expiresAt).toEqual(expiresAt);
+    });
+
+    it('should preserve all scopes from old key', async () => {
+      const multiScopeKey = {
+        ...mockExistingKey,
+        scopes: [API_KEY_SCOPES.AGENT_PROVISION, API_KEY_SCOPES.AGENT_READ],
+      };
+
+      // Mock getApiKey
+      mockQuery.mockResolvedValueOnce({ rows: [multiScopeKey] });
+
+      // Mock revokeApiKey
+      mockQuery.mockResolvedValueOnce({ rowCount: 1 });
+
+      // Mock createApiKey - preserve expires_at from multiScopeKey
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'new-key-id-456',
+            user_id: 'user-123',
+            scopes: [API_KEY_SCOPES.AGENT_PROVISION, API_KEY_SCOPES.AGENT_READ],
+            name: 'Production Key',
+            created_at: new Date(),
+            expires_at: multiScopeKey.expires_at,
+          },
+        ],
+      });
+
+      const result = await service.rotateApiKey('key-id-123', 'user-123');
+
+      expect(result.scopes).toEqual([API_KEY_SCOPES.AGENT_PROVISION, API_KEY_SCOPES.AGENT_READ]);
+    });
+
+    it('should handle key without name', async () => {
+      const unnamedKey = { ...mockExistingKey, name: null };
+
+      // Mock getApiKey
+      mockQuery.mockResolvedValueOnce({ rows: [unnamedKey] });
+
+      // Mock revokeApiKey
+      mockQuery.mockResolvedValueOnce({ rowCount: 1 });
+
+      // Mock createApiKey - preserve expires_at from unnamedKey
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'new-key-id-456',
+            user_id: 'user-123',
+            scopes: [API_KEY_SCOPES.AGENT_PROVISION],
+            name: null,
+            created_at: new Date(),
+            expires_at: unnamedKey.expires_at,
+          },
+        ],
+      });
+
+      const result = await service.rotateApiKey('key-id-123', 'user-123');
+
+      expect(result.name).toBeNull();
+    });
+
+    it('should throw error if revocation fails', async () => {
+      // Mock getApiKey
+      mockQuery.mockResolvedValueOnce({ rows: [mockExistingKey] });
+
+      // Mock revokeApiKey failure (rowCount = 0)
+      mockQuery.mockResolvedValueOnce({ rowCount: 0 });
+
+      await expect(service.rotateApiKey('key-id-123', 'user-123')).rejects.toThrow(
+        'Failed to revoke old API key'
+      );
     });
   });
 });

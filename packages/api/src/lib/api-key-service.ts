@@ -78,6 +78,40 @@ export interface VerifyApiKeyResult {
 }
 
 /**
+ * Result of rotating an API key
+ */
+export interface RotateApiKeyResult {
+  id: string;
+  key: string; // Raw key (only returned once)
+  userId: string;
+  scopes: ApiKeyScope[];
+  name: string | null;
+  createdAt: Date;
+  expiresAt: Date | null;
+  oldKeyId: string; // ID of the revoked key
+}
+
+/**
+ * Custom error for API key not found
+ */
+export class ApiKeyNotFoundError extends Error {
+  constructor(message = 'API key not found or access denied') {
+    super(message);
+    this.name = 'ApiKeyNotFoundError';
+  }
+}
+
+/**
+ * Custom error for revoked API key
+ */
+export class ApiKeyRevokedError extends Error {
+  constructor(message = 'Cannot rotate a revoked API key') {
+    super(message);
+    this.name = 'ApiKeyRevokedError';
+  }
+}
+
+/**
  * API Key Service
  *
  * Handles generation, storage, and verification of API keys for agent authentication.
@@ -287,5 +321,73 @@ export class ApiKeyService {
     );
 
     return result.rows[0] || null;
+  }
+
+  /**
+   * Rotate an API key (revoke old, create new with same scopes)
+   *
+   * SECURITY: This is a critical operation that should be:
+   * - Rate limited (prevent abuse)
+   * - Audited (log all rotations)
+   * - Atomic (old key revoked before new key returned)
+   *
+   * @param keyId - ID of the key to rotate
+   * @param userId - User ID (for authorization)
+   * @returns New API key with same scopes and name
+   * @throws ApiKeyNotFoundError if key doesn't exist or doesn't belong to user
+   * @throws ApiKeyRevokedError if key is already revoked
+   */
+  async rotateApiKey(keyId: string, userId: string): Promise<RotateApiKeyResult> {
+    // TODO: Wrap in database transaction for true atomicity
+    // Currently, if createApiKey fails after revokeApiKey succeeds, the user
+    // is left without a valid key. This should be refactored to use a single
+    // database transaction with rollback capability.
+    // See: https://github.com/pcdkd/forj/issues/XXX
+
+    // Get existing key (verify ownership and get metadata)
+    const existingKey = await this.getApiKey(keyId, userId);
+
+    if (!existingKey) {
+      throw new ApiKeyNotFoundError();
+    }
+
+    // Cannot rotate revoked keys
+    if (existingKey.revoked_at) {
+      throw new ApiKeyRevokedError();
+    }
+
+    // Infer environment from key_hint (key_hint stores first 8 chars including prefix)
+    const environment: 'live' | 'test' = existingKey.key_hint.startsWith('forj_liv')
+      ? 'live'
+      : 'test';
+
+    // Revoke old key
+    const revoked = await this.revokeApiKey(keyId, userId);
+    if (!revoked) {
+      throw new Error('Failed to revoke old API key');
+    }
+
+    // Create new key with same scopes and name
+    const newKey = await this.createApiKey({
+      userId,
+      scopes: existingKey.scopes as ApiKeyScope[],
+      name: existingKey.name || undefined,
+      expiresAt: existingKey.expires_at || undefined,
+      environment,
+    });
+
+    logger.info({
+      msg: 'API key rotated',
+      oldKeyId: keyId,
+      newKeyId: newKey.id,
+      userId,
+      scopes: newKey.scopes,
+      environment,
+    });
+
+    return {
+      ...newKey,
+      oldKeyId: keyId,
+    };
   }
 }
