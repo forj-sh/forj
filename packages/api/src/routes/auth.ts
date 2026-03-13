@@ -12,7 +12,12 @@ const ONE_DAY_IN_SECONDS = 24 * 60 * 60; // 86400 seconds
 export async function authRoutes(server: FastifyInstance) {
   /**
    * POST /auth/cli
-   * CLI authentication - returns mock JWT token
+   * CLI authentication - mock endpoint for development only
+   *
+   * SECURITY: This endpoint is DISABLED in production (NODE_ENV=production).
+   * In production, clients must use /auth/github for GitHub Device Flow authentication.
+   *
+   * To enable in development, set ENABLE_MOCK_AUTH=true in .env
    *
    * RATE LIMITING: IP-based only (unauthenticated endpoint)
    */
@@ -20,6 +25,23 @@ export async function authRoutes(server: FastifyInstance) {
     '/auth/cli',
     { preHandler: [ipRateLimit('auth-login')] },
     async (request, reply) => {
+      // SECURITY: Block mock authentication in production
+      const isProduction = process.env.NODE_ENV === 'production';
+      const mockAuthEnabled = process.env.ENABLE_MOCK_AUTH === 'true';
+
+      if (isProduction || !mockAuthEnabled) {
+        request.log.warn({
+          nodeEnv: process.env.NODE_ENV,
+          mockAuthEnabled,
+        }, 'Mock auth endpoint blocked - use GitHub Device Flow');
+
+        return reply.status(404).send({
+          success: false,
+          error: 'Authentication endpoint not available. Use GitHub Device Flow authentication.',
+          hint: 'For development, set ENABLE_MOCK_AUTH=true in .env',
+        });
+      }
+
       const { deviceId, cliVersion } = request.body || {};
 
       // Mock user ID with better uniqueness (timestamp + random component)
@@ -51,11 +73,11 @@ export async function authRoutes(server: FastifyInstance) {
         .setExpirationTime(exp)
         .sign(secret);
 
-      request.log.info({
+      request.log.warn({
         userId: mockUserId,
         deviceId,
         cliVersion,
-      }, 'CLI auth request');
+      }, '[DEVELOPMENT ONLY] Mock CLI auth request - DO NOT USE IN PRODUCTION');
 
       const response: CLIAuthResponse = {
         token: mockToken,
