@@ -30,6 +30,7 @@ import {
   DEFAULT_SPF_RECORDS,
   DEFAULT_DMARC_RECORD,
 } from '@forj/shared';
+import { updateProjectService } from './database.js';
 
 /**
  * DNS wiring worker class
@@ -61,10 +62,46 @@ export class DNSWorker {
   private setupEventHandlers(): void {
     this.worker.on('completed', (job) => {
       console.log(`DNS job ${job.id} completed`);
+
+      // Only mark service as 'complete' in DB if it's the terminal operation.
+      // DNS jobs are multi-step (WIRE_RECORDS → VERIFY_RECORDS), and the 'completed'
+      // event fires for each operation. We only want to mark the service complete when
+      // DNS verification finishes successfully with DNSJobStatus.COMPLETE status.
+      const progress = job.progress as { status?: DNSJobStatus };
+
+      if (progress?.status === DNSJobStatus.COMPLETE) {
+        const value = job.data.domain;
+        const now = new Date().toISOString();
+
+        void updateProjectService(job.data.projectId, 'dns', {
+          status: 'complete',
+          value,
+          updatedAt: now,
+          completedAt: now,
+        }).catch((err) => {
+          console.error('Failed to update project status in database:', err);
+        });
+      }
     });
 
     this.worker.on('failed', (job, err) => {
       console.error(`DNS job ${job?.id} failed:`, err);
+
+      if (job) {
+        // Use user-friendly error message from CloudflareApiError if available
+        const errorMessage = err instanceof CloudflareApiError ? err.message : err.message;
+        const now = new Date().toISOString();
+
+        // Update database with failure status
+        void updateProjectService(job.data.projectId, 'dns', {
+          status: 'failed',
+          error: errorMessage,
+          updatedAt: now,
+          completedAt: now,
+        }).catch((dbErr) => {
+          console.error('Failed to update project status in database:', dbErr);
+        });
+      }
     });
 
     this.worker.on('error', (err) => {
