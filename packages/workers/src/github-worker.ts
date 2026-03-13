@@ -26,6 +26,7 @@ import {
   isValidGitHubStateTransition,
   DEFAULT_BRANCH_PROTECTION,
 } from '@forj/shared';
+import { updateProjectService } from './database.js';
 
 /**
  * GitHub worker class
@@ -57,10 +58,42 @@ export class GitHubWorker {
   private setupEventHandlers(): void {
     this.worker.on('completed', (job) => {
       console.log(`GitHub job ${job.id} completed`);
+
+      // Only mark service as 'complete' in DB if it's the terminal operation.
+      // GitHub jobs are multi-step (VERIFY_ORG → CREATE_REPO → CONFIGURE_REPO),
+      // and the 'completed' event fires for each operation. We only want to mark
+      // the service complete when repository configuration finishes successfully.
+      if (job.data.operation === GitHubOperationType.CONFIGURE_REPO) {
+        const value = 'repoUrl' in job.data ? job.data.repoUrl : job.data.orgName;
+        const now = new Date().toISOString();
+
+        void updateProjectService(job.data.projectId, 'github', {
+          status: 'complete',
+          value,
+          updatedAt: now,
+          completedAt: now,
+        }).catch((err) => {
+          console.error('Failed to update project status in database:', err);
+        });
+      }
     });
 
     this.worker.on('failed', (job, err) => {
       console.error(`GitHub job ${job?.id} failed:`, err);
+
+      if (job) {
+        // Use user-friendly error message if available
+        const errorMessage = err instanceof GitHubError ? err.getUserMessage() : err.message;
+
+        // Update database with failure status
+        void updateProjectService(job.data.projectId, 'github', {
+          status: 'failed',
+          error: errorMessage,
+          updatedAt: new Date().toISOString(),
+        }).catch((dbErr) => {
+          console.error('Failed to update project status in database:', dbErr);
+        });
+      }
     });
 
     this.worker.on('error', (err) => {
