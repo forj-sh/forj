@@ -52,10 +52,10 @@ export function rateLimit(endpoint: string, config?: RateLimitConfig) {
     try {
       const result = await rateLimiter.tryAcquire(userId, endpoint, effectiveConfig);
 
-      // Set standard rate limit headers
-      reply.header('X-RateLimit-Limit', effectiveConfig.maxRequests.toString());
-      reply.header('X-RateLimit-Remaining', result.remaining.toString());
-      reply.header('X-RateLimit-Reset', result.resetSeconds.toString());
+      // Set user-specific rate limit headers (distinct from per-IP headers)
+      reply.header('X-UserRateLimit-Limit', effectiveConfig.maxRequests.toString());
+      reply.header('X-UserRateLimit-Remaining', result.remaining.toString());
+      reply.header('X-UserRateLimit-Reset', result.resetSeconds.toString());
 
       if (!result.allowed) {
         // Rate limit exceeded - return 429 Too Many Requests
