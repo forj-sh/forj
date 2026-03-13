@@ -2,6 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '../middleware/auth.js';
 import { ApiKeyService, type ApiKeyScope } from '../lib/api-key-service.js';
 import { db } from '../lib/database.js';
+import { ipRateLimit } from '../middleware/ip-rate-limit.js';
+import { rateLimit } from '../middleware/rate-limit.js';
 
 /**
  * Request/Response types
@@ -50,7 +52,7 @@ export async function apiKeyRoutes(server: FastifyInstance) {
    */
   server.post<{ Body: CreateApiKeyRequest }>(
     '/api-keys',
-    { preHandler: requireAuth },
+    { preHandler: [requireAuth, ipRateLimit('api-keys'), rateLimit('api-keys')] },
     async (request, reply) => {
       const { name, scopes, expiresAt, environment = 'live' } = request.body || {};
       const userId = request.user!.userId;
@@ -165,7 +167,7 @@ export async function apiKeyRoutes(server: FastifyInstance) {
    */
   server.get<{ Querystring: { includeRevoked?: string } }>(
     '/api-keys',
-    { preHandler: requireAuth },
+    { preHandler: [requireAuth, ipRateLimit('api-keys'), rateLimit('api-keys')] },
     async (request, reply) => {
       const userId = request.user!.userId;
       const includeRevoked = request.query.includeRevoked === 'true';
@@ -206,7 +208,7 @@ export async function apiKeyRoutes(server: FastifyInstance) {
    */
   server.get<{ Params: { id: string } }>(
     '/api-keys/:id',
-    { preHandler: requireAuth },
+    { preHandler: [requireAuth, ipRateLimit('api-keys'), rateLimit('api-keys')] },
     async (request, reply) => {
       const { id } = request.params;
       const userId = request.user!.userId;
@@ -251,7 +253,7 @@ export async function apiKeyRoutes(server: FastifyInstance) {
    */
   server.delete<{ Params: { id: string } }>(
     '/api-keys/:id',
-    { preHandler: requireAuth },
+    { preHandler: [requireAuth, ipRateLimit('api-keys'), rateLimit('api-keys')] },
     async (request, reply) => {
       const { id } = request.params;
       const userId = request.user!.userId;
