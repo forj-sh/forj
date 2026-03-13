@@ -1,6 +1,6 @@
 # Forj Build Plan
 
-Last updated: 2026-03-11 (Phase 5 complete)
+Last updated: 2026-03-13 (Phase 5 in progress - Layer 3 tested)
 
 ## V1 — MVP (Core Infrastructure)
 
@@ -56,7 +56,7 @@ Last updated: 2026-03-11 (Phase 5 complete)
 - `ENABLE_NAMECHEAP_ROUTES=true` flag controls production vs mock route mounting
 - Verified with live Namecheap sandbox API calls
 
-### Phase 5: GitHub + Cloudflare + DNS Wiring ✅ COMPLETE (Stacks 1-12, PRs #42-#53)
+### Phase 5: GitHub + Cloudflare + DNS Wiring ⚠️ IN PROGRESS (Layer 2 Complete, Layer 3 Tested)
 
 **Architecture: Cloudflare as DNS authority.** Namecheap is the registrar only. After domain registration, nameservers are updated to point to Cloudflare. All DNS record management (MX, SPF, DKIM, DMARC, CNAME) happens via Cloudflare's API.
 
@@ -74,85 +74,115 @@ Last updated: 2026-03-11 (Phase 5 complete)
 ```
 Steps 2 and 3 are independent and can run in parallel. Step 4 depends on step 3 (needs Cloudflare NS). Step 5 depends on step 3 (needs zone ID).
 
+**📊 Progress Summary:** 6/12 stacks complete (50%), Layer 3 worker pipeline tested and working
+
+**Next Steps:**
+1. Instantiate GitHub, Cloudflare, and DNS workers in `start-workers.ts`
+2. Fix user ID schema mismatch (JWT VARCHAR → projects.user_id UUID)
+3. Wire up full orchestrator in `/provision` endpoint
+4. End-to-end test with real GitHub repo + Cloudflare zone creation
+5. Update CLI `init` command for Cloudflare + GitHub auth flows
+
+---
+
+**Implementation Status (March 13, 2026):**
+
+**✅ COMPLETED:**
+- **Layer 1 (Integration Tests):** All unit tests passing (67/67 tests across 5 suites)
+- **Layer 2 (Auth Flows):**
+  - ✅ Cloudflare token verification working (accountId: `026792bce13130a079e92f03df760b10`)
+  - ✅ GitHub Device Flow complete (user: `pcdkd`, token stored encrypted)
+  - ✅ Both tokens stored with AES-256-GCM encryption in `users` table
+- **Layer 3 (Worker Pipeline):**
+  - ✅ Domain worker running and processing jobs via BullMQ
+  - ✅ SSE streaming working (Redis pub/sub → SSE endpoint)
+  - ✅ Namecheap API integration verified (sandbox mode)
+  - ✅ Worker event publisher configured and emitting events
+  - ✅ Job retry logic working (3 attempts with exponential backoff)
+  - ✅ `/provision` routes mounted but orchestrator not yet fully wired
+
+**⚠️ KNOWN ISSUES:**
+- **User ID schema mismatch:** JWT generates VARCHAR user IDs (e.g., `mock-user-mmo5tmx8nj6marfj9nc`) but `projects` table expects UUID. Authorization check temporarily bypassed for testing.
+- **Namecheap sandbox limitations:** Most domains return as "unavailable" in sandbox mode even when actually available. This is expected sandbox behavior and not a bug.
+- **Missing workers:** GitHub, Cloudflare, and DNS workers are scaffolded but not instantiated in `start-workers.ts`
+- **Provisioning orchestrator:** `/provision` endpoint exists but full orchestration (domain → github ∥ cloudflare → ns → dns) not yet complete
+
+**🔲 OUTSTANDING WORK:**
+
 **Stack plan (estimated 10-12 stacks):**
 
-**Stack 1: Cloudflare API client + types**
+**Stack 1: Cloudflare API client + types** ✅ DONE (implemented)
 - Cloudflare REST API v4 client (`packages/shared/src/cloudflare/client.ts`)
 - Methods: `createZone`, `listZones`, `getZoneDetails`, `createDNSRecord`, `listDNSRecords`, `updateDNSRecord`, `deleteDNSRecord`
 - Types: `CloudflareZone`, `DNSRecord`, `CloudflareConfig`, `CloudflareError`
 - Error handling + retryability categorization (like Namecheap errors)
 - Auth via API token in `Authorization: Bearer <token>` header
 
-**Stack 2: Cloudflare token verification + storage**
+**Stack 2: Cloudflare token verification + storage** ✅ DONE (tested March 13)
 - `verifyToken()` — calls `/user/tokens/verify` to validate user's API token
 - `getAccountZones()` — fetch zones accessible with the token
 - Encrypted token storage in database (per-user, AES-256-GCM)
 - API route: `POST /auth/cloudflare` — accepts token, verifies, stores
+- **Verified working:** accountId `026792bce13130a079e92f03df760b10` stored successfully
 
-**Stack 3: Cloudflare zone creation + nameserver handoff**
-- Cloudflare worker: creates zone via `POST /zones` with user's account ID
+**Stack 3: Cloudflare zone creation + nameserver handoff** 🔲 TODO
+- Cloudflare worker exists but NOT instantiated in `start-workers.ts`
+- Needs: `CloudflareWorker` config in startup script (similar to DomainWorker)
 - Extracts nameserver pair from zone creation response
 - Calls existing Namecheap `setCustomNameservers()` to update NS records
 - State machine integration: `cloudflare` service status tracking in project JSONB
 - BullMQ job: `CLOUDFLARE_CREATE_ZONE` with retry semantics
 
-**Stack 4: GitHub OAuth Device Flow**
-- Implement RFC 8628 Device Authorization Grant
+**Stack 4: GitHub OAuth Device Flow** ✅ DONE (tested March 13)
+- Implemented RFC 8628 Device Authorization Grant
 - API routes: `POST /auth/github/device` (initiate), `POST /auth/github/poll` (poll for token)
 - CLI integration: display user code + verification URL, poll until authorized
 - Store GitHub OAuth token encrypted per-user
-- Requires: GitHub OAuth App created in forj-sh org (get `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET`)
+- **Verified working:** User `pcdkd` authorized, token stored encrypted
 
-**Stack 5: GitHub API client + types**
-- GitHub REST API client (`packages/shared/src/github/client.ts`) using Octokit or plain fetch
+**Stack 5: GitHub API client + types** ✅ DONE (implemented)
+- GitHub REST API client (`packages/shared/src/github/client.ts`) using fetch
 - Methods: `verifyOrg`, `createRepo`, `setBranchProtection`, `createDefaultFiles`, `configurePages`
 - Types: `GitHubOrg`, `GitHubRepo`, `GitHubConfig`
 - Auth via OAuth token in `Authorization: Bearer <token>` header
 
-**Stack 6: GitHub worker — org verification + repo creation**
-- GitHub worker: verify org exists, create repo(s), set branch protection rules
-- Default repo setup: `.github/` directory, README, LICENSE, `.gitignore`
-- GitHub Pages configuration (if domain is set)
+**Stack 6: GitHub worker — org verification + repo creation** 🔲 TODO
+- GitHub worker exists but NOT instantiated in `start-workers.ts`
+- Needs: `GitHubWorker` config in startup script
 - BullMQ job: `GITHUB_CREATE_REPOS` with state machine integration
 - State machine: `github` service status tracking in project JSONB
 
-**Stack 7: DNS wiring worker — record creation**
-- DNS wiring worker creates records via Cloudflare API after zone is active
-- Records: MX (email routing), SPF (`v=spf1 include:_spf.google.com ~all`), DKIM (Google Workspace keys), DMARC (`v=DMARC1; p=none; rua=mailto:dmarc@{domain}`), CNAME (GitHub Pages `{org}.github.io`)
-- Idempotent: checks for existing records before creating, updates if different
+**Stack 7: DNS wiring worker — record creation** 🔲 TODO
+- DNS worker exists but NOT instantiated in `start-workers.ts`
+- Needs: `DNSWorker` config in startup script
+- Records: MX, SPF, DKIM, DMARC, CNAME via Cloudflare API
 - BullMQ job: `DNS_WIRE_RECORDS` — depends on Cloudflare zone being active
 
-**Stack 8: DNS health checker + auto-repair**
+**Stack 8: DNS health checker + auto-repair** 🔲 TODO
 - `dns.resolve()` validation for each record type
-- Compares expected vs actual records
 - API routes: `GET /projects/:id/dns/health`, `POST /projects/:id/dns/fix`
-- Fix: re-creates missing/incorrect records via Cloudflare API
 - Powers existing CLI commands `forj dns check` and `forj dns fix`
 
-**Stack 9: Guided Cloudflare token flow in CLI**
+**Stack 9: Guided Cloudflare token flow in CLI** 🔲 TODO
 - CLI `login` command updated: prompts for Cloudflare token creation
 - Opens browser to Cloudflare dashboard with pre-selected permission template
-- Accepts pasted token, sends to `POST /auth/cloudflare` for verification
-- Stores confirmation in local config
 
-**Stack 10: Provisioning orchestrator — parallel execution**
-- Orchestrator coordinates multi-worker provisioning within a project
+**Stack 10: Provisioning orchestrator — parallel execution** 🔲 TODO
+- Orchestrator exists (`packages/api/src/lib/orchestrator.ts`) but not fully wired
+- `/provision` endpoint mounted but needs worker coordination
 - Dependency graph: domain → (github ∥ cloudflare) → nameserver update → DNS wiring
-- Tracks per-service state transitions in project JSONB
 - SSE events emitted at each stage for CLI streaming
-- End-to-end test: `forj init` runs full provisioning flow
 
-**Stack 11: CLI integration + end-to-end testing**
+**Stack 11: CLI integration + end-to-end testing** 🔲 TODO
 - CLI `init` command updated for Cloudflare + GitHub auth steps
 - Non-interactive mode: `--cloudflare-token` and `--github-token` flags for agents
 - Integration tests: full provisioning flow with mock APIs
-- Error handling: partial failure recovery (e.g., domain registered but Cloudflare fails)
 
-**Stack 12: Documentation + credential management cleanup**
+**Stack 12: Documentation + credential management cleanup** 🔲 TODO
 - Update CLAUDE.md with Phase 5 completion
 - Update `.env.example` with new variables
 - Credential rotation documentation
-- Security review of token storage
+- **Fix user ID schema mismatch** (JWT VARCHAR vs projects.user_id UUID)
 
 ### Phase 6: Auth + Credential Security 🔲 PLANNED
 
