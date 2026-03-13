@@ -41,13 +41,17 @@ export enum EmailProvider {
 
 /**
  * Base job data for all DNS operations
+ *
+ * SECURITY: Stack 4 - cloudflareApiToken is optional
+ * Workers fetch encrypted credentials from database using userId
+ * Credentials are NOT stored in Redis job data
  */
 export interface BaseDNSJobData {
   userId: string;
   projectId: string;
   domain: string;
   zoneId: string;
-  cloudflareApiToken: string;
+  cloudflareApiToken?: string; // Optional - fetched by worker from database
 }
 
 /**

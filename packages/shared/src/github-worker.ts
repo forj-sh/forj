@@ -30,12 +30,16 @@ export enum GitHubJobStatus {
 
 /**
  * Base job data for all GitHub operations
+ *
+ * SECURITY: Stack 4 - accessToken is optional
+ * Workers fetch encrypted credentials from database using userId
+ * Credentials are NOT stored in Redis job data
  */
 export interface BaseGitHubJobData {
   userId: string;
   projectId: string;
   orgName: string;
-  accessToken: string;
+  accessToken?: string; // Optional - fetched by worker from database
 }
 
 /**
