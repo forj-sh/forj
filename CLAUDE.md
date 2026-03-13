@@ -30,6 +30,18 @@ gt submit                             # Push + create PRs
 
 ### Critical Information
 
+**Phase 6 Completion Checklist:**
+- ✅ API key data model + generation service (Stack 1)
+- ✅ API key authentication middleware (Stack 2)
+- ✅ API key management routes (Stack 3)
+- ✅ Auth middleware on /provision route (Stack 4)
+- ✅ Per-user rate limiting infrastructure (Stack 5)
+- ✅ Per-IP rate limiting infrastructure (Stack 6)
+- ✅ Rate limiting applied to all routes (Stack 7)
+- ✅ API key rotation endpoint (Stack 8)
+- ✅ Credential rotation for OAuth tokens (Stack 9)
+- ✅ MCP tool definition + integration docs (Stack 10)
+
 **Security Status:**
 - ✅ JWT authentication protects all domain routes
 - ✅ IDOR vulnerability fixed (ownership checks)
@@ -282,9 +294,92 @@ npm run dev
 4. **Serial builders** — Devs starting many projects, agencies, freelancers
 5. **Accelerator cohorts** — YC/Techstars batches (white-label opportunity)
 
+## Phase 7: Ship - Next Steps
+
+With Phase 6 complete, the Forj MVP is feature-complete and ready for launch. Phase 7 focuses on polishing, testing, and public launch.
+
+### Pre-Launch Checklist
+
+**1. End-to-End Testing**
+- [ ] Test full provisioning flow with real Namecheap account (sandbox → production)
+- [ ] Test GitHub OAuth Device Flow with real GitHub App
+- [ ] Test Cloudflare zone creation with real API token
+- [ ] Test DNS wiring creates all records correctly (MX, SPF, DKIM, DMARC, CNAME)
+- [ ] Test Stripe checkout flow with real payment
+- [ ] Test API key creation and authentication
+- [ ] Test rate limiting thresholds under load
+- [ ] Test MCP integration with Claude Code
+
+**2. Security Audit**
+- [ ] Review all authentication middleware implementations
+- [ ] Review all rate limiting configurations
+- [ ] Review all credential encryption/decryption flows
+- [ ] Test for common vulnerabilities (OWASP Top 10)
+- [ ] Penetration testing on credential handoff flow
+- [ ] Review all error messages for information leakage
+- [ ] Verify all secrets are in environment variables (not hardcoded)
+
+**3. Landing Page & Marketing**
+- [ ] Update forj.sh landing page with demo video
+- [ ] Create CLI demo GIF showing full `forj init` flow
+- [ ] Write launch blog post explaining value proposition
+- [ ] Prepare Show HN post with compelling hook
+- [ ] Create Twitter/X launch thread
+- [ ] Update README.md with installation instructions
+
+**4. npm Package Publishing**
+- [ ] Test CLI installation: `npm install -g forj-cli`
+- [ ] Verify global `forj` command works
+- [ ] Test `npx forj-cli init` cold start
+- [ ] Publish to npm registry
+- [ ] Test installation on clean machine (macOS, Linux, Windows)
+
+**5. Documentation**
+- [ ] Update API documentation with all endpoints
+- [ ] Create troubleshooting guide for common issues
+- [ ] Document environment variable requirements
+- [ ] Add MCP integration guide to docs
+- [ ] Create video walkthrough for first-time users
+
+**6. Monitoring & Observability**
+- [ ] Set up error tracking (Sentry or similar)
+- [ ] Configure log aggregation (Datadog, Logtail, etc.)
+- [ ] Set up uptime monitoring for API
+- [ ] Create dashboard for key metrics (provisioning success rate, error rates, etc.)
+- [ ] Set up alerts for critical failures
+
+**7. Launch Targets**
+- [ ] Deploy to production (Vercel for landing, Railway/Fly.io for API)
+- [ ] Publish npm package
+- [ ] Post to Show HN
+- [ ] Post to Twitter/X
+- [ ] Share in relevant Discord/Slack communities (Indie Hackers, etc.)
+- [ ] Target: 50 projects provisioned in first week
+- [ ] Target: 10 paying customers ($49-199 tiers)
+
+### Post-Launch Iteration
+
+**Week 1-2:**
+- Monitor error rates and fix critical bugs
+- Tune rate limits based on real usage patterns
+- Collect user feedback on UX pain points
+- Quick wins: CLI output improvements, better error messages
+
+**Week 3-4:**
+- Implement most-requested features
+- Optimize provisioning speed (currently 2-5 minutes)
+- Add telemetry for usage analytics
+- Consider V2 features (Vercel, Railway integrations)
+
+**Month 2:**
+- Plan V2 roadmap based on user feedback
+- Consider enterprise features (white-label, bulk provisioning)
+- Evaluate Google Workspace reseller application timing
+
 ## References
 
 - Full specification: `project-docs/forj-spec.md`
 - Build plan: `project-docs/build-plan.md`
 - Testing guide: `project-docs/testing-guide.md`
 - Troubleshooting: `project-docs/troubleshooting.md`
+- MCP integration: `docs/MCP_INTEGRATION.md`

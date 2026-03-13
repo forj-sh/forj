@@ -1,6 +1,6 @@
 # Forj Build Plan
 
-Last updated: 2026-03-13 (Phase 5 complete - all stacks merged)
+Last updated: 2026-03-13 (Phase 6 complete - all stacks merged)
 
 ## V1 — MVP (Core Infrastructure)
 
@@ -121,12 +121,76 @@ Last updated: 2026-03-13 (Phase 5 complete - all stacks merged)
 - Event publishing validation
 - Try/finally cleanup pattern
 
-### Phase 6: Auth + Credential Security 🔲 PLANNED
+### Phase 6: Auth + Credential Security ✅ COMPLETE (Stacks 1-10, PRs #63-#72)
 
-- API key generation for agent tier (long-lived, scoped: `agent:provision`, `agent:read`)
-- MCP tool definition for agent discoverability
-- Per-user/per-IP rate limiting on API routes
-- Credential rotation support
+**Stack 1: API key data model + generation service (PR #63)**
+- Database schema for API keys (id, user_id, key_hash, key_hint, scopes, environment)
+- API key generation with HMAC-SHA256 hashing
+- Scope-based authorization (`agent:provision`, `agent:read`)
+- Live vs test environment separation
+- Unit tests for key generation and validation
+
+**Stack 2: API key authentication middleware (PR #64)**
+- `requireApiKey` middleware with scope validation
+- Bearer token extraction and verification
+- Integration with existing `requireAuth` JWT middleware
+- Scope enforcement on protected routes
+
+**Stack 3: API key management routes (PR #65)**
+- POST /api-keys — Create new API key with scopes
+- GET /api-keys — List user's API keys
+- DELETE /api-keys/:id — Revoke API key
+- Response envelopes with proper error handling
+- Integration tests for all CRUD operations
+
+**Stack 4: Add auth middleware to /provision route (PR #66)**
+- Protected /provision endpoint with `requireApiKey(['agent:provision'])`
+- Prevents unauthorized infrastructure provisioning
+- Validated with integration tests
+
+**Stack 5: Per-user rate limiting infrastructure (PR #67)**
+- Redis-backed sliding window rate limiter (Lua script)
+- Per-user limits extracted from JWT/API key
+- Configurable limits per route (10-100 req/hour)
+- Rate limit headers: `X-UserRateLimit-Limit`, `X-UserRateLimit-Remaining`, `X-UserRateLimit-Reset`
+- Unit tests for sliding window algorithm
+
+**Stack 6: Per-IP rate limiting infrastructure (PR #68)**
+- Redis-backed IP rate limiter with separate namespace
+- Per-IP limits for DDoS protection
+- Configurable limits per route (5-60 req/hour)
+- Rate limit headers: `X-IpRateLimit-Limit`, `X-IpRateLimit-Remaining`, `X-IpRateLimit-Reset`
+- Unit tests for IP-based limiting
+
+**Stack 7: Apply rate limiting to all routes (PR #69)**
+- Applied both user + IP rate limiting to all protected routes
+- Auth routes: 20/hour (user) + 10/hour (IP)
+- Domain routes: 50/hour (user) + 30/hour (IP)
+- API key routes: 20/hour (user) + 10/hour (IP)
+- Project routes: 30/hour (user) + 50/hour (IP)
+- Provision route: 10/hour (user) + 5/hour (IP)
+- Header namespacing prevents clobbering
+
+**Stack 8: API key rotation endpoint (PR #70)**
+- POST /api-keys/:id/rotate — Atomic key rotation
+- Revoke old key + create new key with same scopes
+- Environment inference from key_hint
+- Custom error classes for type-safe error handling
+- Zero-downtime rotation workflow
+
+**Stack 9: Credential rotation for OAuth tokens (PR #71)**
+- `reencrypt()` utility for rotating master encryption key
+- Support for rotating Cloudflare/GitHub encrypted tokens
+- Documentation for rotation workflow
+- Unit tests for re-encryption with new keys
+- TODOs added for separate encryption keys per service
+
+**Stack 10: MCP tool definition + integration documentation (PR #72)**
+- `.mcp.json` with 10 MCP tool definitions
+- Tools: provision_infrastructure, check_domain_availability, create_api_key, list_api_keys, rotate_api_key, revoke_api_key, initialize_project, get_project_status, check_dns_health, fix_dns_issues
+- Comprehensive `docs/MCP_INTEGRATION.md` guide
+- JSON Schema validation for all tool parameters
+- Security considerations for credential handling in AI contexts
 
 ### Phase 7: Ship
 
@@ -186,22 +250,29 @@ Note: No Cloudflare OAuth client ID/secret needed — users provide their own AP
 
 ## Security Status
 
-### Fixed (Phase 4) ✅
+### Fixed (Phases 4-6) ✅
 
 | Item | Status |
 |------|--------|
-| JWT authentication on all domain routes | ✅ Fixed (Stack 6) |
-| IDOR on `/domains/jobs/:jobId` | ✅ Fixed (Stack 7) |
-| Stripe webhook signature verification | ✅ Fixed (Stack 9) |
-| Server-side pricing validation | ✅ Fixed (Stack 11) |
+| JWT authentication on all domain routes | ✅ Fixed (Phase 4, Stack 6) |
+| IDOR on `/domains/jobs/:jobId` | ✅ Fixed (Phase 4, Stack 7) |
+| Stripe webhook signature verification | ✅ Fixed (Phase 4, Stack 9) |
+| Server-side pricing validation | ✅ Fixed (Phase 4, Stack 11) |
+| Credential encryption at rest (Cloudflare/GitHub tokens) | ✅ Fixed (Phase 5, Stack 2) |
+| API key authentication for agent tier | ✅ Fixed (Phase 6, Stacks 1-3) |
+| `/provision` route authentication | ✅ Fixed (Phase 6, Stack 4) |
+| Per-user rate limiting on API routes | ✅ Fixed (Phase 6, Stacks 5 & 7) |
+| Per-IP rate limiting on API routes | ✅ Fixed (Phase 6, Stacks 6 & 7) |
+| API key rotation support | ✅ Fixed (Phase 6, Stack 8) |
+| Credential rotation support (OAuth tokens) | ✅ Fixed (Phase 6, Stack 9) |
 
-### Remaining
+### Remaining (Pre-Launch)
 
 | Gap | Severity | Phase |
 |-----|----------|-------|
-| Per-user/per-IP rate limiting on API routes | MEDIUM | Phase 6 |
-| Credential encryption at rest (Cloudflare/GitHub tokens) | ✅ Fixed | Phase 5 (Stack 2) |
-| Credential rotation support | MEDIUM | Phase 6 |
+| Penetration testing | HIGH | Phase 7 |
+| Production security audit | HIGH | Phase 7 |
+| Rate limit tuning based on real usage | MEDIUM | Post-launch |
 
 ---
 
