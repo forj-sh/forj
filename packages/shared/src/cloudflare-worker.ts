@@ -30,12 +30,16 @@ export enum CloudflareJobStatus {
 
 /**
  * Base job data for all Cloudflare operations
+ *
+ * SECURITY: Stack 4 - apiToken is optional
+ * Workers fetch encrypted credentials from database using userId
+ * Credentials are NOT stored in Redis job data
  */
 export interface BaseCloudflareJobData {
   userId: string;
   projectId: string;
   domain: string;
-  apiToken: string;
+  apiToken?: string; // Optional - fetched by worker from database
   accountId?: string;
 }
 
