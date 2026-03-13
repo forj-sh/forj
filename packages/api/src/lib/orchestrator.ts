@@ -44,6 +44,7 @@ export interface ProvisioningConfig {
   namecheapUsername: string;
   githubToken: string;
   cloudflareApiToken: string;
+  cloudflareAccountId: string;
 
   // Domain registration
   years: number;
@@ -253,6 +254,7 @@ export class ProvisioningOrchestrator {
       projectId: config.projectId,
       domain: config.domain,
       apiToken: config.cloudflareApiToken,
+      accountId: config.cloudflareAccountId,
     };
 
     const job = await this.cloudflareQueue.add('create-zone', jobData, {
@@ -334,7 +336,7 @@ export class ProvisioningOrchestrator {
       projectId: config.projectId,
       domain: config.domain,
       zoneId,
-      apiToken: config.cloudflareApiToken,
+      cloudflareApiToken: config.cloudflareApiToken,
       emailProvider: config.emailProvider || EmailProvider.GOOGLE_WORKSPACE,
       customMXRecords: config.customMXRecords,
       customSPF: config.customSPF,
@@ -400,8 +402,8 @@ export class ProvisioningOrchestrator {
       projectId: config.projectId,
       domain: config.domain,
       zoneId,
+      cloudflareApiToken: config.cloudflareApiToken,
       expectedRecords,
-      apiToken: config.cloudflareApiToken,
     };
 
     const job = await this.dnsQueue.add('verify-dns', jobData, {
