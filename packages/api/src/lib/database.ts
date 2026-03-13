@@ -247,3 +247,88 @@ export async function isDomainTaken(domain: string): Promise<boolean> {
 
   return result.rows[0].exists;
 }
+
+/**
+ * User database operations
+ */
+
+export interface User {
+  id: string;
+  email: string;
+  cloudflareTokenEncrypted: string | null;
+  cloudflareAccountId: string | null;
+  githubTokenEncrypted: string | null;
+  githubUsername: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Get user by ID
+ */
+export async function getUser(userId: string): Promise<User | null> {
+  const result = await db.query(
+    `SELECT id, email,
+            cloudflare_token_encrypted as "cloudflareTokenEncrypted",
+            cloudflare_account_id as "cloudflareAccountId",
+            github_token_encrypted as "githubTokenEncrypted",
+            github_username as "githubUsername",
+            created_at as "createdAt",
+            updated_at as "updatedAt"
+     FROM users
+     WHERE id = $1`,
+    [userId]
+  );
+
+  return result.rows[0] || null;
+}
+
+/**
+ * Upsert user (create or update)
+ * Used for storing tokens after OAuth flows
+ *
+ * IMPORTANT: COALESCE pattern prevents clearing fields
+ * - Passing `undefined` or `null` will preserve the existing value
+ * - To support token revocation/clearing, pass an explicit empty string '' or update this query
+ * - Current behavior: only updates when a non-null value is provided
+ */
+export async function upsertUser(params: {
+  id: string;
+  email: string;
+  cloudflareTokenEncrypted?: string | null;
+  cloudflareAccountId?: string | null;
+  githubTokenEncrypted?: string | null;
+  githubUsername?: string | null;
+}): Promise<User> {
+  const {
+    id,
+    email,
+    cloudflareTokenEncrypted,
+    cloudflareAccountId,
+    githubTokenEncrypted,
+    githubUsername,
+  } = params;
+
+  const result = await db.query(
+    `INSERT INTO users (id, email, cloudflare_token_encrypted, cloudflare_account_id,
+                        github_token_encrypted, github_username, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+     ON CONFLICT (id) DO UPDATE SET
+       email = EXCLUDED.email,
+       cloudflare_token_encrypted = COALESCE(EXCLUDED.cloudflare_token_encrypted, users.cloudflare_token_encrypted),
+       cloudflare_account_id = COALESCE(EXCLUDED.cloudflare_account_id, users.cloudflare_account_id),
+       github_token_encrypted = COALESCE(EXCLUDED.github_token_encrypted, users.github_token_encrypted),
+       github_username = COALESCE(EXCLUDED.github_username, users.github_username),
+       updated_at = NOW()
+     RETURNING id, email,
+               cloudflare_token_encrypted as "cloudflareTokenEncrypted",
+               cloudflare_account_id as "cloudflareAccountId",
+               github_token_encrypted as "githubTokenEncrypted",
+               github_username as "githubUsername",
+               created_at as "createdAt",
+               updated_at as "updatedAt"`,
+    [id, email, cloudflareTokenEncrypted, cloudflareAccountId, githubTokenEncrypted, githubUsername]
+  );
+
+  return result.rows[0];
+}

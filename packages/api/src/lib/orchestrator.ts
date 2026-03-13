@@ -37,14 +37,15 @@ export interface ProvisioningConfig {
   userId: string;
   projectId: string;
   domain: string;
+  services: string[]; // Services to provision: 'domain', 'github', 'cloudflare'
 
   // Service credentials
-  namecheapApiUser: string;
-  namecheapApiKey: string;
-  namecheapUsername: string;
-  githubToken: string;
-  cloudflareApiToken: string;
-  cloudflareAccountId: string;
+  namecheapApiUser?: string;
+  namecheapApiKey?: string;
+  namecheapUsername?: string;
+  githubToken?: string;
+  cloudflareApiToken?: string;
+  cloudflareAccountId?: string;
 
   // Domain registration
   years: number;
@@ -112,9 +113,9 @@ export class ProvisioningOrchestrator {
   }
 
   /**
-   * Provision all infrastructure - fully async, non-blocking
+   * Provision requested infrastructure - fully async, non-blocking
    *
-   * IMPORTANT: This method queues all jobs and returns immediately.
+   * IMPORTANT: This method queues only the requested services and returns immediately.
    * Jobs execute asynchronously in background workers. Inter-job dependencies
    * are handled by workers reading job data from completed upstream jobs.
    *
@@ -122,23 +123,39 @@ export class ProvisioningOrchestrator {
    */
   async provision(config: ProvisioningConfig): Promise<ProvisioningJobs> {
     const jobs: ProvisioningJobs = {};
+    const { services } = config;
 
-    // Phase 1: Queue domain registration
-    // This runs first, blocking other phases until complete (handled by workers)
-    console.log('[Orchestrator] Queueing Phase 1: Domain registration');
-    jobs.domainRegistration = await this.registerDomain(config);
+    // Phase 1: Queue domain registration (if requested)
+    if (services.includes('domain')) {
+      console.log('[Orchestrator] Queueing Phase 1: Domain registration');
+      jobs.domainRegistration = await this.registerDomain(config);
+    }
 
-    // Phase 2: Queue GitHub and Cloudflare (will run in parallel by workers)
-    // Workers will wait for domain registration to complete before starting
-    console.log('[Orchestrator] Queueing Phase 2: GitHub + Cloudflare (parallel)');
-    const [githubOrgJob, cloudflareZoneJob] = await Promise.all([
-      this.setupGitHub(config),
-      this.setupCloudflare(config),
-    ]);
+    // Phase 2: Queue GitHub and Cloudflare (if requested, will run in parallel by workers)
+    const phase2Jobs = [];
+    if (services.includes('github')) {
+      console.log('[Orchestrator] Queueing GitHub setup');
+      phase2Jobs.push(this.setupGitHub(config));
+    } else {
+      phase2Jobs.push(Promise.resolve(null));
+    }
 
-    jobs.githubOrgVerify = githubOrgJob.orgVerify;
-    jobs.githubRepoCreate = githubOrgJob.repoCreate;
-    jobs.cloudflareZone = cloudflareZoneJob;
+    if (services.includes('cloudflare')) {
+      console.log('[Orchestrator] Queueing Cloudflare setup');
+      phase2Jobs.push(this.setupCloudflare(config));
+    } else {
+      phase2Jobs.push(Promise.resolve(null));
+    }
+
+    const [githubOrgJob, cloudflareZoneJob] = await Promise.all(phase2Jobs);
+
+    if (githubOrgJob) {
+      jobs.githubOrgVerify = githubOrgJob.orgVerify;
+      jobs.githubRepoCreate = githubOrgJob.repoCreate;
+    }
+    if (cloudflareZoneJob) {
+      jobs.cloudflareZone = cloudflareZoneJob;
+    }
 
     // NOTE: Subsequent phases (nameserver update, DNS wiring, verification)
     // are handled by the Cloudflare worker after zone creation completes.
