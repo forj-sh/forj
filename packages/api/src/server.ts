@@ -20,6 +20,7 @@ import { stripeWebhookRoutes } from './routes/stripe-webhooks.js';
 import { stripeCheckoutRoutes } from './routes/stripe-checkout.js';
 import { getStripeClient, getStripeWebhookSecret } from './lib/stripe-client.js';
 import { provisionRoutes } from './routes/provision.js';
+import { apiKeyRoutes } from './routes/api-keys.js';
 
 /**
  * Create and configure Fastify server
@@ -173,7 +174,8 @@ export async function createServer() {
   await server.register(projectRoutes);
   await server.register(eventRoutes);
   await server.register(provisionRoutes);
-  logger.info('Provisioning routes registered');
+  await server.register(apiKeyRoutes);
+  logger.info('Provisioning and API key routes registered');
 
   return server;
 }
