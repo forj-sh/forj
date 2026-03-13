@@ -2,13 +2,19 @@
  * Provisioning routes
  *
  * POST /provision - Start infrastructure provisioning
- * GET /provision/:jobId - Get provisioning status
+ * GET /provision/status/:projectId - Get provisioning status
+ *
+ * SECURITY: All routes require authentication. Scopes vary by route:
+ * - POST /provision requires agent:provision
+ * - GET /provision/status/:projectId requires agent:read
  */
 
 import type { FastifyInstance } from 'fastify';
 import { ProvisioningOrchestrator, type ProvisioningConfig } from '../lib/orchestrator.js';
 import { getDomainQueue, getGitHubQueue, getCloudflareQueue, getDNSQueue } from '../lib/queues.js';
-import { getRedis } from '../lib/redis.js';
+import { requireAuth, requireScopes } from '../middleware/auth.js';
+import { API_KEY_SCOPES } from '../lib/api-key-service.js';
+import { verifyProjectOwnership } from '../lib/authorization.js';
 
 /**
  * Provisioning routes
@@ -23,32 +29,72 @@ export async function provisionRoutes(server: FastifyInstance) {
    * - GitHub repository
    * - Cloudflare DNS zone
    * - DNS record wiring
+   *
+   * AUTHENTICATION: Requires JWT or API key with agent:provision scope
+   * SECURITY: userId is extracted from authenticated user, not from request body
    */
-  server.post<{ Body: ProvisioningConfig }>('/provision', async (request, reply) => {
-    const config = request.body;
+  server.post<{ Body: Omit<ProvisioningConfig, 'userId'> }>(
+    '/provision',
+    {
+      preHandler: [requireAuth, requireScopes([API_KEY_SCOPES.AGENT_PROVISION])],
+    },
+    async (request, reply) => {
+      const bodyConfig = request.body;
 
-    // Validate required fields
-    if (
-      !config.userId ||
-      !config.projectId ||
-      !config.domain ||
-      !config.namecheapApiUser ||
-      !config.namecheapApiKey ||
-      !config.namecheapUsername ||
-      !config.githubToken ||
-      !config.cloudflareApiToken ||
-      !config.cloudflareAccountId ||
-      !config.githubOrg ||
-      !config.years ||
-      !config.contactInfo
-    ) {
-      return reply.status(400).send({
-        success: false,
-        error: 'Missing required fields',
-        message:
-          'Required: userId, projectId, domain, namecheapApiUser, namecheapApiKey, namecheapUsername, githubToken, cloudflareApiToken, cloudflareAccountId, githubOrg, years, contactInfo',
-      });
-    }
+      // Extract userId from authenticated user (SECURITY: Never trust client-provided userId)
+      const userId = request.user?.userId;
+      if (!userId) {
+        // This should be guaranteed by requireAuth, but we check as a safeguard
+        request.log.error('User ID not found on request object after authentication');
+        return reply.status(500).send({
+          success: false,
+          error: 'Internal Server Error',
+          message: 'User ID not found after authentication',
+        });
+      }
+
+      // Build full config with authenticated userId
+      const config: ProvisioningConfig = {
+        ...bodyConfig,
+        userId, // Use authenticated user's ID
+      };
+
+      // Validate required fields
+      if (
+        !config.projectId ||
+        !config.domain ||
+        !config.namecheapApiUser ||
+        !config.namecheapApiKey ||
+        !config.namecheapUsername ||
+        !config.githubToken ||
+        !config.cloudflareApiToken ||
+        !config.cloudflareAccountId ||
+        !config.githubOrg ||
+        !config.years ||
+        !config.contactInfo
+      ) {
+        return reply.status(400).send({
+          success: false,
+          error: 'Missing required fields',
+          message:
+            'Required: projectId, domain, namecheapApiUser, namecheapApiKey, namecheapUsername, githubToken, cloudflareApiToken, cloudflareAccountId, githubOrg, years, contactInfo',
+        });
+      }
+
+      // Verify project ownership to prevent IDOR
+      const ownsProject = await verifyProjectOwnership(config.projectId, userId, request.log);
+      if (!ownsProject) {
+        request.log.warn({
+          projectId: config.projectId,
+          userId,
+        }, 'User attempted to provision project they do not own');
+
+        return reply.status(404).send({
+          success: false,
+          error: 'Project not found',
+          message: 'The specified project does not exist or you do not have access to it',
+        });
+      }
 
     // Validate contactInfo subfields
     const { contactInfo } = config;
@@ -122,10 +168,14 @@ export async function provisionRoutes(server: FastifyInstance) {
    *
    * Returns aggregated status of all provisioning jobs
    *
+   * AUTHENTICATION: Requires JWT or API key with agent:read scope
    * TODO: Implement this endpoint by querying BullMQ job statuses and aggregating them
    */
   server.get<{ Params: { projectId: string } }>(
     '/provision/status/:projectId',
+    {
+      preHandler: [requireAuth, requireScopes([API_KEY_SCOPES.AGENT_READ])],
+    },
     async (request, reply) => {
       const { projectId } = request.params;
 
