@@ -20,7 +20,18 @@ import {
   createProject,
   getProjectByIdAndUserId,
   isDomainTaken,
+  getUser,
+  updateProjectService,
+  type User,
 } from '../lib/database.js';
+import { ProvisioningOrchestrator, type ProvisioningConfig } from '../lib/orchestrator.js';
+import { decrypt } from '../lib/encryption.js';
+import {
+  getDomainQueue,
+  getGitHubQueue,
+  getCloudflareQueue,
+  getDNSQueue,
+} from '../lib/queues.js';
 
 /**
  * Project routes
@@ -58,6 +69,14 @@ export async function projectRoutes(server: FastifyInstance) {
         });
       }
 
+      // Validate service-specific required fields
+      if (services.includes('github') && !githubOrg) {
+        return reply.status(400).send({
+          success: false,
+          error: 'Missing required field: githubOrg is required when github service is selected',
+        });
+      }
+
       // Get authenticated user ID
       const userId = request.user?.userId;
       if (!userId) {
@@ -66,6 +85,9 @@ export async function projectRoutes(server: FastifyInstance) {
           error: 'User ID not found after authentication',
         });
       }
+
+      // ========== VALIDATE ALL PREREQUISITES BEFORE CREATING PROJECT ==========
+      // This prevents orphaned projects if validation fails
 
       // Check if domain is already taken
       const domainExists = await isDomainTaken(domain);
@@ -76,8 +98,76 @@ export async function projectRoutes(server: FastifyInstance) {
         });
       }
 
-      // Generate cryptographically secure project ID
-      const projectId = `proj_${randomUUID()}`;
+      // Get user credentials from database (only if needed for Cloudflare or GitHub)
+      const needsUserCredentials = services.includes('cloudflare') || services.includes('github');
+      let user: User | null = null;
+      let cloudflareToken: string | undefined;
+      let githubToken: string | undefined;
+
+      if (needsUserCredentials) {
+        user = await getUser(userId);
+        if (!user) {
+          return reply.status(500).send({
+            success: false,
+            error: 'User not found',
+          });
+        }
+
+        // Only require encryption key when we actually need to decrypt tokens
+        const encryptionKey = process.env.CLOUDFLARE_ENCRYPTION_KEY;
+        if (!encryptionKey) {
+          request.log.error('CLOUDFLARE_ENCRYPTION_KEY not configured');
+          return reply.status(500).send({
+            success: false,
+            error: 'Server encryption not configured',
+          });
+        }
+
+        // Decrypt user credentials
+        if (user.cloudflareTokenEncrypted && services.includes('cloudflare')) {
+          try {
+            cloudflareToken = await decrypt(user.cloudflareTokenEncrypted, encryptionKey);
+          } catch (error) {
+            request.log.error(error, 'Failed to decrypt Cloudflare token');
+            return reply.status(500).send({
+              success: false,
+              error: 'Failed to decrypt Cloudflare credentials',
+            });
+          }
+        }
+
+        if (user.githubTokenEncrypted && services.includes('github')) {
+          try {
+            githubToken = await decrypt(user.githubTokenEncrypted, encryptionKey);
+          } catch (error) {
+            request.log.error(error, 'Failed to decrypt GitHub token');
+            return reply.status(500).send({
+              success: false,
+              error: 'Failed to decrypt GitHub credentials',
+            });
+          }
+        }
+      }
+
+      // Validate Namecheap credentials (only if domain service requested)
+      if (services.includes('domain')) {
+        const namecheapApiUser = process.env.NAMECHEAP_API_USER;
+        const namecheapApiKey = process.env.NAMECHEAP_API_KEY;
+        const namecheapUsername = process.env.NAMECHEAP_USERNAME;
+
+        if (!namecheapApiUser || !namecheapApiKey || !namecheapUsername) {
+          request.log.error('Namecheap credentials not configured');
+          return reply.status(500).send({
+            success: false,
+            error: 'Domain registration not configured',
+          });
+        }
+      }
+
+      // ========== ALL PREREQUISITES VALIDATED - NOW CREATE PROJECT ==========
+
+      // Generate cryptographically secure project ID (raw UUID for database compatibility)
+      const projectId = randomUUID();
 
       try {
         // Create project in database
@@ -96,6 +186,80 @@ export async function projectRoutes(server: FastifyInstance) {
           services,
           githubOrg,
         }, 'Project initialization');
+
+        // Build provisioning config for requested services
+        const provisioningConfig: ProvisioningConfig = {
+          userId,
+          projectId: project.id,
+          domain,
+          services, // Critical: tell orchestrator which services to provision
+          years: 1,
+          // TODO: Source contact info from user profile instead of hardcoded values
+          // Using placeholder data violates ICANN policies - must fix before production
+          contactInfo: {
+            firstName: 'Forj',
+            lastName: 'User',
+            email: user?.email || 'test@forj.sh',
+            phone: '+1.0000000000',
+            address1: '123 Main St',
+            city: 'San Francisco',
+            stateProvince: 'CA',
+            postalCode: '94102',
+            country: 'US',
+          },
+        };
+
+        // Add service-specific credentials (only if service requested)
+        if (services.includes('domain')) {
+          provisioningConfig.namecheapApiUser = process.env.NAMECHEAP_API_USER;
+          provisioningConfig.namecheapApiKey = process.env.NAMECHEAP_API_KEY;
+          provisioningConfig.namecheapUsername = process.env.NAMECHEAP_USERNAME;
+        }
+
+        if (services.includes('github')) {
+          provisioningConfig.githubToken = githubToken;
+          provisioningConfig.githubOrg = githubOrg!; // Safe: validated upfront
+        }
+
+        if (services.includes('cloudflare')) {
+          provisioningConfig.cloudflareApiToken = cloudflareToken;
+          provisioningConfig.cloudflareAccountId = user?.cloudflareAccountId;
+        }
+
+        // Start provisioning in background (fire-and-forget, don't await)
+        // This keeps the HTTP request fast and consistent with /routes/provision.ts
+        const orchestrator = new ProvisioningOrchestrator(
+          getDomainQueue(),
+          getGitHubQueue(),
+          getCloudflareQueue(),
+          getDNSQueue()
+        );
+
+        orchestrator.provision(provisioningConfig)
+          .then(() => {
+            request.log.info({
+              projectId: project.id,
+              services,
+            }, 'Provisioning orchestration started');
+          })
+          .catch(async (error) => {
+            request.log.error(error, 'Failed to start provisioning');
+
+            // Update project state to indicate provisioning failed to start
+            // This ensures system state is consistent and user can see the failure
+            try {
+              for (const service of services) {
+                await updateProjectService(project.id, service as any, {
+                  status: 'failed',
+                  error: 'Failed to queue provisioning job. Please try again or contact support.',
+                  startedAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                });
+              }
+            } catch (dbError) {
+              request.log.error(dbError, 'Failed to update project state after provisioning error');
+            }
+          });
 
         const response: ProjectInitResponse = {
           projectId: project.id,
