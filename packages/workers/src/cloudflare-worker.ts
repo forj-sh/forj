@@ -28,6 +28,30 @@ import {
   CloudflareWorkerEventType,
   isValidCloudflareStateTransition,
 } from '@forj/shared';
+import { updateProjectService } from './database.js';
+
+/**
+ * Sanitize error messages to remove sensitive credentials
+ */
+function sanitizeErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+
+  let message = error.message;
+
+  // Redact Namecheap API credentials
+  message = message.replace(/ApiKey=[^&\s]+/gi, 'ApiKey=***REDACTED***');
+  message = message.replace(/ApiUser=[^&\s]+/gi, 'ApiUser=***REDACTED***');
+  message = message.replace(/UserName=[^&\s]+/gi, 'UserName=***REDACTED***');
+  message = message.replace(/ClientIp=[^&\s]+/gi, 'ClientIp=***REDACTED***');
+
+  // Redact Cloudflare API tokens
+  message = message.replace(/Bearer\s+[^\s]+/gi, 'Bearer ***REDACTED***');
+  message = message.replace(/X-Auth-Key:\s*[^\s]+/gi, 'X-Auth-Key: ***REDACTED***');
+
+  return message;
+}
 
 /**
  * Cloudflare worker class
@@ -95,10 +119,43 @@ export class CloudflareWorker {
   private setupEventHandlers(): void {
     this.worker.on('completed', (job) => {
       console.log(`Cloudflare job ${job.id} completed`);
+
+      // Only mark service as 'complete' in DB if it's the final step of the workflow.
+      // Cloudflare jobs are multi-step (CREATE_ZONE → UPDATE_NAMESERVERS → VERIFY_NAMESERVERS),
+      // and the 'completed' event fires for each step. We only want to mark the service
+      // complete when nameserver verification finishes successfully.
+      const progress = job.progress as { status?: CloudflareJobStatus };
+
+      if (progress?.status === CloudflareJobStatus.COMPLETE) {
+        const zoneId = 'zoneId' in job.data ? job.data.zoneId : undefined;
+        const now = new Date().toISOString();
+
+        // Update database with completion status
+        void updateProjectService(job.data.projectId, 'cloudflare', {
+          status: 'complete',
+          value: zoneId,
+          updatedAt: now,
+          completedAt: now,
+        }).catch((err) => {
+          console.error('Failed to update project status in database:', err);
+        });
+      }
     });
 
     this.worker.on('failed', (job, err) => {
-      console.error(`Cloudflare job ${job?.id} failed:`, err);
+      const sanitizedError = sanitizeErrorMessage(err);
+      console.error(`Cloudflare job ${job?.id} failed:`, sanitizedError);
+
+      if (job) {
+        // Update database with failure status (sanitized to avoid leaking credentials)
+        void updateProjectService(job.data.projectId, 'cloudflare', {
+          status: 'failed',
+          error: sanitizedError,
+          updatedAt: new Date().toISOString(),
+        }).catch((dbErr) => {
+          console.error('Failed to update project status in database:', dbErr);
+        });
+      }
     });
 
     this.worker.on('error', (err) => {
