@@ -33,6 +33,7 @@ import {
   isValidStateTransition,
   splitDomain,
 } from '@forj/shared';
+import { updateProjectService } from './database.js';
 
 /**
  * Sanitize error message to prevent API key exposure
@@ -113,6 +114,17 @@ export class DomainWorker {
     // Note: Using void to explicitly ignore promise (emitEvent handles its own errors)
     this.worker.on('completed', (job) => {
       console.log(`Job ${job.id} completed`);
+
+      // Update database with completion status
+      void updateProjectService(job.data.projectId, 'domain', {
+        status: 'complete',
+        value: job.data.domainName,
+        updatedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+      }).catch((err) => {
+        console.error('Failed to update project status in database:', err);
+      });
+
       void this.emitEvent({
         type: DomainWorkerEventType.JOB_COMPLETED,
         jobId: job.id || '',
@@ -131,6 +143,15 @@ export class DomainWorker {
       console.error(`Job ${job?.id} failed:`, sanitizedError);
 
       if (job) {
+        // Update database with failure status
+        void updateProjectService(job.data.projectId, 'domain', {
+          status: 'failed',
+          error: sanitizedError,
+          updatedAt: new Date().toISOString(),
+        }).catch((err) => {
+          console.error('Failed to update project status in database:', err);
+        });
+
         void this.emitEvent({
           type: DomainWorkerEventType.JOB_FAILED,
           jobId: job.id || '',
