@@ -1,6 +1,7 @@
 import { Pool, neonConfig } from '@neondatabase/serverless';
 import ws from 'ws';
 import { logger } from './logger.js';
+import type { Project, ServiceState, ServiceType } from '@forj/shared';
 
 // Configure Neon to use WebSocket for serverless environments
 neonConfig.webSocketConstructor = ws;
@@ -91,4 +92,158 @@ export async function getDatabaseStatus(): Promise<'connected' | 'disconnected' 
   };
 
   return status;
+}
+
+/**
+ * Project database operations
+ */
+
+/**
+ * Create a new project
+ */
+export async function createProject(params: {
+  id: string;
+  name: string;
+  domain: string;
+  userId: string;
+  services: ServiceType[];
+}): Promise<Project> {
+  const { id, name, domain, userId, services } = params;
+
+  // Initialize service states as pending with consistent timestamp
+  const now = new Date().toISOString();
+  const serviceStates: Partial<Record<ServiceType, ServiceState>> = {};
+  for (const service of services) {
+    serviceStates[service] = {
+      status: 'pending',
+      startedAt: now,
+      updatedAt: now,
+    };
+  }
+
+  // Normalize domain to lowercase for case-insensitive uniqueness
+  const normalizedDomain = domain.toLowerCase();
+
+  const result = await db.query(
+    `INSERT INTO projects (id, name, domain, user_id, services, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+     RETURNING id, name, domain, user_id as "userId", services,
+               created_at as "createdAt", updated_at as "updatedAt"`,
+    [id, name, normalizedDomain, userId, JSON.stringify(serviceStates)]
+  );
+
+  return result.rows[0];
+}
+
+/**
+ * Get project by ID
+ */
+export async function getProject(projectId: string): Promise<Project | null> {
+  const result = await db.query(
+    `SELECT id, name, domain, user_id as "userId", services,
+            created_at as "createdAt", updated_at as "updatedAt"
+     FROM projects
+     WHERE id = $1`,
+    [projectId]
+  );
+
+  return result.rows[0] || null;
+}
+
+/**
+ * Get project by ID with ownership check
+ * Returns null if project doesn't exist or doesn't belong to user
+ */
+export async function getProjectByIdAndUserId(
+  projectId: string,
+  userId: string
+): Promise<Project | null> {
+  const result = await db.query(
+    `SELECT id, name, domain, user_id as "userId", services,
+            created_at as "createdAt", updated_at as "updatedAt"
+     FROM projects
+     WHERE id = $1 AND user_id = $2`,
+    [projectId, userId]
+  );
+
+  return result.rows[0] || null;
+}
+
+/**
+ * Get all projects for a user
+ */
+export async function getProjectsByUserId(userId: string): Promise<Project[]> {
+  const result = await db.query(
+    `SELECT id, name, domain, user_id as "userId", services,
+            created_at as "createdAt", updated_at as "updatedAt"
+     FROM projects
+     WHERE user_id = $1
+     ORDER BY created_at DESC`,
+    [userId]
+  );
+
+  return result.rows;
+}
+
+/**
+ * Update service state for a project
+ */
+export async function updateProjectService(
+  projectId: string,
+  serviceType: ServiceType,
+  state: ServiceState
+): Promise<void> {
+  // Use jsonb_set to update nested service state
+  await db.query(
+    `UPDATE projects
+     SET services = jsonb_set(
+       COALESCE(services, '{}'::jsonb),
+       $1,
+       $2::jsonb,
+       true
+     ),
+     updated_at = NOW()
+     WHERE id = $3`,
+    [`{${serviceType}}`, JSON.stringify(state), projectId]
+  );
+}
+
+/**
+ * Update multiple service states atomically
+ */
+export async function updateProjectServices(
+  projectId: string,
+  services: Partial<Record<ServiceType, ServiceState>>
+): Promise<void> {
+  await db.query(
+    `UPDATE projects
+     SET services = $1::jsonb,
+         updated_at = NOW()
+     WHERE id = $2`,
+    [JSON.stringify(services), projectId]
+  );
+}
+
+/**
+ * Delete project (hard delete)
+ */
+export async function deleteProject(projectId: string): Promise<boolean> {
+  const result = await db.query(
+    `DELETE FROM projects WHERE id = $1`,
+    [projectId]
+  );
+
+  return result.rowCount !== null && result.rowCount > 0;
+}
+
+/**
+ * Check if domain is already registered
+ */
+export async function isDomainTaken(domain: string): Promise<boolean> {
+  const result = await db.query(
+    `SELECT EXISTS(SELECT 1 FROM projects WHERE domain = $1) as exists`,
+    [domain.toLowerCase()]
+  );
+
+  return result.rows[0].exists;
 }
