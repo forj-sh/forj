@@ -2,6 +2,28 @@
  * GitHub authentication routes
  *
  * Implements OAuth Device Flow (RFC 8628)
+ *
+ * TOKEN ROTATION WORKFLOW:
+ * 1. User calls POST /auth/github/device to initiate new device flow
+ * 2. User authorizes at github.com/login/device with provided user code
+ * 3. Client polls POST /auth/github/poll with device code
+ * 4. Server gets new access token and stores it (replaces old token)
+ * 5. Old token is implicitly superseded (GitHub doesn't support explicit revocation)
+ *
+ * To completely remove credentials:
+ * - Call DELETE /auth/github to clear stored token
+ * - User can revoke access at github.com/settings/applications
+ *
+ * ENCRYPTION:
+ * - Tokens are encrypted using AES-256-GCM before storage
+ * - Encryption key: CLOUDFLARE_ENCRYPTION_KEY environment variable (shared credential encryption key)
+ * - Format: salt:iv:authTag:ciphertext (all base64)
+ * - TODO: Consider using separate GITHUB_ENCRYPTION_KEY for better security isolation
+ *
+ * SECURITY:
+ * - Server enforces scopes (repo read:org) - client cannot escalate privileges
+ * - User ID extracted from JWT - no IDOR vulnerability
+ * - Tokens never logged or exposed in responses
  */
 
 import type { FastifyInstance } from 'fastify';

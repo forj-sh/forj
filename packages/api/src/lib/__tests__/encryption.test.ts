@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeAll } from '@jest/globals';
-import { encrypt, decrypt, generateEncryptionKey, isValidEncryptionKey } from '../encryption.js';
+import { encrypt, decrypt, generateEncryptionKey, isValidEncryptionKey, reencrypt } from '../encryption.js';
 
 describe('Encryption', () => {
   let testKey: string;
@@ -172,6 +172,123 @@ describe('Encryption', () => {
         const decrypted = await decrypt(encrypted, testKey);
         expect(decrypted).toBe(testCase);
       });
+    });
+  });
+
+  describe('reencrypt', () => {
+    it('should re-encrypt data with new key', async () => {
+      const plaintext = 'secret-cloudflare-token-abc123';
+      const oldKey = generateEncryptionKey();
+      const newKey = generateEncryptionKey();
+
+      // Encrypt with old key
+      const encryptedWithOldKey = await encrypt(plaintext, oldKey);
+
+      // Re-encrypt with new key
+      const reencrypted = await reencrypt(encryptedWithOldKey, oldKey, newKey);
+
+      // Verify old key can't decrypt new ciphertext
+      await expect(decrypt(reencrypted, oldKey)).rejects.toThrow();
+
+      // Verify new key can decrypt
+      const decrypted = await decrypt(reencrypted, newKey);
+      expect(decrypted).toBe(plaintext);
+    });
+
+    it('should produce different ciphertext after re-encryption', async () => {
+      const plaintext = 'github-token-gho_123456';
+      const oldKey = generateEncryptionKey();
+      const newKey = generateEncryptionKey();
+
+      const encryptedWithOldKey = await encrypt(plaintext, oldKey);
+      const reencrypted = await reencrypt(encryptedWithOldKey, oldKey, newKey);
+
+      // Ciphertext should be different
+      expect(reencrypted).not.toBe(encryptedWithOldKey);
+
+      // But plaintext should be the same
+      const decrypted = await decrypt(reencrypted, newKey);
+      expect(decrypted).toBe(plaintext);
+    });
+
+    it('should handle multiple credentials re-encryption', async () => {
+      const credentials = [
+        'cloudflare-token-1',
+        'github-token-2',
+        'api-key-3',
+        'oauth-token-4',
+      ];
+
+      const oldKey = generateEncryptionKey();
+      const newKey = generateEncryptionKey();
+
+      // Encrypt all with old key
+      const encrypted = await Promise.all(
+        credentials.map((cred) => encrypt(cred, oldKey))
+      );
+
+      // Re-encrypt all with new key
+      const reencrypted = await Promise.all(
+        encrypted.map((enc) => reencrypt(enc, oldKey, newKey))
+      );
+
+      // Verify all can be decrypted with new key
+      const decrypted = await Promise.all(
+        reencrypted.map((enc) => decrypt(enc, newKey))
+      );
+
+      expect(decrypted).toEqual(credentials);
+    });
+
+    it('should fail if old key is incorrect', async () => {
+      const plaintext = 'secret-token';
+      const correctOldKey = generateEncryptionKey();
+      const wrongOldKey = generateEncryptionKey();
+      const newKey = generateEncryptionKey();
+
+      const encrypted = await encrypt(plaintext, correctOldKey);
+
+      // Try to re-encrypt with wrong old key
+      await expect(reencrypt(encrypted, wrongOldKey, newKey)).rejects.toThrow();
+    });
+
+    it('should handle special characters during re-encryption', async () => {
+      const plaintext = 'token-🔐-日本語-!@#$%^&*()';
+      const oldKey = generateEncryptionKey();
+      const newKey = generateEncryptionKey();
+
+      const encrypted = await encrypt(plaintext, oldKey);
+      const reencrypted = await reencrypt(encrypted, oldKey, newKey);
+      const decrypted = await decrypt(reencrypted, newKey);
+
+      expect(decrypted).toBe(plaintext);
+    });
+
+    it('should handle long tokens during re-encryption', async () => {
+      const plaintext = 'long-token-' + 'x'.repeat(5000);
+      const oldKey = generateEncryptionKey();
+      const newKey = generateEncryptionKey();
+
+      const encrypted = await encrypt(plaintext, oldKey);
+      const reencrypted = await reencrypt(encrypted, oldKey, newKey);
+      const decrypted = await decrypt(reencrypted, newKey);
+
+      expect(decrypted).toBe(plaintext);
+    });
+
+    it('should still re-encrypt when old key equals new key', async () => {
+      const plaintext = 'test-token';
+      const key = generateEncryptionKey();
+
+      const encrypted = await encrypt(plaintext, key);
+      const reencrypted = await reencrypt(encrypted, key, key);
+
+      // Should produce different ciphertext (due to new IV/salt)
+      expect(reencrypted).not.toBe(encrypted);
+
+      // But decryption should still work
+      const decrypted = await decrypt(reencrypted, key);
+      expect(decrypted).toBe(plaintext);
     });
   });
 });

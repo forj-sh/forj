@@ -140,3 +140,33 @@ export function isValidEncryptionKey(key: string): boolean {
     return false;
   }
 }
+
+/**
+ * Re-encrypt data with a new encryption key
+ *
+ * This is used when rotating the encryption key itself.
+ * Decrypts data with the old key and re-encrypts with the new key.
+ *
+ * @param encryptedData - Data encrypted with old key
+ * @param oldKey - Old base64-encoded encryption key
+ * @param newKey - New base64-encoded encryption key
+ * @returns Data re-encrypted with new key
+ *
+ * @example
+ * // Rotate CLOUDFLARE_ENCRYPTION_KEY (shared credential encryption key)
+ * const oldKey = process.env.CLOUDFLARE_ENCRYPTION_KEY; // Current key
+ * const newKey = 'new-base64-key...'; // New key to rotate to
+ * const reencrypted = await reencrypt(storedToken, oldKey, newKey);
+ * // Update database with reencrypted token, then update env var
+ */
+export async function reencrypt(
+  encryptedData: string,
+  oldKey: string,
+  newKey: string
+): Promise<string> {
+  // Decrypt with old key
+  const plaintext = await decrypt(encryptedData, oldKey);
+
+  // Re-encrypt with new key
+  return encrypt(plaintext, newKey);
+}
