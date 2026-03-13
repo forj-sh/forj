@@ -12,20 +12,37 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Essential Commands
 ```bash
-# Development
+# Development (npm workspaces)
 npm run dev -w packages/api          # Start API server (localhost:3000)
 npm run dev -w packages/cli          # CLI watch mode
-cd packages/workers && npm run dev   # Start domain worker
+npm run dev -w packages/workers      # Start BullMQ workers
+npm run dev -w packages/landing      # Landing page dev server
 
 # Testing
-npm test -w packages/api -- sse-streaming.test.ts  # Integration test
-curl http://localhost:3000/health                   # API health check
+npm test -w packages/api                              # Run all API tests
+npm test -w packages/api -- sse-streaming.test.ts     # Run specific test
+npm run test:watch -w packages/api                    # Watch mode
+npm run test:coverage -w packages/api                 # Coverage report
+curl http://localhost:3000/health                     # API health check
+
+# Database migrations
+npm run db:migrate -w packages/api                    # Run pending migrations
+npm run db:migrate:create -w packages/api -- <name>   # Create new migration
+
+# Type checking
+npm run type-check -w packages/api    # Check API types
+npm run type-check -w packages/cli    # Check CLI types
+
+# Build
+npm run build                         # Build all packages
+npm run build -w packages/api         # Build API only
 
 # Graphite workflow
 gt create -m "Stack N: Description"  # Create new stack
 gt modify                             # Amend current stack
 gt restack                            # Rebase all stacks
 gt submit                             # Push + create PRs
+gt log short                          # View stack tree
 ```
 
 ### Critical Information
@@ -99,19 +116,38 @@ The complete product specification is in `project-docs/forj-spec.md`.
 
 ## Repository Structure
 
+**Monorepo:** npm workspaces with 5 packages. Use `-w <package-name>` flag for package-specific commands.
+
 ```
 forj/ (GitHub: forj-sh/forj)
 ├── packages/
-│   ├── landing/        ✅ Landing page (live at forj.sh, deployed on Vercel)
-│   ├── cli/            ✅ CLI client (commander.js + inquirer + SSE)
-│   ├── api/            ✅ Fastify API server (routes, auth, Stripe, orchestrator)
+│   ├── landing/        ✅ Landing page (Vite + TypeScript, forj.sh on Vercel)
+│   ├── cli/            ✅ CLI client (ESM with .js extensions, commander + inquirer + SSE)
+│   ├── api/            ✅ Fastify API server (routes, auth, Stripe, JWT)
+│   │   ├── src/
+│   │   │   ├── routes/        — 14 route files (health, domains, auth, projects, etc.)
+│   │   │   ├── middleware/    — auth, rate-limit, ip-rate-limit
+│   │   │   ├── lib/           — redis, queues, db, stripe, logger
+│   │   │   └── __tests__/     — Integration tests (SSE, provisioning pipeline)
+│   │   └── migrations/        — 4 migrations (projects, users, api-keys)
 │   ├── workers/        ✅ BullMQ workers (domain, GitHub, Cloudflare, DNS)
-│   └── shared/         ✅ Shared types + API clients (Namecheap, Cloudflare, GitHub)
+│   │   └── src/               — 4 worker files + start script
+│   └── shared/         ✅ Shared types + API clients
+│       └── src/
+│           ├── namecheap/     — Namecheap API client + rate limiter
+│           ├── cloudflare/    — Cloudflare API client
+│           ├── github/        — GitHub Device Flow OAuth + API client
+│           └── *.ts           — Shared types (projects, domains, events, services)
 ├── api/                ✅ Vercel serverless functions (waitlist form)
 ├── lib/                ✅ Shared database utilities
-├── project-docs/       ✅ Product specifications + build plan
+├── project-docs/       ✅ Product specs, build plan, testing guide
 └── CLAUDE.md           ✅ This file
 ```
+
+**Package dependencies:**
+- `api` depends on `shared` (for types and API clients)
+- `workers` depends on `shared` (for worker implementations)
+- `cli` is independent (no internal deps)
 
 ## Architecture
 
@@ -165,6 +201,8 @@ Projects table stores project state with JSONB `services` column. Users table st
 **Database migrations:**
 - `1741570800000_init-projects-table.cjs` — Projects table (UUID PK, JSONB services, VARCHAR user_id)
 - `1741915200000_create-users-table.cjs` — Users table (encrypted token storage)
+- `1773363143000_alter-user-id-to-varchar.cjs` — Migration to VARCHAR user IDs for auth flexibility
+- `1773411143000_create-api-keys-table.cjs` — API keys table for agent authentication
 
 ## Tech Stack
 
@@ -193,13 +231,31 @@ Projects table stores project state with JSONB `services` column. Users table st
 # Run all integration tests
 npm test -w packages/api
 
-# Start services for manual testing
-npm run dev -w packages/api          # Terminal 1
-cd packages/workers && npm run dev   # Terminal 2
+# Run specific test file
+npm test -w packages/api -- sse-streaming.test.ts
+npm test -w packages/api -- provisioning-pipeline.test.ts
 
-# Health check
-curl http://localhost:3000/health
+# Watch mode for TDD
+npm run test:watch -w packages/api
+
+# Coverage report
+npm run test:coverage -w packages/api
+
+# Start services for manual testing
+npm run dev -w packages/api          # Terminal 1: API server on :3000
+npm run dev -w packages/workers      # Terminal 2: BullMQ workers
+redis-server                         # Terminal 3: Redis (if not running)
+
+# Health checks
+curl http://localhost:3000/health                     # API health
+curl http://localhost:3000/queues                     # Queue status
 ```
+
+**Test requirements:**
+- All tests use Jest with ts-jest preset for ESM support
+- Mock strategy: `global.fetch` for HTTP calls, `jest.fn()` for Redis
+- Tests run with `NODE_OPTIONS=--experimental-vm-modules` for ESM compatibility
+- Integration tests require Redis running locally
 
 See `project-docs/testing-guide.md` for comprehensive testing instructions.
 

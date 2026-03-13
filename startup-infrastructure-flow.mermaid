@@ -1,0 +1,103 @@
+%%{init: {'theme': 'dark', 'themeVariables': {'primaryColor': '#0891B2', 'primaryTextColor': '#fff', 'primaryBorderColor': '#22D3EE', 'lineColor': '#F59E0B', 'secondaryColor': '#162234', 'tertiaryColor': '#0F1B2D', 'fontSize': '14px'}}}%%
+
+flowchart TD
+    %% ═══════════════════════════════════════════
+    %% PHASE 1: INCORPORATION (Stripe Atlas)
+    %% ═══════════════════════════════════════════
+
+    FOUNDER["🧑‍💻 Founder Has an Idea"]:::trigger --> ATLAS
+
+    subgraph ATLAS["☁️ STRIPE ATLAS — Incorporation"]
+        direction TB
+        A1["Delaware C-Corp Filing"] --> A2["EIN (Tax ID)"]
+        A2 --> A3["Bank Account (Mercury/SVB)"]
+        A3 --> A4["Stripe Payments Activated"]
+    end
+
+    ATLAS -->|"Handoff: Company exists,<br/>no infrastructure yet"| FORJ
+
+    %% ═══════════════════════════════════════════
+    %% PHASE 2: INFRASTRUCTURE (Forj)
+    %% ═══════════════════════════════════════════
+
+    subgraph FORJ["⚡ FORJ — Infrastructure Deploy (~2 min)"]
+        direction TB
+        F1["Domain Registration<br/>(Namecheap Reseller)"]
+        F2["GitHub Org + Repos<br/>(OAuth Device Flow)"]
+        F3["Cloudflare Zone + DNS<br/>(Guided API Token)"]
+
+        F1 --> F4["DNS Wiring Layer"]
+        F2 --> F4
+        F3 --> F4
+
+        F4 --> F5["MX + SPF + DKIM + DMARC<br/>Email Auth Records"]
+        F4 --> F6["CNAME Records<br/>(Vercel / Railway / Pages)"]
+    end
+
+    FORJ -->|"Upsell at checkout:<br/>every DE corp needs one"| AGENT
+
+    %% ═══════════════════════════════════════════
+    %% PHASE 3: REGISTERED AGENT (The Real Business)
+    %% ═══════════════════════════════════════════
+
+    subgraph AGENT["🛡️ REGISTERED AGENT SERVICE — Delaware"]
+        direction TB
+        R1["Registered Agent Filing<br/>(Delaware Division of Corps)"]
+        R1 --> R2["Legal Mail Forwarding<br/>+ Document Scanning"]
+        R2 --> R3["Annual Report Filing<br/>+ Compliance Alerts"]
+        R3 --> R4["Ongoing Compliance<br/>Monitoring Dashboard"]
+    end
+
+    %% ═══════════════════════════════════════════
+    %% REVENUE STREAMS
+    %% ═══════════════════════════════════════════
+
+    FORJ -->|"$49-199/yr"| REV
+    AGENT -->|"$50-150/yr recurring"| REV
+    F1 -->|"$3-5/yr margin"| REV
+
+    REV["💰 REVENUE STACK<br/>Compounding per founder"]:::revenue
+
+    %% ═══════════════════════════════════════════
+    %% FUTURE EXPANSION
+    %% ═══════════════════════════════════════════
+
+    AGENT --> EXPAND
+
+    subgraph EXPAND["🚀 V2/V3 EXPANSION"]
+        direction LR
+        E1["Google Workspace<br/>Reseller (~20%/seat)"]
+        E2["Multi-State Agent<br/>Coverage"]
+        E3["Accelerator<br/>Partnerships"]
+    end
+
+    %% ═══════════════════════════════════════════
+    %% ACQUISITION INSIGHT
+    %% ═══════════════════════════════════════════
+
+    ATLAS -.->|"~10K+ companies/yr<br/>incorporate via Atlas"| ACQ
+    FORJ -.->|"Captures founders at<br/>moment of need"| ACQ
+    AGENT -.->|"Legally required.<br/>95%+ retention."| ACQ
+
+    ACQ["🎯 ZERO-CAC ACQUISITION LOOP<br/>Infra tool → Agent upsell → Recurring revenue"]:::insight
+
+    %% ═══════════════════════════════════════════
+    %% KEY INSIGHT
+    %% ═══════════════════════════════════════════
+
+    ACQ -.-> WHY
+
+    WHY["💡 WHY THIS WORKS<br/>Low NPS incumbents · Legally mandated service<br/>Built-in distribution · Delaware-only = simple ops<br/>AI-driven UX disrupts 1990s-era portals"]:::insight
+
+    %% ═══════════════════════════════════════════
+    %% STYLES
+    %% ═══════════════════════════════════════════
+
+    classDef trigger fill:#F59E0B,stroke:#FCD34D,color:#0F1B2D,font-weight:bold
+    classDef revenue fill:#10B981,stroke:#34D399,color:#fff,font-weight:bold
+    classDef insight fill:#162234,stroke:#F59E0B,color:#FCD34D,stroke-width:2px,font-weight:bold
+
+    style ATLAS fill:#1E293B,stroke:#F59E0B,stroke-width:2px,color:#F59E0B,font-weight:bold
+    style FORJ fill:#1E293B,stroke:#0891B2,stroke-width:2px,color:#22D3EE,font-weight:bold
+    style AGENT fill:#1E293B,stroke:#10B981,stroke-width:2px,color:#10B981,font-weight:bold
+    style EXPAND fill:#1E293B,stroke:#64748B,stroke-width:1px,color:#94A3B8
