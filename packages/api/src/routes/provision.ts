@@ -37,6 +37,7 @@ export async function provisionRoutes(server: FastifyInstance) {
       !config.namecheapUsername ||
       !config.githubToken ||
       !config.cloudflareApiToken ||
+      !config.cloudflareAccountId ||
       !config.githubOrg ||
       !config.years ||
       !config.contactInfo
@@ -45,7 +46,7 @@ export async function provisionRoutes(server: FastifyInstance) {
         success: false,
         error: 'Missing required fields',
         message:
-          'Required: userId, projectId, domain, namecheapApiUser, namecheapApiKey, namecheapUsername, githubToken, cloudflareApiToken, githubOrg, years, contactInfo',
+          'Required: userId, projectId, domain, namecheapApiUser, namecheapApiKey, namecheapUsername, githubToken, cloudflareApiToken, cloudflareAccountId, githubOrg, years, contactInfo',
       });
     }
 
