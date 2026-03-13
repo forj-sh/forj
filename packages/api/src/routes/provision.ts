@@ -15,6 +15,8 @@ import { getDomainQueue, getGitHubQueue, getCloudflareQueue, getDNSQueue } from 
 import { requireAuth, requireScopes } from '../middleware/auth.js';
 import { API_KEY_SCOPES } from '../lib/api-key-service.js';
 import { verifyProjectOwnership } from '../lib/authorization.js';
+import { ipRateLimit } from '../middleware/ip-rate-limit.js';
+import { rateLimit } from '../middleware/rate-limit.js';
 
 /**
  * Provisioning routes
@@ -36,7 +38,12 @@ export async function provisionRoutes(server: FastifyInstance) {
   server.post<{ Body: Omit<ProvisioningConfig, 'userId'> }>(
     '/provision',
     {
-      preHandler: [requireAuth, requireScopes([API_KEY_SCOPES.AGENT_PROVISION])],
+      preHandler: [
+        requireAuth,
+        requireScopes([API_KEY_SCOPES.AGENT_PROVISION]),
+        ipRateLimit('provision'),
+        rateLimit('provision'),
+      ],
     },
     async (request, reply) => {
       const bodyConfig = request.body;
@@ -174,7 +181,12 @@ export async function provisionRoutes(server: FastifyInstance) {
   server.get<{ Params: { projectId: string } }>(
     '/provision/status/:projectId',
     {
-      preHandler: [requireAuth, requireScopes([API_KEY_SCOPES.AGENT_READ])],
+      preHandler: [
+        requireAuth,
+        requireScopes([API_KEY_SCOPES.AGENT_READ]),
+        ipRateLimit('provision'),
+        rateLimit('provision'),
+      ],
     },
     async (request, reply) => {
       const { projectId } = request.params;
