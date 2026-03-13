@@ -14,7 +14,8 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import Redis from 'ioredis';
 import { DomainWorker } from './domain-worker.js';
-import type { DomainWorkerConfig } from '@forj/shared';
+import { CloudflareWorker } from './cloudflare-worker.js';
+import type { DomainWorkerConfig, CloudflareWorkerConfig } from '@forj/shared';
 
 // Load environment variables from API package
 // Workers share the same .env as the API server
@@ -107,18 +108,42 @@ const domainWorkerConfig: DomainWorkerConfig = {
 const domainWorker = new DomainWorker(domainWorkerConfig, redis);
 console.log(`✅ Domain worker started (concurrency: ${concurrency})`);
 
-// TODO: Initialize other workers when their configs are available
-// GitHub, Cloudflare, and DNS workers will be added in Phase 5
+// Cloudflare worker configuration
+const cloudflareWorkerConfig: CloudflareWorkerConfig = {
+  redis: redisConfig,
+  concurrency: parseInt(process.env.CLOUDFLARE_WORKER_CONCURRENCY || '3', 10),
+  // Note: CloudflareWorker publishes events to Redis internally via its publishEvent() method
+  // No need to provide an external eventPublisher (would cause duplicate events)
+};
 
-console.log('\n✨ Domain worker ready. Listening for jobs...\n');
-console.log('ℹ️  GitHub, Cloudflare, and DNS workers not yet implemented');
+const cloudflareWorker = new CloudflareWorker(cloudflareWorkerConfig);
+console.log(`✅ Cloudflare worker started (concurrency: ${cloudflareWorkerConfig.concurrency})`);
+
+// TODO: Initialize GitHub and DNS workers
+// GitHub and DNS workers will be added in upcoming stacks
+
+console.log('\n✨ Workers ready. Listening for jobs...\n');
+console.log('ℹ️  Active: Domain, Cloudflare');
+console.log('ℹ️  Pending: GitHub, DNS');
 
 // Graceful shutdown
 const shutdown = async () => {
   console.log('\n🛑 Shutting down workers...');
 
-  await domainWorker.close();
-  await redis.disconnect();
+  // Use Promise.allSettled to ensure all resources close even if one fails
+  const results = await Promise.allSettled([
+    domainWorker.close(),
+    cloudflareWorker.close(),
+    redis.disconnect(),
+  ]);
+
+  // Log any shutdown failures
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      const workerNames = ['Domain worker', 'Cloudflare worker', 'Redis connection'];
+      console.error(`❌ Failed to close ${workerNames[index]}:`, result.reason);
+    }
+  });
 
   console.log('✅ All workers stopped');
   process.exit(0);
