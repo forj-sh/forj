@@ -16,7 +16,8 @@ import Redis from 'ioredis';
 import { DomainWorker } from './domain-worker.js';
 import { CloudflareWorker } from './cloudflare-worker.js';
 import { DNSWorker } from './dns-worker.js';
-import type { DomainWorkerConfig, CloudflareWorkerConfig, DNSWorkerConfig, DNSWorkerEvent } from '@forj/shared';
+import { GitHubWorker } from './github-worker.js';
+import type { DomainWorkerConfig, CloudflareWorkerConfig, DNSWorkerConfig, DNSWorkerEvent, GitHubWorkerConfig, GitHubWorkerEvent } from '@forj/shared';
 
 // Load environment variables from API package
 // Workers share the same .env as the API server
@@ -142,12 +143,18 @@ const dnsWorkerConfig: DNSWorkerConfig = {
 const dnsWorker = new DNSWorker(dnsWorkerConfig);
 console.log(`✅ DNS worker started (concurrency: ${dnsWorkerConfig.concurrency})`);
 
-// TODO: Initialize GitHub worker
-// GitHub worker will be added in upcoming stacks
+// GitHub worker configuration
+const githubWorkerConfig: GitHubWorkerConfig = {
+  redis: redisConfig,
+  concurrency: parseInt(process.env.GITHUB_WORKER_CONCURRENCY || '3', 10),
+  eventPublisher: createProjectEventPublisher('GitHub'),
+};
+
+const githubWorker = new GitHubWorker(githubWorkerConfig);
+console.log(`✅ GitHub worker started (concurrency: ${githubWorkerConfig.concurrency})`);
 
 console.log('\n✨ Workers ready. Listening for jobs...\n');
-console.log('ℹ️  Active: Domain, Cloudflare, DNS');
-console.log('ℹ️  Pending: GitHub');
+console.log('ℹ️  Active: Domain, Cloudflare, DNS, GitHub');
 
 // Graceful shutdown
 const shutdown = async () => {
@@ -158,13 +165,14 @@ const shutdown = async () => {
     domainWorker.close(),
     cloudflareWorker.close(),
     dnsWorker.close(),
+    githubWorker.close(),
     redis.disconnect(),
   ]);
 
   // Log any shutdown failures
   results.forEach((result, index) => {
     if (result.status === 'rejected') {
-      const workerNames = ['Domain worker', 'Cloudflare worker', 'DNS worker', 'Redis connection'];
+      const workerNames = ['Domain worker', 'Cloudflare worker', 'DNS worker', 'GitHub worker', 'Redis connection'];
       console.error(`❌ Failed to close ${workerNames[index]}:`, result.reason);
     }
   });
