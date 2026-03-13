@@ -9,11 +9,18 @@ import type {
   DNSFixResponse,
   DNSRecordType,
   EmailProvider,
+  ServiceType,
+  ServiceStatusDisplay,
 } from '@forj/shared';
 import { DNSHealthChecker, type ExpectedDNSConfig } from '../lib/dns-health-checker.js';
 import { requireAuth } from '../middleware/auth.js';
 import { ipRateLimit } from '../middleware/ip-rate-limit.js';
 import { rateLimit } from '../middleware/rate-limit.js';
+import {
+  createProject,
+  getProjectByIdAndUserId,
+  isDomainTaken,
+} from '../lib/database.js';
 
 /**
  * Project routes
@@ -22,19 +29,20 @@ import { rateLimit } from '../middleware/rate-limit.js';
  * ✅ Authentication middleware (JWT or API key)
  * ✅ IP-based rate limiting (prevent distributed attacks)
  * ✅ Per-user rate limiting (prevent individual abuse)
- * TODO: Authorization checks (verify user_id ownership via database)
- * TODO: Input sanitization and validation
- * TODO: Project data persistence (currently using mock responses)
+ * ✅ Authorization checks (verify user_id ownership via database)
+ * ✅ Project data persistence (PostgreSQL)
+ * ✅ Domain uniqueness check (prevent duplicate registrations)
+ * TODO: Input sanitization and validation (domain format, service names)
+ * TODO: User project quota limits
  */
 export async function projectRoutes(server: FastifyInstance) {
   /**
    * POST /projects/init
-   * Initialize new project - returns mock project ID
+   * Initialize new project and persist to database
    *
    * AUTHENTICATION: Requires JWT or API key
    * RATE LIMITING: IP-based + user-based
-   * TODO: Validate user_id from JWT and store with project
-   * TODO: Check user project quota limits
+   * AUTHORIZATION: User ID from auth token
    */
   server.post<{ Body: ProjectInitRequest }>(
     '/projects/init',
@@ -42,6 +50,7 @@ export async function projectRoutes(server: FastifyInstance) {
     async (request, reply) => {
       const { name, domain, services, githubOrg } = request.body;
 
+      // Validate required fields
       if (!name || !domain || !services || services.length === 0) {
         return reply.status(400).send({
           success: false,
@@ -49,35 +58,69 @@ export async function projectRoutes(server: FastifyInstance) {
         });
       }
 
+      // Get authenticated user ID
+      const userId = request.user?.userId;
+      if (!userId) {
+        return reply.status(500).send({
+          success: false,
+          error: 'User ID not found after authentication',
+        });
+      }
+
+      // Check if domain is already taken
+      const domainExists = await isDomainTaken(domain);
+      if (domainExists) {
+        return reply.status(409).send({
+          success: false,
+          error: `Domain ${domain} is already registered`,
+        });
+      }
+
       // Generate cryptographically secure project ID
       const projectId = `proj_${randomUUID()}`;
 
-      request.log.info({
-        projectId,
-        name,
-        domain,
-        services,
-        githubOrg,
-      }, 'Project initialization');
+      try {
+        // Create project in database
+        const project = await createProject({
+          id: projectId,
+          name,
+          domain,
+          userId,
+          services,
+        });
 
-      const response: ProjectInitResponse = {
-        projectId,
-      };
+        request.log.info({
+          projectId: project.id,
+          name: project.name,
+          domain: project.domain,
+          services,
+          githubOrg,
+        }, 'Project initialization');
 
-      return {
-        success: true,
-        data: response,
-      };
+        const response: ProjectInitResponse = {
+          projectId: project.id,
+        };
+
+        return {
+          success: true,
+          data: response,
+        };
+      } catch (error) {
+        request.log.error(error, 'Failed to create project');
+        return reply.status(500).send({
+          success: false,
+          error: 'Failed to create project',
+        });
+      }
     });
 
   /**
    * GET /projects/:id/status
-   * Get project status - returns mock project state
+   * Get project status from database
    *
    * AUTHENTICATION: Requires JWT or API key
    * RATE LIMITING: IP-based + user-based
-   * TODO: Verify user owns this project (check user_id in database)
-   * TODO: Return 404 for non-existent projects (don't leak existence)
+   * AUTHORIZATION: User must own the project
    */
   server.get<{ Params: { id: string } }>(
     '/projects/:id/status',
@@ -85,37 +128,63 @@ export async function projectRoutes(server: FastifyInstance) {
     async (request, reply) => {
       const { id } = request.params;
 
-      // Mock project status
+      // Get authenticated user ID
+      const userId = request.user?.userId;
+      if (!userId) {
+        return reply.status(500).send({
+          success: false,
+          error: 'User ID not found after authentication',
+        });
+      }
+
+      // Get project with ownership check
+      const project = await getProjectByIdAndUserId(id, userId);
+
+      if (!project) {
+        return reply.status(404).send({
+          success: false,
+          error: 'Project not found',
+        });
+      }
+
+      // Convert ServiceState to ServiceStatusDisplay
+      const displayServices: Partial<Record<ServiceType, ServiceStatusDisplay>> = {};
+
+      for (const [serviceType, serviceState] of Object.entries(project.services)) {
+        if (!serviceState) continue;
+
+        // Map internal service status to display status
+        let displayStatusValue: 'pending' | 'active' | 'failed';
+        switch (serviceState.status) {
+          case 'complete':
+            displayStatusValue = 'active';
+            break;
+          case 'failed':
+            displayStatusValue = 'failed';
+            break;
+          case 'pending':
+          case 'running':
+          default:
+            displayStatusValue = 'pending';
+            break;
+        }
+
+        const displayStatus: ServiceStatusDisplay = {
+          status: displayStatusValue,
+          value: serviceState.value,
+          detail: serviceState.error,
+          updatedAt: serviceState.updatedAt,
+        };
+
+        displayServices[serviceType as ServiceType] = displayStatus;
+      }
+
       const status: ProjectStatus = {
-        project: 'demo-project',
-        domain: 'getdemo.com',
-        services: {
-          domain: {
-            status: 'active',
-            value: 'getdemo.com',
-            detail: 'Registered via Namecheap',
-            updatedAt: new Date(Date.now() - 3600000).toISOString(),
-          },
-          github: {
-            status: 'active',
-            value: 'github.com/demo-org',
-            detail: 'Organization configured',
-            updatedAt: new Date(Date.now() - 3000000).toISOString(),
-          },
-          cloudflare: {
-            status: 'active',
-            value: 'Zone active',
-            detail: 'DNS configured',
-            updatedAt: new Date(Date.now() - 2400000).toISOString(),
-          },
-          dns: {
-            status: 'active',
-            value: 'All records healthy',
-            updatedAt: new Date(Date.now() - 1800000).toISOString(),
-          },
-        },
-        createdAt: new Date(Date.now() - 7200000).toISOString(),
-        updatedAt: new Date(Date.now() - 1800000).toISOString(),
+        project: project.name,
+        domain: project.domain,
+        services: displayServices,
+        createdAt: project.createdAt,
+        updatedAt: project.updatedAt,
       };
 
       request.log.info({ projectId: id }, 'Project status check');
