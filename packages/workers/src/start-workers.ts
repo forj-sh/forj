@@ -17,6 +17,7 @@ import { DomainWorker } from './domain-worker.js';
 import { CloudflareWorker } from './cloudflare-worker.js';
 import { DNSWorker } from './dns-worker.js';
 import { GitHubWorker } from './github-worker.js';
+import { closeDatabase } from './database.js';
 import type { DomainWorkerConfig, CloudflareWorkerConfig, DNSWorkerConfig, DNSWorkerEvent, GitHubWorkerConfig, GitHubWorkerEvent } from '@forj/shared';
 
 // Load environment variables from API package
@@ -30,6 +31,7 @@ console.log(`📁 Loaded environment from: ${envPath}\n`);
 // Environment validation
 const requiredEnvVars = [
   'REDIS_URL',
+  'DATABASE_URL',
   'NAMECHEAP_API_USER',
   'NAMECHEAP_API_KEY',
   'NAMECHEAP_USERNAME',
@@ -167,12 +169,13 @@ const shutdown = async () => {
     dnsWorker.close(),
     githubWorker.close(),
     redis.disconnect(),
+    closeDatabase(),
   ]);
 
   // Log any shutdown failures
   results.forEach((result, index) => {
     if (result.status === 'rejected') {
-      const workerNames = ['Domain worker', 'Cloudflare worker', 'DNS worker', 'GitHub worker', 'Redis connection'];
+      const workerNames = ['Domain worker', 'Cloudflare worker', 'DNS worker', 'GitHub worker', 'Redis connection', 'Database connection'];
       console.error(`❌ Failed to close ${workerNames[index]}:`, result.reason);
     }
   });
