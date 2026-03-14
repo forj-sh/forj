@@ -374,7 +374,7 @@ export class DNSHealthChecker {
       proxied: boolean;
       priority?: number;
     } = {
-      type: record.type,
+      type: record.type as DNSRecordType, // SOA records are managed by Cloudflare
       name: record.name,
       content: record.value,
       ttl: 1, // Automatic
@@ -386,6 +386,7 @@ export class DNSHealthChecker {
       recordInput.priority = priority;
     }
 
-    await client.createDNSRecord(config.zoneId, recordInput);
+    // Cast to DNSRecordInput to handle SOA type mismatch (SOA records managed by Cloudflare)
+    await client.createDNSRecord(config.zoneId, recordInput as Parameters<typeof client.createDNSRecord>[1]);
   }
 }

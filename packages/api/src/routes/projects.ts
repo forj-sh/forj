@@ -193,6 +193,7 @@ export async function projectRoutes(server: FastifyInstance) {
           projectId: project.id,
           domain,
           services, // Critical: tell orchestrator which services to provision
+          githubOrg: githubOrg || '', // Will be set conditionally below if github service requested
           years: 1,
           // TODO: Source contact info from user profile instead of hardcoded values
           // Using placeholder data violates ICANN policies - must fix before production
@@ -223,7 +224,7 @@ export async function projectRoutes(server: FastifyInstance) {
 
         if (services.includes('cloudflare')) {
           provisioningConfig.cloudflareApiToken = cloudflareToken;
-          provisioningConfig.cloudflareAccountId = user?.cloudflareAccountId;
+          provisioningConfig.cloudflareAccountId = user?.cloudflareAccountId ?? undefined;
         }
 
         // Start provisioning in background (fire-and-forget, don't await)

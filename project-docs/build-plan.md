@@ -252,11 +252,27 @@ Last updated: 2026-03-13 (Phase 6 complete - all stacks merged)
 
 ### Phase 7: Ship
 
-- Landing page update + CLI demo GIF
-- `npm publish forj-cli` to registry
-- Show HN post + dev Twitter launch
-- End-to-end testing: `forj init` → domain check → provisioning → credentials
-- 50 projects provisioned target
+**Monitoring & Observability** ✅ STARTED (March 14, 2026)
+- ✅ Sentry error tracking configured (API, Workers, CLI)
+- ✅ Privacy-first data scrubbing implemented
+- ✅ CLI opt-in telemetry with user consent (`forj telemetry enable`)
+- ✅ Debug endpoints for testing (`/debug-sentry`)
+- [ ] Sentry alerts configured (high error rates, failed jobs, rate limit violations)
+- [ ] Uptime monitoring (BetterUptime, Checkly)
+- [ ] Log aggregation (Datadog, Logtail)
+
+**Pre-Launch Validation**
+- [ ] End-to-end testing: `forj init` → domain check → provisioning → credentials
+- [ ] GitHub OAuth Device Flow test (real GitHub App)
+- [ ] Cloudflare zone creation + DNS wiring test
+- [ ] API key authentication and rate limiting stress test
+- [ ] Penetration testing (focus on credential handoff flow)
+
+**Launch Preparation**
+- [ ] Landing page update + CLI demo GIF
+- [ ] `npm publish forj-cli` to registry
+- [ ] Show HN post + dev Twitter launch
+- [ ] 50 projects provisioned target
 
 ---
 

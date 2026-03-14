@@ -593,7 +593,13 @@ const config = ProvisioningConfigSchema.parse(request.body);
 ### Monitoring & Logging
 
 - [ ] **Implement audit logging** (🟡 IMPORTANT)
-- [ ] Set up error tracking (Sentry)
+- [x] **Set up error tracking (Sentry)** ✅ COMPLETE (March 14, 2026)
+  - [x] Sentry SDK installed in all 3 packages (API, Workers, CLI)
+  - [x] Privacy-first data scrubbing (API keys, tokens, credentials, PII)
+  - [x] CLI opt-in telemetry with user consent required
+  - [x] Debug endpoints tested (`/debug-sentry`, `/debug-sentry/handled`, `/debug-sentry/message`)
+  - [x] Performance monitoring (10% sample rate for API/Workers, 5% for CLI)
+  - [ ] Sentry alerts configured for production
 - [ ] Configure application metrics (Prometheus)
 - [ ] Set up log aggregation (Datadog, LogDNA)
 - [ ] Create alerts for failed jobs
@@ -709,8 +715,166 @@ Before public launch, conduct penetration testing focused on:
 8. ✅ Encryption key validation and secure examples (LOW)
 
 **Remaining Pre-Launch Tasks** (Phase 7):
-- [ ] Set up production monitoring (Sentry, Datadog)
-- [ ] Configure alerting for critical failures
+- [x] Set up production monitoring (Sentry) ✅ COMPLETE (March 14, 2026)
+- [ ] Configure Sentry alerting for critical failures
+- [ ] Set up log aggregation (Datadog, Logtail)
 - [ ] Conduct penetration testing (focus on credential handoff flow)
 - [ ] Load testing for rate limit tuning
 - [ ] Production deployment validation
+
+---
+
+## Phase 7 Update: Sentry Monitoring Implementation (March 14, 2026)
+
+### Overview
+
+Comprehensive error tracking and monitoring infrastructure implemented across all 3 components (API, Workers, CLI) using Sentry.io with privacy-first design and extensive data scrubbing.
+
+### Implementation Details
+
+**1. API Server (`forj-api`)**
+- **SDK**: `@sentry/node` v8.x
+- **Integration**: Fastify error handler (`Sentry.setupFastifyErrorHandler`)
+- **Instrumentation**: `src/instrument.ts` (imported before all other modules)
+- **DSN**: `SENTRY_DSN_API` environment variable
+- **Sample Rate**: 10% of transactions (configurable via `SENTRY_TRACES_SAMPLE_RATE`)
+- **Features**:
+  - Automatic route tracking
+  - Performance monitoring
+  - Request context (user IDs, project IDs)
+  - Database query tracking via OpenTelemetry
+  - Git commit SHA release tracking
+
+**2. Workers (`forj-workers`)**
+- **SDK**: `@sentry/node` v8.x
+- **Instrumentation**: `src/instrument.ts` (loaded after dotenv config)
+- **DSN**: `SENTRY_DSN_WORKERS` environment variable
+- **Sample Rate**: 10% of transactions
+- **Features**:
+  - BullMQ job failure tracking
+  - Job context (queue name, job ID, attempt count)
+  - Custom `captureJobError()` helper for structured error reporting
+  - Scrubbed job data in error context
+
+**3. CLI (`forj-cli`)**
+- **SDK**: `@sentry/node` v8.x
+- **Integration**: Opt-in telemetry (user consent required)
+- **Configuration**: `~/.forj/telemetry.json` (enabled flag + anonymous ID)
+- **DSN**: `SENTRY_DSN_CLI` environment variable (baked into build)
+- **Sample Rate**: 5% of CLI commands (lower to reduce noise)
+- **Features**:
+  - `forj telemetry enable` - Opt-in with clear disclosure
+  - `forj telemetry disable` - Instant opt-out
+  - `forj telemetry status` - Check current status
+  - Anonymous user IDs (never linked to real identity)
+  - Command context tracking (command name, flags)
+  - Custom `captureCliError()` helper
+
+### Privacy & Security Controls
+
+**Data Scrubbing (All Components)**:
+- ✅ Forj API keys (`forj_live_*`, `forj_test_*`) → `forj_[REDACTED]`
+- ✅ JWT tokens → `[JWT_REDACTED]`
+- ✅ Bearer tokens → `Bearer [REDACTED]`
+- ✅ Cloudflare API tokens (40 chars) → `[CF_TOKEN_REDACTED]`
+- ✅ GitHub tokens (`ghp_*`, `gho_*`) → `[GITHUB_TOKEN_REDACTED]`
+- ✅ Stripe keys (`sk_live_*`, `sk_test_*`) → `sk_[REDACTED]`
+- ✅ Namecheap API keys (32-char hex) → `[NC_API_KEY_REDACTED]`
+- ✅ Generic passwords/secrets in JSON → `[REDACTED]`
+
+**CLI-Specific Scrubbing**:
+- ✅ Email addresses → `[EMAIL_REDACTED]`
+- ✅ Domain names → `[DOMAIN_REDACTED]`
+- ✅ IP addresses → `[IP_REDACTED]`
+- ✅ User file paths → `~` (replaces home directory)
+- ✅ Usernames → `[USER]`
+
+**Additional Safeguards**:
+- ✅ `sendDefaultPii: false` (never send IP, user agent, etc.)
+- ✅ Authorization headers stripped from API errors
+- ✅ Cookie headers removed
+- ✅ Custom headers (`X-API-Key`) removed
+
+### Testing & Verification
+
+**Debug Endpoints (Development Only)**:
+```bash
+# Unhandled error test
+curl http://localhost:3000/debug-sentry
+# Response: 500 Internal Server Error
+# Sentry: Error captured with stack trace
+
+# Handled error test
+curl http://localhost:3000/debug-sentry/handled
+# Response: {"success":false,"error":"Handled error sent to Sentry"}
+# Sentry: Exception captured manually
+
+# Message logging test
+curl http://localhost:3000/debug-sentry/message
+# Response: {"success":true,"message":"Test message sent to Sentry"}
+# Sentry: Info message captured
+```
+
+**Verified**:
+- ✅ API errors sent to Sentry (unhandled and handled)
+- ✅ Sensitive data scrubbed from error messages
+- ✅ Request context included in error reports
+- ✅ Performance transactions tracked
+
+### Production Configuration
+
+**Environment Variables**:
+```bash
+# API
+SENTRY_DSN_API=https://7dd97ec0955ca3ee00205fb39eb8ded0@o4511042868805632.ingest.us.sentry.io/4511042872541184
+SENTRY_ENVIRONMENT=production
+SENTRY_TRACES_SAMPLE_RATE=0.1
+
+# Workers
+SENTRY_DSN_WORKERS=https://833159a139cea08124c841435074d59c@o4511042868805632.ingest.us.sentry.io/4511042877456384
+
+# CLI (baked into build)
+SENTRY_DSN_CLI=https://a3d77463b5f9c10877032491f0d4cc86@o4511042868805632.ingest.us.sentry.io/4511042880864256
+
+# Optional
+GIT_COMMIT_SHA=$(git rev-parse HEAD)  # For release tracking
+```
+
+**Sentry Dashboard**:
+- Organization: `forj-sh`
+- Projects: `forj-api`, `forj-workers`, `forj-cli`
+- URL: `https://sentry.io/organizations/forj-sh/`
+
+### Remaining Tasks
+
+- [ ] Configure Sentry alerts in production:
+  - [ ] High error rate (> 5% in 5 minutes)
+  - [ ] Failed BullMQ jobs (> 10 in 1 hour)
+  - [ ] Critical errors (any error with `level: 'fatal'`)
+  - [ ] Rate limit violations (> 100 in 1 hour)
+- [ ] Set up Slack integration for critical alerts
+- [ ] Create Sentry dashboard for key metrics
+- [ ] Document incident response workflow with Sentry
+- [ ] Test error reporting in production environment
+
+### Security Assessment
+
+**Strengths**:
+- ✅ Comprehensive data scrubbing prevents credential leakage
+- ✅ CLI telemetry requires explicit user consent (privacy-first)
+- ✅ Sample rates reduce costs while maintaining visibility
+- ✅ Release tracking enables error correlation with deployments
+- ✅ Debug endpoints only enabled in development
+
+**Risks**:
+- ⚠️ Sentry has access to error messages (potential PII leakage if scrubbing fails)
+- ⚠️ CLI anonymous IDs stored on user's machine (low risk)
+- ⚠️ Sentry SDK vulnerabilities could affect error reporting
+
+**Mitigations**:
+- ✅ Extensive regex-based scrubbing with multiple layers
+- ✅ `beforeSend` hook inspects all events before transmission
+- ✅ CLI telemetry can be disabled instantly by user
+- ✅ Regular SDK updates via Dependabot
+
+**Recommendation**: ✅ **APPROVED** - Monitoring infrastructure ready for production use. Complete alert configuration before public launch.

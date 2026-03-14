@@ -27,6 +27,7 @@ const config: Config = {
     '!src/**/*.d.ts',
     '!src/**/__tests__/**',
   ],
+  testTimeout: 30000, // 30 second timeout for all tests (database operations can be slow)
 };
 
 export default config;

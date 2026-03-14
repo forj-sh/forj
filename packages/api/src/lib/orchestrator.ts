@@ -132,20 +132,23 @@ export class ProvisioningOrchestrator {
     }
 
     // Phase 2: Queue GitHub and Cloudflare (if requested, will run in parallel by workers)
-    const phase2Jobs = [];
-    if (services.includes('github')) {
-      console.log('[Orchestrator] Queueing GitHub setup');
-      phase2Jobs.push(this.setupGitHub(config));
-    } else {
-      phase2Jobs.push(Promise.resolve(null));
-    }
-
-    if (services.includes('cloudflare')) {
-      console.log('[Orchestrator] Queueing Cloudflare setup');
-      phase2Jobs.push(this.setupCloudflare(config));
-    } else {
-      phase2Jobs.push(Promise.resolve(null));
-    }
+    const phase2Jobs: [
+      Promise<{ orgVerify: string; repoCreate: string } | null>,
+      Promise<string | null>
+    ] = [
+      services.includes('github')
+        ? (() => {
+            console.log('[Orchestrator] Queueing GitHub setup');
+            return this.setupGitHub(config);
+          })()
+        : Promise.resolve(null),
+      services.includes('cloudflare')
+        ? (() => {
+            console.log('[Orchestrator] Queueing Cloudflare setup');
+            return this.setupCloudflare(config);
+          })()
+        : Promise.resolve(null),
+    ];
 
     const [githubOrgJob, cloudflareZoneJob] = await Promise.all(phase2Jobs);
 
@@ -300,14 +303,18 @@ export class ProvisioningOrchestrator {
     nameservers: string[]
   ): Promise<string> {
     const jobData: SetNameserversJobData = {
+      jobId: '', // Placeholder - BullMQ will assign actual job ID
       operation: DomainOperationType.SET_NAMESERVERS,
       userId: config.userId,
       projectId: config.projectId,
-      domain: config.domain,
+      status: 'pending' as any,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      attempts: 0,
+      domainName: config.domain,
       nameservers,
-      apiUser: config.namecheapApiUser,
-      apiKey: config.namecheapApiKey,
-      username: config.namecheapUsername,
+      // BREAKING CHANGE (PR #85): Credentials removed from job data
+      // Worker will fetch Namecheap API credentials from environment variables
     };
 
     const job = await this.domainQueue.add('set-nameservers', jobData, {
@@ -403,7 +410,11 @@ export class ProvisioningOrchestrator {
 
     // MX records - use defaults from shared constants
     if (config.emailProvider) {
-      const mxRecords = config.customMXRecords || DEFAULT_MX_RECORDS[config.emailProvider];
+      const mxRecords =
+        config.customMXRecords ||
+        (config.emailProvider in DEFAULT_MX_RECORDS
+          ? DEFAULT_MX_RECORDS[config.emailProvider as keyof typeof DEFAULT_MX_RECORDS]
+          : undefined);
       if (mxRecords && mxRecords.length > 0) {
         // Verify first MX record exists
         expectedRecords.push({
@@ -416,12 +427,18 @@ export class ProvisioningOrchestrator {
 
     // SPF record - use defaults from shared constants
     if (config.emailProvider) {
-      const spfRecord = config.customSPF || DEFAULT_SPF_RECORDS[config.emailProvider];
-      expectedRecords.push({
-        type: 'TXT',
-        name: config.domain,
-        content: spfRecord,
-      });
+      const spfRecord =
+        config.customSPF ||
+        (config.emailProvider in DEFAULT_SPF_RECORDS
+          ? DEFAULT_SPF_RECORDS[config.emailProvider as keyof typeof DEFAULT_SPF_RECORDS]
+          : undefined);
+      if (spfRecord) {
+        expectedRecords.push({
+          type: 'TXT',
+          name: config.domain,
+          content: spfRecord,
+        });
+      }
     }
 
     // GitHub Pages CNAME

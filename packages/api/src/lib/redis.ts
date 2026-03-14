@@ -50,10 +50,10 @@ export async function closeRedis(): Promise<void> {
 
 /**
  * Get Redis instance
+ *
+ * Returns null if Redis is not available (REDIS_URL not set).
+ * Consumers should handle null gracefully (e.g., rate limiting middleware fails open).
  */
-export function getRedis(): Redis {
-  if (!redis) {
-    throw new Error('Redis not initialized');
-  }
+export function getRedis(): Redis | null {
   return redis;
 }

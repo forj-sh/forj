@@ -1,4 +1,6 @@
 import 'dotenv/config';
+// IMPORTANT: Sentry must be imported before everything else
+import './instrument.js';
 import { createServer } from './server.js';
 import { logger } from './lib/logger.js';
 import type { FastifyInstance } from 'fastify';

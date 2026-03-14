@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
+import { Sentry } from './instrument.js';
 import { NamecheapClient } from '@forj/shared';
 import { logger } from './lib/logger.js';
 import { errorHandler } from './lib/error-handler.js';
@@ -21,6 +22,7 @@ import { stripeCheckoutRoutes } from './routes/stripe-checkout.js';
 import { getStripeClient, getStripeWebhookSecret } from './lib/stripe-client.js';
 import { provisionRoutes } from './routes/provision.js';
 import { apiKeyRoutes } from './routes/api-keys.js';
+import { debugSentryRoutes } from './routes/debug-sentry.js';
 
 /**
  * Create and configure Fastify server
@@ -55,6 +57,9 @@ export async function createServer() {
 
   // Error handler
   server.setErrorHandler(errorHandler);
+
+  // Sentry error handler (must be after custom error handler)
+  Sentry.setupFastifyErrorHandler(server);
 
   // Initialize Namecheap integration (if credentials available)
   // SECURITY WARNING: Namecheap routes handle financial operations (domain registration)
@@ -185,6 +190,9 @@ export async function createServer() {
   await server.register(provisionRoutes);
   await server.register(apiKeyRoutes);
   logger.info('Provisioning and API key routes registered');
+
+  // Debug routes (development only)
+  await debugSentryRoutes(server);
 
   return server;
 }

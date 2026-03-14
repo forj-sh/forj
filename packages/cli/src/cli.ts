@@ -1,12 +1,17 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import packageJson from '../package.json' with { type: 'json' };
+import { initSentry } from './lib/sentry.js';
 import { createAddCommand } from './commands/add.js';
 import { createDNSCommand } from './commands/dns.js';
 import { createInitCommand } from './commands/init.js';
 import { createLoginCommand } from './commands/login.js';
 import { createLogoutCommand } from './commands/logout.js';
 import { createStatusCommand } from './commands/status.js';
+import { createTelemetryCommand } from './commands/telemetry.js';
+
+// Initialize Sentry (only if user has opted in)
+initSentry();
 
 const program = new Command();
 
@@ -24,6 +29,7 @@ program.addCommand(createAddCommand());
 program.addCommand(createDNSCommand());
 program.addCommand(createLoginCommand());
 program.addCommand(createLogoutCommand());
+program.addCommand(createTelemetryCommand());
 
 // Dev/testing commands - only load if explicitly enabled with FORJ_DEV=1
 if (process.env.FORJ_DEV === '1') {

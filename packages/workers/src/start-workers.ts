@@ -12,6 +12,16 @@
 import { config } from 'dotenv';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+
+// Load environment variables FIRST
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const envPath = resolve(__dirname, '../../api/.env');
+config({ path: envPath });
+
+// IMPORTANT: Import Sentry AFTER dotenv config but BEFORE everything else
+// Using dynamic import to ensure dotenv runs first (ESM imports are hoisted)
+await import('./instrument.js');
+
 import Redis from 'ioredis';
 import { DomainWorker } from './domain-worker.js';
 import { CloudflareWorker } from './cloudflare-worker.js';
@@ -19,12 +29,6 @@ import { DNSWorker } from './dns-worker.js';
 import { GitHubWorker } from './github-worker.js';
 import { closeDatabase } from './database.js';
 import type { DomainWorkerConfig, CloudflareWorkerConfig, DNSWorkerConfig, DNSWorkerEvent, GitHubWorkerConfig, GitHubWorkerEvent } from '@forj/shared';
-
-// Load environment variables from API package
-// Workers share the same .env as the API server
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const envPath = resolve(__dirname, '../../api/.env');
-config({ path: envPath });
 
 console.log(`📁 Loaded environment from: ${envPath}\n`);
 

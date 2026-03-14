@@ -106,6 +106,13 @@ NAMECHEAP_SANDBOX=true
 GITHUB_CLIENT_ID=...
 GITHUB_CLIENT_SECRET=...
 CLOUDFLARE_ENCRYPTION_KEY=$(openssl rand -base64 32)
+
+# Phase 7 additions (Monitoring)
+SENTRY_DSN_API=https://...@...ingest.sentry.io/...
+SENTRY_DSN_WORKERS=https://...@...ingest.sentry.io/...
+SENTRY_DSN_CLI=https://...@...ingest.sentry.io/...
+SENTRY_ENVIRONMENT=development
+SENTRY_TRACES_SAMPLE_RATE=0.1
 ```
 
 **Key Constraints:**
@@ -611,11 +618,21 @@ done
 - [ ] Security headers configured (CSP, HSTS, X-Frame-Options)
 
 **5. Monitoring & Observability**
-- [ ] Error tracking setup (Sentry)
+- [x] Error tracking setup (Sentry) - ✅ COMPLETE (March 14, 2026)
+  - [x] Sentry projects created (forj-api, forj-workers, forj-cli)
+  - [x] SDK installed and configured in all packages
+  - [x] Privacy controls and data scrubbing implemented
+  - [x] CLI opt-in telemetry with user consent
+  - [x] Debug endpoints tested and verified
+  - [x] **Integration verified**: All three projects tested and capturing events
+    - API: 3 test events (message, handled exception, unhandled error)
+    - CLI: 2 test events (message, exception)
+    - Workers: 3 test events (message, exception, job error with context)
+  - [x] **ESM module loading fix**: Workers now use `await import('./instrument.js')` to ensure dotenv loads before Sentry initialization
 - [ ] Log aggregation (Datadog, Logtail)
 - [ ] Uptime monitoring (BetterUptime, Checkly)
 - [ ] Metrics dashboard (Prometheus + Grafana)
-- [ ] Alerts configured:
+- [ ] Alerts configured in Sentry:
   - [ ] High error rates (> 5% in 5 min)
   - [ ] Failed jobs (> 10 in 1 hour)
   - [ ] Rate limit violations (> 100 in 1 hour)
