@@ -344,8 +344,8 @@ export async function githubAuthRoutes(server: FastifyInstance) {
  */
 export async function getGitHubToken(userId: string): Promise<string | null> {
   const encryptionKey = process.env.GITHUB_ENCRYPTION_KEY;
-  if (!encryptionKey) {
-    throw new Error('GITHUB_ENCRYPTION_KEY not configured');
+  if (!encryptionKey || !isValidEncryptionKey(encryptionKey)) {
+    throw new Error('GITHUB_ENCRYPTION_KEY not configured or is invalid');
   }
 
   const result = await db.query(
