@@ -19,6 +19,12 @@ export const QUEUE_NAMES = {
 
 /**
  * Create BullMQ queues with proper typing
+ *
+ * SECURITY: Stack 4 - Job cleanup configuration
+ * Jobs are automatically removed after completion/failure to:
+ * - Prevent Redis memory exhaustion
+ * - Remove any residual sensitive data
+ * - Comply with data retention policies
  */
 function createQueues(): Record<string, Queue> | Record<string, never> {
   if (!redis) {
@@ -30,16 +36,33 @@ function createQueues(): Record<string, Queue> | Record<string, never> {
   // This ensures BullMQ connects with the same credentials as the ioredis instance
   const connection = redis.options;
 
+  // Default job options for all queues
+  // SECURITY: Keep last 100 completed and 200 failed jobs for debugging
+  // Older jobs are automatically cleaned up to prevent data accumulation
+  const ONE_DAY_IN_SECONDS = 24 * 60 * 60;
+  const SEVEN_DAYS_IN_SECONDS = 7 * ONE_DAY_IN_SECONDS;
+
+  const defaultJobOptions = {
+    removeOnComplete: {
+      count: 100, // Keep last 100 completed jobs
+      age: ONE_DAY_IN_SECONDS, // Remove jobs older than 24 hours
+    },
+    removeOnFail: {
+      count: 200, // Keep last 200 failed jobs for debugging
+      age: SEVEN_DAYS_IN_SECONDS, // Remove failed jobs older than 7 days
+    },
+  };
+
   return {
-    domain: new Queue(QUEUE_NAMES.DOMAIN, { connection }),
-    domainCheck: new Queue(QUEUE_NAMES.DOMAIN_CHECK, { connection }),
-    projectInit: new Queue(QUEUE_NAMES.PROJECT_INIT, { connection }),
-    serviceProvision: new Queue(QUEUE_NAMES.SERVICE_PROVISION, { connection }),
-    dnsCheck: new Queue(QUEUE_NAMES.DNS_CHECK, { connection }),
-    dnsFix: new Queue(QUEUE_NAMES.DNS_FIX, { connection }),
-    github: new Queue(QUEUE_NAMES.GITHUB, { connection }),
-    cloudflare: new Queue(QUEUE_NAMES.CLOUDFLARE, { connection }),
-    dns: new Queue(QUEUE_NAMES.DNS, { connection }),
+    domain: new Queue(QUEUE_NAMES.DOMAIN, { connection, defaultJobOptions }),
+    domainCheck: new Queue(QUEUE_NAMES.DOMAIN_CHECK, { connection, defaultJobOptions }),
+    projectInit: new Queue(QUEUE_NAMES.PROJECT_INIT, { connection, defaultJobOptions }),
+    serviceProvision: new Queue(QUEUE_NAMES.SERVICE_PROVISION, { connection, defaultJobOptions }),
+    dnsCheck: new Queue(QUEUE_NAMES.DNS_CHECK, { connection, defaultJobOptions }),
+    dnsFix: new Queue(QUEUE_NAMES.DNS_FIX, { connection, defaultJobOptions }),
+    github: new Queue(QUEUE_NAMES.GITHUB, { connection, defaultJobOptions }),
+    cloudflare: new Queue(QUEUE_NAMES.CLOUDFLARE, { connection, defaultJobOptions }),
+    dns: new Queue(QUEUE_NAMES.DNS, { connection, defaultJobOptions }),
   };
 }
 
