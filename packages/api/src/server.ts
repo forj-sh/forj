@@ -24,12 +24,21 @@ import { apiKeyRoutes } from './routes/api-keys.js';
 
 /**
  * Create and configure Fastify server
+ *
+ * SECURITY: Stack 6 - Proxy trust configuration
+ * When behind a reverse proxy (Cloudflare, Vercel, nginx), we must configure
+ * trustProxy to correctly identify the client IP from forwarded headers.
+ * This is critical for rate limiting and security logging.
  */
 export async function createServer() {
   const server = Fastify({
     logger: logger as any,
     disableRequestLogging: false,
     requestIdLogLabel: 'reqId',
+    // SECURITY: Trust proxy headers when explicitly enabled
+    // In production behind Cloudflare/Vercel, this should be true
+    // In development/testing, this should be false to prevent header spoofing
+    trustProxy: process.env.TRUST_PROXY === 'true',
   });
 
   // Security plugins

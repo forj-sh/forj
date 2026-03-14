@@ -13,28 +13,29 @@ import { logger } from '../lib/logger.js';
 /**
  * Extract client IP address from request
  *
- * Considers X-Forwarded-For header for requests behind proxies/load balancers.
- * Falls back to request.ip if no proxy headers present.
+ * SECURITY: Stack 6 - Proper proxy trust handling
  *
- * SECURITY: In production, ensure your reverse proxy (e.g., nginx, Cloudflare)
- * sets X-Forwarded-For correctly and strips client-provided values.
+ * When behind Cloudflare (production):
+ * - Uses CF-Connecting-IP header (cannot be spoofed)
+ * - Falls back to request.ip (Fastify processes X-Forwarded-For when trustProxy enabled)
+ *
+ * When direct connection (development):
+ * - Uses request.ip only (ignores X-Forwarded-For to prevent spoofing)
  *
  * @param request - Fastify request
  * @returns Client IP address (IPv4 or IPv6)
  */
 export function getClientIp(request: FastifyRequest): string {
-  // Check X-Forwarded-For header (set by reverse proxies)
-  const forwardedFor = request.headers['x-forwarded-for'];
-
-  if (forwardedFor) {
-    // X-Forwarded-For can contain multiple IPs: "client, proxy1, proxy2"
-    // The first IP is the original client
-    const ips = typeof forwardedFor === 'string' ? forwardedFor.split(',') : forwardedFor;
-    const clientIp = ips[0].trim();
-    return clientIp;
+  // When behind Cloudflare, use CF-Connecting-IP header
+  // This header is set by Cloudflare and cannot be spoofed by the client
+  const cfConnectingIp = request.headers['cf-connecting-ip'];
+  if (cfConnectingIp && typeof cfConnectingIp === 'string') {
+    return cfConnectingIp;
   }
 
-  // Fall back to request.ip (direct connection or trusted proxy)
+  // Fall back to request.ip
+  // When trustProxy is enabled, Fastify correctly parses X-Forwarded-For
+  // When trustProxy is disabled, request.ip is the direct connection IP
   return request.ip;
 }
 
