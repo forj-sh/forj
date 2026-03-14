@@ -121,7 +121,7 @@ Last updated: 2026-03-13 (Phase 6 complete - all stacks merged)
 - Event publishing validation
 - Try/finally cleanup pattern
 
-### Phase 6: Auth + Credential Security ✅ COMPLETE (Stacks 1-10, PRs #63-#72)
+### Phase 6: Auth + Credential Security + Security Audit Fixes ✅ COMPLETE (Stacks 1-10 + Audit Fixes, PRs #63-#72 + #82-#88)
 
 **Stack 1: API key data model + generation service (PR #63)**
 - Database schema for API keys (id, user_id, key_hash, key_hint, scopes, environment)
@@ -191,6 +191,64 @@ Last updated: 2026-03-13 (Phase 6 complete - all stacks merged)
 - Comprehensive `docs/MCP_INTEGRATION.md` guide
 - JSON Schema validation for all tool parameters
 - Security considerations for credential handling in AI contexts
+
+**Security Audit Fixes (March 13-14, 2026)**
+
+**PR #82 (Stack 1): Remove mock authentication endpoint and add environment flag**
+- Added `ENABLE_MOCK_AUTH` environment variable (defaults to `false`)
+- Conditional route registration: `/auth/cli` only enabled when `!isProduction && mockAuthEnabled`
+- Changed `.env.example` default to `ENABLE_MOCK_AUTH=false` (secure by default)
+- Rewrote auth tests using `server.inject()` for hermetic testing
+- **Fixes**: CRITICAL-01 - Mock authentication endpoint exposed in production
+
+**PR #83 (Stack 2): Restore domain registration authorization and payment verification**
+- Created `ProjectWithPayment` type with camelCase properties
+- Combined 2 database queries into 1 (ownership + payment check)
+- Unified 403/404 error responses to prevent information leakage
+- 50% reduction in database round-trips
+- **Fixes**: MEDIUM-01 - Database query redundancy and information leakage
+
+**PR #84 (Stack 3): Add authentication and authorization to SSE stream endpoint**
+- Added `requireAuth` middleware to `/events/stream/:projectId`
+- Added `verifyProjectOwnership` authorization check
+- Comprehensive RELIABILITY TRADE-OFFS documentation section
+- Documented fail-open behavior for rate limiter and authorization
+- **Fixes**: MEDIUM-02 - Missing SSE stream authentication
+
+**PR #85 (Stack 4): Remove plaintext credentials from job queue**
+- Removed `accessToken` from GitHub job data structures
+- Removed `apiToken` from Cloudflare job data structures
+- Updated orchestrator to not pass credentials in job payloads
+- Extracted magic numbers to named constants (`ONE_DAY_IN_SECONDS`, `SEVEN_DAYS_IN_SECONDS`)
+- Updated function docstrings to document BREAKING CHANGE
+- **Fixes**: MEDIUM-03 - Plaintext credentials in job queue
+
+**PR #86 (Stack 5): Implement atomic API key rotation with database transactions**
+- Fixed 5 critical bugs in `rotateApiKey()` implementation:
+  1. Wrong method names (`generateApiKey()` → `generateKey()`, `hashApiKey()` → `hashKey()`)
+  2. Incorrect `keyHint` calculation (was including prefix)
+  3. Double-encoding scopes with `JSON.stringify()`
+  4. Return object mismatch with `RotateApiKeyResult` interface
+  5. Rollback error handling could mask original errors
+- All bugs would have caused runtime failures
+- **Fixes**: MEDIUM-04 - API key rotation implementation bugs
+
+**PR #87 (Stack 6): Fix IP rate limiting to respect proxy trust configuration**
+- Gate `cf-connecting-ip` header trust on `request.ips` (only populated when `trustProxy` enabled)
+- Prevents header spoofing when `TRUST_PROXY=false`
+- Updated documentation to clarify proxy header trust behavior
+- **Fixes**: HIGH-02 - IP spoofing via forged proxy headers
+
+**PR #88 (Stack 7): Implement service-specific encryption keys for credential isolation**
+- Added `isValidEncryptionKey()` validation to `getGitHubToken()` for consistency
+- Replaced deterministic example keys with obviously invalid placeholders (`REPLACE_ME_openssl_rand_base64_32`)
+- Prevents accidental production use of example encryption keys
+- **Fixes**: LOW-01 (insecure example keys), LOW-02 (missing validation)
+
+**Audit Summary**:
+- Total vulnerabilities fixed: 8 (1 CRITICAL, 2 HIGH, 4 MEDIUM, 2 LOW)
+- Lines changed: ~500 across 15 files
+- Review method: Automated AI code review (Gemini Code Assist + GitHub Copilot) + manual verification
 
 ### Phase 7: Ship
 
@@ -265,14 +323,22 @@ Note: No Cloudflare OAuth client ID/secret needed — users provide their own AP
 | Per-IP rate limiting on API routes | ✅ Fixed (Phase 6, Stacks 6 & 7) |
 | API key rotation support | ✅ Fixed (Phase 6, Stack 8) |
 | Credential rotation support (OAuth tokens) | ✅ Fixed (Phase 6, Stack 9) |
+| **Mock authentication endpoint exposed** | ✅ Fixed (Phase 6 Audit, PR #82) |
+| **Database query optimization and info leakage** | ✅ Fixed (Phase 6 Audit, PR #83) |
+| **SSE stream authentication** | ✅ Fixed (Phase 6 Audit, PR #84) |
+| **Plaintext credentials in Redis job queue** | ✅ Fixed (Phase 6 Audit, PR #85) |
+| **API key rotation implementation bugs** | ✅ Fixed (Phase 6 Audit, PR #86) |
+| **IP spoofing via forged proxy headers** | ✅ Fixed (Phase 6 Audit, PR #87) |
+| **Insecure example encryption keys** | ✅ Fixed (Phase 6 Audit, PR #88) |
 
 ### Remaining (Pre-Launch)
 
 | Gap | Severity | Phase |
 |-----|----------|-------|
 | Penetration testing | HIGH | Phase 7 |
-| Production security audit | HIGH | Phase 7 |
+| Production monitoring and alerting setup | HIGH | Phase 7 |
 | Rate limit tuning based on real usage | MEDIUM | Post-launch |
+| Audit logging for sensitive operations | MEDIUM | Post-launch |
 
 ---
 

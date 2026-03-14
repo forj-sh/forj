@@ -1,25 +1,28 @@
-# Security Review - Phase 5
+# Security Review - Phase 6
 
-**Review Date**: March 11, 2026
-**Reviewer**: Engineering Team
-**Scope**: Phase 5 implementation (GitHub + Cloudflare + DNS automation)
+**Review Date**: March 14, 2026 (Updated after security audit implementation)
+**Reviewer**: Engineering Team + AI Code Review (Gemini Code Assist, GitHub Copilot)
+**Scope**: Phase 6 implementation (Auth + Credential Security + Security Audit Fixes)
 
 ---
 
 ## Executive Summary
 
-Phase 5 introduces significant new attack surface through third-party API integrations (GitHub, Cloudflare) and automated DNS record management. This review identifies implemented security measures, outstanding vulnerabilities, and recommendations for production deployment.
+Phase 6 completed a comprehensive security audit and implemented critical fixes across authentication, rate limiting, credential management, and proxy configuration. All HIGH and CRITICAL severity vulnerabilities identified in Phase 5 have been resolved.
 
-**Overall Security Posture**: ⚠️ **GOOD with gaps**
+**Overall Security Posture**: ✅ **STRONG - Ready for production launch**
 
-- ✅ Strong authentication and authorization controls
-- ✅ Secure credential handling for API tokens
+- ✅ Strong authentication and authorization controls (JWT + API keys with scopes)
+- ✅ Secure credential handling for API tokens (AES-256-GCM encryption)
 - ✅ Input validation on all endpoints
-- ⚠️ Missing rate limiting on API endpoints
-- ⚠️ Missing audit logging for sensitive operations
-- ⚠️ Missing production monitoring and alerting
+- ✅ **FIXED**: Per-user and per-IP rate limiting on all API routes
+- ✅ **FIXED**: Mock authentication endpoint properly gated
+- ✅ **FIXED**: Proxy trust configuration prevents IP spoofing
+- ✅ **FIXED**: API key rotation with zero-downtime atomicity
+- ⚠️ Missing audit logging for sensitive operations (deferred to post-launch)
+- ⚠️ Missing production monitoring and alerting (Phase 7 pre-launch task)
 
-**Recommendation**: Address rate limiting and audit logging before public launch.
+**Recommendation**: Complete Phase 7 pre-launch checklist (monitoring, penetration testing) before public launch.
 
 ---
 
@@ -231,11 +234,33 @@ function sanitizeErrorMessage(message: string): string {
 
 ---
 
-## Vulnerabilities Identified
+## Vulnerabilities Identified and Fixed (Phase 6 Security Audit)
 
-### 🔴 HIGH: Missing API Rate Limiting
+### ✅ FIXED: 🔴 CRITICAL-01 - Mock Authentication Endpoint Exposed in Production
 
-**Description**: API endpoints lack per-user and per-IP rate limiting.
+**Description**: Mock authentication endpoint `/auth/cli` was registered in production environments, bypassing real authentication.
+
+**Attack Scenario**:
+1. Attacker discovers `/auth/cli` endpoint in production
+2. Attacker generates unlimited JWT tokens without real authentication
+3. Attacker gains full API access without valid credentials
+4. System completely compromised
+
+**Impact**: CRITICAL - Complete authentication bypass
+
+**Fix Implemented** (PR #82 - Stack 1):
+- Added `ENABLE_MOCK_AUTH` environment variable (defaults to `false`)
+- Conditional route registration: only enabled when `!isProduction && mockAuthEnabled`
+- Rate limiter no longer runs on disabled routes (performance improvement)
+- Hermetic unit tests using `server.inject()` instead of external fetch
+
+**Status**: ✅ RESOLVED
+
+---
+
+### ✅ FIXED: 🔴 HIGH-01 - Missing API Rate Limiting
+
+**Description**: API endpoints lacked per-user and per-IP rate limiting.
 
 **Attack Scenario**:
 1. Attacker obtains valid JWT token (stolen or compromised account)
@@ -246,24 +271,156 @@ function sanitizeErrorMessage(message: string): string {
 
 **Impact**: HIGH - DDoS, financial loss, service degradation
 
-**Mitigation**:
-```typescript
-// Add to packages/api/src/middleware/rate-limit.ts
-import rateLimit from '@fastify/rate-limit';
+**Fix Implemented** (PR #67-69 - Stacks 5-7):
+- Redis-backed sliding window rate limiter (Lua scripts for atomicity)
+- Per-user rate limiting: 10-100 req/hour (route-specific)
+- Per-IP rate limiting: 5-60 req/hour (DDoS protection)
+- Rate limit headers: `X-UserRateLimit-*` and `X-IpRateLimit-*`
+- Applied to all protected routes with tiered limits
 
-server.register(rateLimit, {
-  max: 100, // requests
-  timeWindow: '1 hour',
-  keyGenerator: (request) => request.user?.userId || request.ip,
-  errorResponseBuilder: (request, context) => ({
-    success: false,
-    error: 'Rate limit exceeded',
-    retryAfter: context.ttl,
-  }),
-});
-```
+**Status**: ✅ RESOLVED
 
-**Priority**: 🔴 Critical - implement before public launch
+---
+
+### ✅ FIXED: 🔴 HIGH-02 - IP Spoofing via Forged Proxy Headers
+
+**Description**: `getClientIp()` unconditionally trusted `cf-connecting-ip` header even when `TRUST_PROXY=false`, allowing rate limit bypass.
+
+**Attack Scenario**:
+1. Attacker sends direct connection with forged `CF-Connecting-IP` header
+2. Rate limiting uses spoofed IP instead of real IP
+3. Attacker bypasses per-IP rate limits
+4. DDoS protection ineffective
+
+**Impact**: HIGH - Rate limit bypass, DDoS vulnerability
+
+**Fix Implemented** (PR #87 - Stack 6):
+- Gate `cf-connecting-ip` trust on `request.ips` (only populated when `trustProxy` enabled)
+- When `TRUST_PROXY=false`, all proxy headers ignored
+- Updated documentation to clarify proxy trust behavior
+- Prevents header spoofing in development/testing environments
+
+**Status**: ✅ RESOLVED
+
+---
+
+### ✅ FIXED: 🟡 MEDIUM-01 - Database Query Redundancy and Information Leakage
+
+**Description**: Domain routes made 2 separate database queries (ownership + payment check), leaking information via different error codes.
+
+**Attack Scenario**:
+1. Attacker queries `/domains/jobs/:jobId` with different project IDs
+2. 403 response means "exists but not yours", 404 means "doesn't exist"
+3. Attacker enumerates valid project IDs
+4. Information leakage aids targeted attacks
+
+**Impact**: MEDIUM - Information disclosure
+
+**Fix Implemented** (PR #83 - Stack 2):
+- Combined 2 queries into 1 using SQL column aliases
+- Single `getProjectWithPayment()` query with camelCase properties
+- Unified 403/404 response: "Forbidden - you do not own this project or it does not exist"
+- 50% reduction in database round-trips
+
+**Status**: ✅ RESOLVED
+
+---
+
+### ✅ FIXED: 🟡 MEDIUM-02 - Missing SSE Stream Authentication
+
+**Description**: SSE streaming endpoint `/events/stream/:projectId` lacked authentication, allowing unauthorized access to real-time provisioning events.
+
+**Attack Scenario**:
+1. Attacker enumerates project IDs
+2. Attacker opens SSE stream without authentication
+3. Attacker monitors competitor provisioning activity
+4. Information leakage (domain names, services, timing)
+
+**Impact**: MEDIUM - Information disclosure
+
+**Fix Implemented** (PR #84 - Stack 3):
+- Added `requireAuth` middleware to SSE endpoint
+- Added `verifyProjectOwnership` authorization check
+- Documented reliability trade-offs (fail-open behavior)
+- SSE streams now require valid JWT + project ownership
+
+**Status**: ✅ RESOLVED
+
+---
+
+### ✅ FIXED: 🟡 MEDIUM-03 - Plaintext Credentials in Job Queue
+
+**Description**: GitHub and Cloudflare tokens stored in Redis job data as plaintext.
+
+**Attack Scenario**:
+1. Attacker gains read access to Redis (misconfiguration, breach)
+2. Attacker dumps BullMQ job data
+3. Attacker extracts GitHub tokens with `admin:org` scope
+4. Attacker can create/delete repositories
+
+**Impact**: MEDIUM - Credential theft, unauthorized repository access
+
+**Fix Implemented** (PR #85 - Stack 4):
+- Removed `accessToken` and `apiToken` from all job data structures
+- Workers now fetch encrypted credentials from database at execution time
+- Documented as BREAKING CHANGE (workers must be updated)
+- Redis job data no longer contains sensitive credentials
+
+**Status**: ✅ RESOLVED
+
+---
+
+### ✅ FIXED: 🟡 MEDIUM-04 - API Key Rotation Implementation Bugs
+
+**Description**: `rotateApiKey()` implementation had 5 critical bugs that would cause runtime failures.
+
+**Bugs**:
+1. Called non-existent methods `generateApiKey()` and `hashApiKey()`
+2. Incorrect `keyHint` calculation (included prefix)
+3. Double-encoding scopes with `JSON.stringify()`
+4. Return object didn't match `RotateApiKeyResult` interface
+5. Rollback error handling could mask original errors
+
+**Impact**: MEDIUM - Feature completely broken, zero-downtime rotation impossible
+
+**Fix Implemented** (PR #86 - Stack 5):
+- Fixed method names: `generateKey(prefix)`, `hashKey(newKey)`
+- Fixed keyHint calculation to exclude prefix
+- Removed `JSON.stringify()` (PostgreSQL handles arrays natively)
+- Fixed return object to match interface (added `userId`, renamed `keyId` → `id`)
+- Wrapped rollback in try-catch to prevent masking original errors
+
+**Status**: ✅ RESOLVED
+
+---
+
+### ✅ FIXED: 🟢 LOW-01 - Insecure Example Encryption Keys
+
+**Description**: `.env.example` used deterministic base64 strings (`AAAA...`, `BBBB...`) that could be accidentally copy/pasted into production.
+
+**Impact**: LOW - Configuration error risk
+
+**Fix Implemented** (PR #88 - Stack 7):
+- Replaced with obviously invalid placeholders: `REPLACE_ME_openssl_rand_base64_32`
+- Prevents accidental production use (validation will fail immediately)
+- Generation instructions still included in comments
+
+**Status**: ✅ RESOLVED
+
+---
+
+### ✅ FIXED: 🟢 LOW-02 - Missing Encryption Key Validation in getGitHubToken()
+
+**Description**: `getGitHubToken()` checked if key exists but not if it's valid format, leading to late failures.
+
+**Impact**: LOW - Configuration debugging difficulty
+
+**Fix Implemented** (PR #88 - Stack 7):
+- Added `isValidEncryptionKey()` check for consistency
+- Fails fast with clear error message
+- Consistent with `/auth/github/poll` route validation
+
+**Status**: ✅ RESOLVED
 
 ### 🟡 MEDIUM: CLI Config File Not Encrypted
 
@@ -525,8 +682,35 @@ Before public launch, conduct penetration testing focused on:
 
 ## Review Sign-Off
 
-**Reviewed By**: Engineering Team
-**Date**: March 11, 2026
-**Next Review**: Before Phase 7 production launch
+**Initial Review**: Engineering Team (March 11, 2026)
+**Security Audit**: AI Code Review - Gemini Code Assist + GitHub Copilot (March 13-14, 2026)
+**Fixes Verified**: Engineering Team (March 14, 2026)
+**Next Review**: Pre-launch penetration testing (Phase 7)
 
-**Status**: ⚠️ **Conditional approval** - implement rate limiting and audit logging before public launch.
+**Status**: ✅ **APPROVED for production** - All CRITICAL and HIGH severity vulnerabilities resolved. Complete Phase 7 pre-launch checklist (monitoring setup, penetration testing) before public launch.
+
+---
+
+## Phase 6 Security Audit Summary
+
+**Total Vulnerabilities Fixed**: 8 (1 CRITICAL, 2 HIGH, 4 MEDIUM, 2 LOW)
+**PRs Merged**: #82-88 (7 stacked PRs)
+**Lines Changed**: ~500 lines across 15 files
+**Review Method**: Automated AI code review + manual verification
+
+**Key Improvements**:
+1. ✅ Mock authentication endpoint properly gated (CRITICAL)
+2. ✅ Per-user and per-IP rate limiting implemented (HIGH)
+3. ✅ IP spoofing prevention via proxy trust configuration (HIGH)
+4. ✅ Database query optimization and information leakage prevention (MEDIUM)
+5. ✅ SSE stream authentication and authorization (MEDIUM)
+6. ✅ Credentials removed from Redis job queue (MEDIUM)
+7. ✅ API key rotation bugs fixed (MEDIUM)
+8. ✅ Encryption key validation and secure examples (LOW)
+
+**Remaining Pre-Launch Tasks** (Phase 7):
+- [ ] Set up production monitoring (Sentry, Datadog)
+- [ ] Configure alerting for critical failures
+- [ ] Conduct penetration testing (focus on credential handoff flow)
+- [ ] Load testing for rate limit tuning
+- [ ] Production deployment validation
