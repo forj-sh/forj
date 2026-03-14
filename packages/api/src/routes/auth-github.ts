@@ -14,11 +14,11 @@
  * - Call DELETE /auth/github to clear stored token
  * - User can revoke access at github.com/settings/applications
  *
- * ENCRYPTION:
+ * ENCRYPTION: Stack 7 - Service-specific encryption keys
  * - Tokens are encrypted using AES-256-GCM before storage
- * - Encryption key: CLOUDFLARE_ENCRYPTION_KEY environment variable (shared credential encryption key)
+ * - Encryption key: GITHUB_ENCRYPTION_KEY environment variable (GitHub-specific)
  * - Format: salt:iv:authTag:ciphertext (all base64)
- * - TODO: Consider using separate GITHUB_ENCRYPTION_KEY for better security isolation
+ * - Security isolation: Separate key from Cloudflare credentials
  *
  * SECURITY:
  * - Server enforces scopes (repo read:org) - client cannot escalate privileges
@@ -155,9 +155,9 @@ export async function githubAuthRoutes(server: FastifyInstance) {
       }
 
       // Get encryption key and validate format
-      const encryptionKey = process.env.CLOUDFLARE_ENCRYPTION_KEY;
+      const encryptionKey = process.env.GITHUB_ENCRYPTION_KEY;
       if (!encryptionKey) {
-        request.log.error('CLOUDFLARE_ENCRYPTION_KEY not configured');
+        request.log.error('GITHUB_ENCRYPTION_KEY not configured');
         return reply.status(500).send({
           success: false,
           error: 'Server configuration error',
@@ -165,7 +165,7 @@ export async function githubAuthRoutes(server: FastifyInstance) {
       }
 
       if (!isValidEncryptionKey(encryptionKey)) {
-        request.log.error('CLOUDFLARE_ENCRYPTION_KEY is not a valid base64-encoded 32-byte key');
+        request.log.error('GITHUB_ENCRYPTION_KEY is not a valid base64-encoded 32-byte key');
         return reply.status(500).send({
           success: false,
           error: 'Server configuration error - invalid encryption key format',
@@ -343,9 +343,9 @@ export async function githubAuthRoutes(server: FastifyInstance) {
  * (for use in other parts of the API)
  */
 export async function getGitHubToken(userId: string): Promise<string | null> {
-  const encryptionKey = process.env.CLOUDFLARE_ENCRYPTION_KEY;
+  const encryptionKey = process.env.GITHUB_ENCRYPTION_KEY;
   if (!encryptionKey) {
-    throw new Error('CLOUDFLARE_ENCRYPTION_KEY not configured');
+    throw new Error('GITHUB_ENCRYPTION_KEY not configured');
   }
 
   const result = await db.query(
