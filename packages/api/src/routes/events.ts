@@ -16,6 +16,20 @@ import { verifyProjectOwnership } from '../lib/authorization.js';
  * - Authorization checks (user must own project)
  * - IP-based rate limiting (max 10 streams per minute)
  * - Returns 404 for unauthorized projects (prevents enumeration)
+ *
+ * RELIABILITY TRADE-OFFS:
+ * 1. Rate Limiter Fail-Open (ipRateLimit):
+ *    - If Redis is unavailable, rate limiting is bypassed (fail-open)
+ *    - Trade-off: Availability > DoS protection during Redis outages
+ *    - Rationale: SSE streams are authenticated and short-lived (<5min)
+ *    - TODO: Consider fail-closed mode for production deployments
+ *
+ * 2. Authorization Error Handling (verifyProjectOwnership):
+ *    - Database errors are swallowed and treated as authorization failures
+ *    - Returns 404 for both "not found" and "DB unavailable" cases
+ *    - Masks infrastructure problems (DB outages appear as 404s)
+ *    - TODO (Stack refactor): Make verifyProjectOwnership throw on DB errors
+ *      to allow proper 500 responses for infrastructure failures
  */
 export async function eventRoutes(server: FastifyInstance) {
   /**
@@ -35,6 +49,8 @@ export async function eventRoutes(server: FastifyInstance) {
     {
       preHandler: [
         requireAuth,
+        // TRADE-OFF: Fail-open rate limiting (bypassed if Redis unavailable)
+        // Prioritizes availability over strict DoS protection
         ipRateLimit('sse-stream', { maxRequests: 10, windowMs: 60000 })
       ]
     },
@@ -43,9 +59,13 @@ export async function eventRoutes(server: FastifyInstance) {
       const userId = request.user!.userId; // Guaranteed by requireAuth
 
       // AUTHORIZATION CHECK: Verify user owns this project
+      // LIMITATION: verifyProjectOwnership swallows DB errors and returns false
+      // This means DB failures appear as 404s instead of 500s (masks infrastructure issues)
+      // See TODO in file header for refactoring plan
       const ownsProject = await verifyProjectOwnership(projectId, userId, request.log);
       if (!ownsProject) {
         // Return 404 instead of 403 to prevent project ID enumeration
+        // Note: This 404 could mean either "not found" or "DB error" (see limitation above)
         request.log.warn({
           projectId,
           userId,
