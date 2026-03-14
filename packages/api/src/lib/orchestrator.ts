@@ -214,8 +214,10 @@ export class ProvisioningOrchestrator {
   /**
    * Setup GitHub organization and repository
    *
-   * SECURITY: Stack 4 - Credentials are NOT stored in job data
-   * Workers fetch encrypted credentials from database at execution time
+   * BREAKING CHANGE (Stack 4): Credentials removed from job data
+   * - accessToken no longer passed in GitHub job payloads
+   * - Workers MUST be updated to fetch encrypted credentials from database
+   * - This change prevents credential exposure in Redis but breaks current workers
    */
   private async setupGitHub(config: ProvisioningConfig): Promise<{
     orgVerify: string;
@@ -227,7 +229,6 @@ export class ProvisioningOrchestrator {
       userId: config.userId,
       projectId: config.projectId,
       orgName: config.githubOrg,
-      // SECURITY: accessToken removed - worker fetches from database
     };
 
     const orgJob = await this.githubQueue.add('verify-org', orgJobData, {
@@ -247,7 +248,6 @@ export class ProvisioningOrchestrator {
       repoName: config.repoName || config.domain.split('.')[0],
       repoDescription: config.repoDescription || `Repository for ${config.domain}`,
       isPrivate: false,
-      // SECURITY: accessToken removed - worker fetches from database
     };
 
     const repoJob = await this.githubQueue.add('create-repo', repoJobData, {
@@ -267,8 +267,10 @@ export class ProvisioningOrchestrator {
   /**
    * Setup Cloudflare DNS zone
    *
-   * SECURITY: Stack 4 - Credentials are NOT stored in job data
-   * Workers fetch encrypted credentials from database at execution time
+   * BREAKING CHANGE (Stack 4): Credentials removed from job data
+   * - apiToken no longer passed in Cloudflare job payloads
+   * - Workers MUST be updated to fetch encrypted credentials from database
+   * - This change prevents credential exposure in Redis but breaks current workers
    */
   private async setupCloudflare(config: ProvisioningConfig): Promise<string> {
     const jobData: CreateZoneJobData = {
@@ -276,7 +278,6 @@ export class ProvisioningOrchestrator {
       userId: config.userId,
       projectId: config.projectId,
       domain: config.domain,
-      // SECURITY: apiToken removed - worker fetches from database
       accountId: config.cloudflareAccountId,
     };
 
@@ -323,8 +324,10 @@ export class ProvisioningOrchestrator {
   /**
    * Verify nameserver propagation
    *
-   * SECURITY: Stack 4 - Credentials are NOT stored in job data
-   * Workers fetch encrypted credentials from database at execution time
+   * BREAKING CHANGE (Stack 4): Credentials removed from job data
+   * - apiToken no longer passed in Cloudflare job payloads
+   * - Workers MUST be updated to fetch encrypted credentials from database
+   * - This change prevents credential exposure in Redis but breaks current workers
    */
   private async verifyNameservers(
     config: ProvisioningConfig,
@@ -338,7 +341,6 @@ export class ProvisioningOrchestrator {
       domain: config.domain,
       zoneId,
       expectedNameservers: nameservers,
-      // SECURITY: apiToken removed - worker fetches from database
     };
 
     const job = await this.cloudflareQueue.add('verify-nameservers', jobData, {
@@ -355,8 +357,10 @@ export class ProvisioningOrchestrator {
   /**
    * Wire DNS records (MX, SPF, DKIM, DMARC, CNAME)
    *
-   * SECURITY: Stack 4 - Credentials are NOT stored in job data
-   * Workers fetch encrypted credentials from database at execution time
+   * BREAKING CHANGE (Stack 4): Credentials removed from job data
+   * - cloudflareApiToken no longer passed in DNS job payloads
+   * - Workers MUST be updated to fetch encrypted credentials from database
+   * - This change prevents credential exposure in Redis but breaks current workers
    */
   private async wireDNS(config: ProvisioningConfig, zoneId: string): Promise<string> {
     const jobData: WireDNSRecordsJobData = {
@@ -365,7 +369,6 @@ export class ProvisioningOrchestrator {
       projectId: config.projectId,
       domain: config.domain,
       zoneId,
-      // SECURITY: cloudflareApiToken removed - worker fetches from database
       emailProvider: config.emailProvider || EmailProvider.GOOGLE_WORKSPACE,
       customMXRecords: config.customMXRecords,
       customSPF: config.customSPF,
@@ -389,8 +392,10 @@ export class ProvisioningOrchestrator {
   /**
    * Verify DNS record propagation
    *
-   * SECURITY: Stack 4 - Credentials are NOT stored in job data
-   * Workers fetch encrypted credentials from database at execution time
+   * BREAKING CHANGE (Stack 4): Credentials removed from job data
+   * - cloudflareApiToken no longer passed in DNS job payloads
+   * - Workers MUST be updated to fetch encrypted credentials from database
+   * - This change prevents credential exposure in Redis but breaks current workers
    */
   private async verifyDNS(config: ProvisioningConfig, zoneId: string): Promise<string> {
     // Build expected records based on configuration
@@ -434,7 +439,6 @@ export class ProvisioningOrchestrator {
       projectId: config.projectId,
       domain: config.domain,
       zoneId,
-      // SECURITY: cloudflareApiToken removed - worker fetches from database
       expectedRecords,
     };
 

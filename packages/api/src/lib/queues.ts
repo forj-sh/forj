@@ -39,14 +39,17 @@ function createQueues(): Record<string, Queue> | Record<string, never> {
   // Default job options for all queues
   // SECURITY: Keep last 100 completed and 200 failed jobs for debugging
   // Older jobs are automatically cleaned up to prevent data accumulation
+  const ONE_DAY_IN_SECONDS = 24 * 60 * 60;
+  const SEVEN_DAYS_IN_SECONDS = 7 * ONE_DAY_IN_SECONDS;
+
   const defaultJobOptions = {
     removeOnComplete: {
       count: 100, // Keep last 100 completed jobs
-      age: 24 * 60 * 60, // Remove jobs older than 24 hours
+      age: ONE_DAY_IN_SECONDS, // Remove jobs older than 24 hours
     },
     removeOnFail: {
       count: 200, // Keep last 200 failed jobs for debugging
-      age: 7 * 24 * 60 * 60, // Remove failed jobs older than 7 days
+      age: SEVEN_DAYS_IN_SECONDS, // Remove failed jobs older than 7 days
     },
   };
 
