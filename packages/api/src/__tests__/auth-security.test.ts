@@ -7,91 +7,111 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { createServer } from '../server.js';
+import type { FastifyInstance } from 'fastify';
 
 describe('Authentication Security', () => {
-  let originalEnv: NodeJS.ProcessEnv;
+  let server: FastifyInstance;
+  const originalEnv = { ...process.env };
 
-  beforeEach(() => {
-    // Save original environment
-    originalEnv = { ...process.env };
+  beforeEach(async () => {
+    // Set required environment variables for server initialization
+    process.env.JWT_SECRET = 'test-secret-key-for-auth-security-tests';
+    process.env.DATABASE_URL = 'postgresql://test:test@localhost:5432/test';
+    // Skip Redis dependency for these tests (rate limiter will fail open)
+    delete process.env.REDIS_URL;
   });
 
-  afterEach(() => {
-    // Restore original environment
-    process.env = originalEnv;
+  afterEach(async () => {
+    // Clean up server if it was created
+    if (server) {
+      await server.close();
+    }
+
+    // Restore environment variables by deleting added keys and restoring original values
+    Object.keys(process.env).forEach((key) => {
+      if (!(key in originalEnv)) {
+        delete process.env[key];
+      }
+    });
+    Object.keys(originalEnv).forEach((key) => {
+      process.env[key] = originalEnv[key];
+    });
   });
 
   describe('POST /auth/cli - Mock Authentication', () => {
-    it('should block mock auth when NODE_ENV=production', async () => {
+    it('should not register route when NODE_ENV=production', async () => {
       process.env.NODE_ENV = 'production';
       process.env.ENABLE_MOCK_AUTH = 'true'; // Even if explicitly enabled
 
-      const response = await fetch('http://localhost:3000/auth/cli', {
+      server = await createServer();
+
+      const response = await server.inject({
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        url: '/auth/cli',
+        payload: {
           deviceId: 'test-device',
           cliVersion: '0.1.0',
-        }),
+        },
       });
 
-      expect(response.status).toBe(404);
-      const data = await response.json() as any;
-      expect(data.success).toBe(false);
-      expect(data.error).toContain('GitHub Device Flow');
+      // Route should not be registered, so we get 404
+      expect(response.statusCode).toBe(404);
     });
 
-    it('should block mock auth when ENABLE_MOCK_AUTH is not set', async () => {
+    it('should not register route when ENABLE_MOCK_AUTH is not set', async () => {
       process.env.NODE_ENV = 'development';
       delete process.env.ENABLE_MOCK_AUTH;
 
-      const response = await fetch('http://localhost:3000/auth/cli', {
+      server = await createServer();
+
+      const response = await server.inject({
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        url: '/auth/cli',
+        payload: {
           deviceId: 'test-device',
           cliVersion: '0.1.0',
-        }),
+        },
       });
 
-      expect(response.status).toBe(404);
-      const data = await response.json() as any;
-      expect(data.success).toBe(false);
+      expect(response.statusCode).toBe(404);
     });
 
-    it('should block mock auth when ENABLE_MOCK_AUTH=false', async () => {
+    it('should not register route when ENABLE_MOCK_AUTH=false', async () => {
       process.env.NODE_ENV = 'development';
       process.env.ENABLE_MOCK_AUTH = 'false';
 
-      const response = await fetch('http://localhost:3000/auth/cli', {
+      server = await createServer();
+
+      const response = await server.inject({
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        url: '/auth/cli',
+        payload: {
           deviceId: 'test-device',
           cliVersion: '0.1.0',
-        }),
+        },
       });
 
-      expect(response.status).toBe(404);
-      const data = await response.json() as any;
-      expect(data.success).toBe(false);
+      expect(response.statusCode).toBe(404);
     });
 
-    it('should allow mock auth only in development with ENABLE_MOCK_AUTH=true', async () => {
+    it('should register and allow mock auth only in development with ENABLE_MOCK_AUTH=true', async () => {
       process.env.NODE_ENV = 'development';
       process.env.ENABLE_MOCK_AUTH = 'true';
 
-      const response = await fetch('http://localhost:3000/auth/cli', {
+      server = await createServer();
+
+      const response = await server.inject({
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        url: '/auth/cli',
+        payload: {
           deviceId: 'test-device',
           cliVersion: '0.1.0',
-        }),
+        },
       });
 
-      expect(response.status).toBe(200);
-      const data = await response.json() as any;
+      expect(response.statusCode).toBe(200);
+      const data = JSON.parse(response.body);
       expect(data.success).toBe(true);
       expect(data.data.token).toBeTruthy();
       expect(data.data.user.id).toMatch(/^mock-user-/);
@@ -101,26 +121,28 @@ describe('Authentication Security', () => {
       process.env.NODE_ENV = 'development';
       process.env.ENABLE_MOCK_AUTH = 'true';
 
-      const response1 = await fetch('http://localhost:3000/auth/cli', {
+      server = await createServer();
+
+      const response1 = await server.inject({
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        url: '/auth/cli',
+        payload: {
           deviceId: 'device-1',
           cliVersion: '0.1.0',
-        }),
+        },
       });
 
-      const response2 = await fetch('http://localhost:3000/auth/cli', {
+      const response2 = await server.inject({
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        url: '/auth/cli',
+        payload: {
           deviceId: 'device-2',
           cliVersion: '0.1.0',
-        }),
+        },
       });
 
-      const data1 = await response1.json() as any;
-      const data2 = await response2.json() as any;
+      const data1 = JSON.parse(response1.body);
+      const data2 = JSON.parse(response2.body);
 
       expect(data1.data.user.id).not.toBe(data2.data.user.id);
       expect(data1.data.token).not.toBe(data2.data.token);
@@ -128,7 +150,7 @@ describe('Authentication Security', () => {
   });
 
   describe('Production Security Posture', () => {
-    it('should enforce production mode prevents all mock auth attempts', async () => {
+    it('should prevent route registration in production regardless of ENABLE_MOCK_AUTH value', async () => {
       const testCases = [
         { ENABLE_MOCK_AUTH: 'true' },
         { ENABLE_MOCK_AUTH: 'false' },
@@ -138,6 +160,11 @@ describe('Authentication Security', () => {
       ];
 
       for (const testCase of testCases) {
+        // Clean up previous server instance
+        if (server) {
+          await server.close();
+        }
+
         process.env.NODE_ENV = 'production';
         if (testCase.ENABLE_MOCK_AUTH === undefined) {
           delete process.env.ENABLE_MOCK_AUTH;
@@ -145,18 +172,18 @@ describe('Authentication Security', () => {
           process.env.ENABLE_MOCK_AUTH = testCase.ENABLE_MOCK_AUTH;
         }
 
-        const response = await fetch('http://localhost:3000/auth/cli', {
+        server = await createServer();
+
+        const response = await server.inject({
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+          url: '/auth/cli',
+          payload: {
             deviceId: 'test',
             cliVersion: '0.1.0',
-          }),
+          },
         });
 
-        expect(response.status).toBe(404);
-        const data = await response.json() as any;
-        expect(data.success).toBe(false);
+        expect(response.statusCode).toBe(404);
       }
     });
   });
