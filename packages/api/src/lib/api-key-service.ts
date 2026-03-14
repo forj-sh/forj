@@ -326,10 +326,10 @@ export class ApiKeyService {
   /**
    * Rotate an API key (revoke old, create new with same scopes)
    *
-   * SECURITY: This is a critical operation that should be:
-   * - Rate limited (prevent abuse)
-   * - Audited (log all rotations)
-   * - Atomic (old key revoked before new key returned)
+   * SECURITY: Stack 5 - Atomic operation using database transactions
+   * - All operations wrapped in BEGIN...COMMIT transaction
+   * - If any step fails, transaction rolls back (old key remains valid)
+   * - User never left without a valid API key
    *
    * @param keyId - ID of the key to rotate
    * @param userId - User ID (for authorization)
@@ -338,56 +338,115 @@ export class ApiKeyService {
    * @throws ApiKeyRevokedError if key is already revoked
    */
   async rotateApiKey(keyId: string, userId: string): Promise<RotateApiKeyResult> {
-    // TODO: Wrap in database transaction for true atomicity
-    // Currently, if createApiKey fails after revokeApiKey succeeds, the user
-    // is left without a valid key. This should be refactored to use a single
-    // database transaction with rollback capability.
-    // See: https://github.com/pcdkd/forj/issues/XXX
+    // Get a connection from the pool for transaction
+    const client = await this.db.connect();
 
-    // Get existing key (verify ownership and get metadata)
-    const existingKey = await this.getApiKey(keyId, userId);
+    try {
+      // Start transaction
+      await client.query('BEGIN');
 
-    if (!existingKey) {
-      throw new ApiKeyNotFoundError();
+      // Get existing key with row-level lock (prevent concurrent modifications)
+      const result = await client.query<ApiKeyRecord>(
+        `SELECT id, user_id, key_hash, key_hint, scopes, name, created_at, expires_at, last_used_at, revoked_at
+         FROM api_keys
+         WHERE id = $1 AND user_id = $2
+         FOR UPDATE`,
+        [keyId, userId]
+      );
+
+      const existingKey = result.rows[0];
+
+      if (!existingKey) {
+        throw new ApiKeyNotFoundError();
+      }
+
+      // Cannot rotate revoked keys
+      if (existingKey.revoked_at) {
+        throw new ApiKeyRevokedError();
+      }
+
+      // Infer environment from key_hint
+      const environment: 'live' | 'test' = existingKey.key_hint.startsWith('forj_liv')
+        ? 'live'
+        : 'test';
+
+      // Revoke old key (within transaction)
+      await client.query(
+        `UPDATE api_keys SET revoked_at = NOW() WHERE id = $1`,
+        [keyId]
+      );
+
+      // Generate new API key
+      const prefix = environment === 'live' ? API_KEY_PREFIXES.LIVE : API_KEY_PREFIXES.TEST;
+      const newKey = this.generateKey(prefix);
+      const keyHash = await this.hashKey(newKey);
+      const keyHint = newKey.substring(prefix.length, prefix.length + KEY_HINT_LENGTH);
+
+      // Insert new key (within transaction)
+      const insertResult = await client.query<ApiKeyRecord>(
+        `INSERT INTO api_keys (user_id, key_hash, key_hint, scopes, name, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id, user_id, key_hash, key_hint, scopes, name, created_at, expires_at, last_used_at, revoked_at`,
+        [
+          userId,
+          keyHash,
+          keyHint,
+          existingKey.scopes,
+          existingKey.name,
+          existingKey.expires_at,
+        ]
+      );
+
+      const newRecord = insertResult.rows[0];
+
+      // Commit transaction - both operations succeed atomically
+      await client.query('COMMIT');
+
+      logger.info({
+        msg: 'API key rotated successfully',
+        oldKeyId: keyId,
+        newKeyId: newRecord.id,
+        userId,
+        scopes: newRecord.scopes,
+        environment,
+      });
+
+      return {
+        id: newRecord.id,
+        key: newKey,
+        userId: newRecord.user_id,
+        scopes: newRecord.scopes as ApiKeyScope[],
+        name: newRecord.name,
+        createdAt: newRecord.created_at,
+        expiresAt: newRecord.expires_at,
+        oldKeyId: keyId,
+      };
+    } catch (error) {
+      // Rollback transaction on any error - old key remains valid
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        logger.error({
+          rollbackError,
+          keyId,
+          userId,
+          msg: 'ROLLBACK failed during error handling - connection may be in inconsistent state',
+        });
+        // Don't mask the original error - still throw it below
+      }
+
+      logger.error({
+        error,
+        keyId,
+        userId,
+        msg: 'API key rotation failed - transaction rolled back, old key still valid',
+      });
+
+      // Re-throw the original error for the caller to handle
+      throw error;
+    } finally {
+      // Always release the client back to the pool
+      client.release();
     }
-
-    // Cannot rotate revoked keys
-    if (existingKey.revoked_at) {
-      throw new ApiKeyRevokedError();
-    }
-
-    // Infer environment from key_hint (key_hint stores first 8 chars including prefix)
-    const environment: 'live' | 'test' = existingKey.key_hint.startsWith('forj_liv')
-      ? 'live'
-      : 'test';
-
-    // Revoke old key
-    const revoked = await this.revokeApiKey(keyId, userId);
-    if (!revoked) {
-      throw new Error('Failed to revoke old API key');
-    }
-
-    // Create new key with same scopes and name
-    const newKey = await this.createApiKey({
-      userId,
-      scopes: existingKey.scopes as ApiKeyScope[],
-      name: existingKey.name || undefined,
-      expiresAt: existingKey.expires_at || undefined,
-      environment,
-    });
-
-    logger.info({
-      msg: 'API key rotated',
-      oldKeyId: keyId,
-      newKeyId: newKey.id,
-      userId,
-      scopes: newKey.scopes,
-      environment,
-    });
-
-    return {
-      ...newKey,
-      oldKeyId: keyId,
-    };
   }
 }
