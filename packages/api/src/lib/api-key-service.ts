@@ -377,9 +377,10 @@ export class ApiKeyService {
       );
 
       // Generate new API key
-      const newKey = await this.generateApiKey(environment);
-      const keyHash = await this.hashApiKey(newKey);
-      const keyHint = newKey.substring(0, KEY_HINT_LENGTH);
+      const prefix = environment === 'live' ? API_KEY_PREFIXES.LIVE : API_KEY_PREFIXES.TEST;
+      const newKey = this.generateKey(prefix);
+      const keyHash = await this.hashKey(newKey);
+      const keyHint = newKey.substring(prefix.length, prefix.length + KEY_HINT_LENGTH);
 
       // Insert new key (within transaction)
       const insertResult = await client.query<ApiKeyRecord>(
@@ -390,7 +391,7 @@ export class ApiKeyService {
           userId,
           keyHash,
           keyHint,
-          JSON.stringify(existingKey.scopes),
+          existingKey.scopes,
           existingKey.name,
           existingKey.expires_at,
         ]
@@ -411,17 +412,28 @@ export class ApiKeyService {
       });
 
       return {
-        keyId: newRecord.id,
+        id: newRecord.id,
         key: newKey,
+        userId: newRecord.user_id,
         scopes: newRecord.scopes as ApiKeyScope[],
-        name: newRecord.name || undefined,
-        expiresAt: newRecord.expires_at || undefined,
+        name: newRecord.name,
         createdAt: newRecord.created_at,
+        expiresAt: newRecord.expires_at,
         oldKeyId: keyId,
       };
     } catch (error) {
       // Rollback transaction on any error - old key remains valid
-      await client.query('ROLLBACK');
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        logger.error({
+          rollbackError,
+          keyId,
+          userId,
+          msg: 'ROLLBACK failed during error handling - connection may be in inconsistent state',
+        });
+        // Don't mask the original error - still throw it below
+      }
 
       logger.error({
         error,
@@ -430,7 +442,7 @@ export class ApiKeyService {
         msg: 'API key rotation failed - transaction rolled back, old key still valid',
       });
 
-      // Re-throw the error for the caller to handle
+      // Re-throw the original error for the caller to handle
       throw error;
     } finally {
       // Always release the client back to the pool
