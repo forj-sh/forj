@@ -28,7 +28,7 @@ import {
 } from '@forj/shared';
 import { PricingCache } from '../lib/pricing-cache.js';
 import { requireAuth } from '../middleware/auth.js';
-import { verifyProjectOwnership } from '../lib/authorization.js';
+import { getProjectWithPayment } from '../lib/authorization.js';
 
 /**
  * Enhanced domain routes with real Namecheap integration
@@ -124,7 +124,7 @@ export async function domainNamecheapRoutes(
    * SECURITY: Authentication middleware applied (Stack 6)
    * SECURITY: Authorization check implemented (Stack 7) - verifies user owns project
    * SECURITY: userId enforced from request.user (Stack 7) - prevents user spoofing
-   * TODO (SECURITY): Add payment verification (Stripe checkout completed)
+   * SECURITY: Payment verification implemented (Stack 2) - requires paid Stripe session in production
    * TODO (SECURITY): Add rate limiting (prevent abuse)
    */
   server.post<{
@@ -157,23 +157,56 @@ export async function domainNamecheapRoutes(
       });
     }
 
-    // AUTHORIZATION CHECK: Verify user owns this project
-    // TODO: Currently depends on projects existing in the DB. Mock/dev environments
-    // may use temporary project IDs (e.g., "proj_<uuid>") that aren't persisted.
-    // Consider adding NAMECHEAP_MOCK_MODE bypass or ensuring projects are persisted
-    // before domain registration in production flow.
+    // AUTHORIZATION & PAYMENT CHECK: Single query for both ownership and payment status
+    // This replaces two separate queries (verifyProjectOwnership + getProjectWithPayment)
+    const project = await getProjectWithPayment(jobData.projectId, userId, request.log);
+    if (!project) {
+      // This handles both project not found and unauthorized access
+      // We return 403 to prevent information leakage about project existence
+      return reply.status(403).send({
+        success: false,
+        error: 'Forbidden - you do not own this project or it does not exist',
+        code: 'FORBIDDEN',
+      });
+    }
 
-    // TEMPORARILY DISABLED FOR WORKER TESTING
-    // Issue: JWT generates VARCHAR user IDs but projects table expects UUID
-    // const ownsProject = await verifyProjectOwnership(jobData.projectId, userId, request.log);
-    // if (!ownsProject) {
-    //   return reply.status(403).send({
-    //     success: false,
-    //     error: 'Forbidden - you do not own this project',
-    //     code: 'FORBIDDEN',
-    //   });
-    // }
-    request.log.warn({ projectId: jobData.projectId, userId }, 'Authorization check bypassed for testing');
+    request.log.info({ projectId: jobData.projectId, userId }, 'Project ownership verified');
+
+    // PAYMENT VERIFICATION: Check Stripe payment status
+    // Only require payment in production or when explicitly enabled
+    const requirePayment = process.env.NODE_ENV === 'production' || process.env.REQUIRE_PAYMENT === 'true';
+
+    if (requirePayment) {
+      // Check if payment has been completed
+      if (project.stripePaymentStatus !== 'paid') {
+        request.log.warn({
+          projectId: jobData.projectId,
+          userId,
+          paymentStatus: project.stripePaymentStatus,
+        }, 'Domain registration blocked - payment not completed');
+
+        return reply.status(402).send({
+          success: false,
+          error: 'Payment required to register domain',
+          code: 'PAYMENT_REQUIRED',
+          details: {
+            projectId: jobData.projectId,
+            paymentStatus: project.stripePaymentStatus || 'not_started',
+          },
+        });
+      }
+
+      request.log.info({
+        projectId: jobData.projectId,
+        userId,
+        stripeSessionId: project.stripeSessionId,
+      }, 'Payment verified for domain registration');
+    } else {
+      request.log.warn({
+        projectId: jobData.projectId,
+        userId,
+      }, 'Payment verification skipped (development mode)');
+    }
 
     try {
       // Create BullMQ job for domain registration

@@ -65,3 +65,55 @@ export async function projectExists(
     return false;
   }
 }
+
+/**
+ * Project details with payment status (camelCase for consistency)
+ */
+export type ProjectWithPayment = {
+  id: string;
+  userId: string;
+  name: string;
+  domain: string;
+  stripeSessionId: string | null;
+  stripePaymentStatus: string | null;
+  createdAt: Date;
+};
+
+/**
+ * Get project details including payment status
+ *
+ * @param projectId - Project UUID
+ * @param userId - User UUID (for authorization)
+ * @param logger - Fastify logger instance
+ * @returns Project details or null if not found/unauthorized
+ */
+export async function getProjectWithPayment(
+  projectId: string,
+  userId: string,
+  logger: FastifyBaseLogger
+): Promise<ProjectWithPayment | null> {
+  try {
+    const result = await db.query(
+      `SELECT id,
+              user_id AS "userId",
+              name,
+              domain,
+              stripe_session_id AS "stripeSessionId",
+              stripe_payment_status AS "stripePaymentStatus",
+              created_at AS "createdAt"
+       FROM projects
+       WHERE id = $1 AND user_id = $2`,
+      [projectId, userId]
+    );
+
+    // Guard against null rowCount (can happen for non-SELECT commands)
+    if (result.rowCount === null || result.rowCount === 0) {
+      return null;
+    }
+
+    return result.rows[0];
+  } catch (error) {
+    logger.error({ error, projectId, userId }, 'Failed to get project with payment status');
+    return null;
+  }
+}
