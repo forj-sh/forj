@@ -15,21 +15,22 @@ import { logger } from '../lib/logger.js';
  *
  * SECURITY: Stack 6 - Proper proxy trust handling
  *
- * When behind Cloudflare (production):
- * - Uses CF-Connecting-IP header (cannot be spoofed)
+ * When behind Cloudflare (production with TRUST_PROXY=true):
+ * - Uses CF-Connecting-IP header (cannot be spoofed when behind trusted proxy)
  * - Falls back to request.ip (Fastify processes X-Forwarded-For when trustProxy enabled)
  *
- * When direct connection (development):
- * - Uses request.ip only (ignores X-Forwarded-For to prevent spoofing)
+ * When direct connection (development with TRUST_PROXY=false):
+ * - Uses request.ip only (ignores ALL proxy headers to prevent spoofing)
  *
  * @param request - Fastify request
  * @returns Client IP address (IPv4 or IPv6)
  */
 export function getClientIp(request: FastifyRequest): string {
-  // When behind Cloudflare, use CF-Connecting-IP header
-  // This header is set by Cloudflare and cannot be spoofed by the client
+  // When behind a trusted proxy, prefer the CF-Connecting-IP header from Cloudflare.
+  // We check `request.ips` as it's only populated when `trustProxy` is enabled,
+  // preventing header spoofing in direct connection scenarios.
   const cfConnectingIp = request.headers['cf-connecting-ip'];
-  if (cfConnectingIp && typeof cfConnectingIp === 'string') {
+  if (request.ips && cfConnectingIp && typeof cfConnectingIp === 'string') {
     return cfConnectingIp;
   }
 
