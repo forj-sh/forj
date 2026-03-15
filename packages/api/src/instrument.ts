@@ -79,7 +79,7 @@ if (SENTRY_DSN) {
 function scrubSensitiveData(text: string): string {
   return text
     // Forj API keys
-    .replace(/forj_(live|test)_[a-zA-Z0-9]{32}/g, 'forj_1_[REDACTED]')
+    .replace(/forj_(live|test)_[a-zA-Z0-9]{32}/g, 'forj_$1_[REDACTED]')
     // JWT tokens
     .replace(/eyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*/g, '[JWT_REDACTED]')
     // Bearer tokens
@@ -89,11 +89,11 @@ function scrubSensitiveData(text: string): string {
     // GitHub tokens (ghp_, gho_, etc.)
     .replace(/gh[a-z]_[a-zA-Z0-9]{36,}/g, '[GITHUB_TOKEN_REDACTED]')
     // Stripe keys
-    .replace(/sk_(live|test)_[a-zA-Z0-9]{24,}/g, 'sk_1_[REDACTED]')
+    .replace(/sk_(live|test)_[a-zA-Z0-9]{24,}/g, 'sk_$1_[REDACTED]')
     // Namecheap API keys (32 char hex)
     .replace(/[a-f0-9]{32}/g, '[NC_API_KEY_REDACTED]')
     // Generic passwords in query params or JSON
-    .replace(/(password|apiKey|api_key|secret|token)["']?\s*[:=]\s*["']?[^"'\s,}]+/gi, '1=[REDACTED]');
+    .replace(/(password|apiKey|api_key|secret|token)(["']?\s*[:=]\s*["']?)[^"'\s,}]+/gi, '$1$2[REDACTED]');
 }
 
 export { Sentry };
