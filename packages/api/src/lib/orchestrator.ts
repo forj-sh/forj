@@ -14,6 +14,7 @@ import { Queue } from 'bullmq';
 import type { Redis as RedisClient } from 'ioredis';
 import {
   DomainOperationType,
+  DomainJobStatus,
   type RegisterDomainJobData,
   type SetNameserversJobData,
   GitHubOperationType,
@@ -302,12 +303,15 @@ export class ProvisioningOrchestrator {
     config: ProvisioningConfig,
     nameservers: string[]
   ): Promise<string> {
+    // Generate deterministic job ID for idempotency
+    const jobId = `set-nameservers:${config.projectId}:${Date.now()}`;
+
     const jobData: SetNameserversJobData = {
-      jobId: '', // Placeholder - BullMQ will assign actual job ID
+      jobId,
       operation: DomainOperationType.SET_NAMESERVERS,
       userId: config.userId,
       projectId: config.projectId,
-      status: 'pending' as any,
+      status: DomainJobStatus.PENDING,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       attempts: 0,
@@ -318,6 +322,7 @@ export class ProvisioningOrchestrator {
     };
 
     const job = await this.domainQueue.add('set-nameservers', jobData, {
+      jobId, // Use consistent jobId for idempotency
       attempts: 3,
       backoff: {
         type: 'exponential',
