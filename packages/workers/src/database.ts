@@ -88,12 +88,25 @@ export interface UserCredentials {
 export async function fetchUserCredentials(userId: string): Promise<UserCredentials | null> {
   try {
     const db = getDb();
+
+    // Get service-specific encryption keys from environment
+    const cloudflareEncryptionKey = process.env.CLOUDFLARE_ENCRYPTION_KEY;
+    const githubEncryptionKey = process.env.GITHUB_ENCRYPTION_KEY;
+
+    if (!cloudflareEncryptionKey) {
+      console.error('[Database] CLOUDFLARE_ENCRYPTION_KEY environment variable is not set');
+      throw new Error('CLOUDFLARE_ENCRYPTION_KEY environment variable is required');
+    }
+
+    if (!githubEncryptionKey) {
+      console.error('[Database] GITHUB_ENCRYPTION_KEY environment variable is not set');
+      throw new Error('GITHUB_ENCRYPTION_KEY environment variable is required');
+    }
+
     const result = await db.query(
       `SELECT
-        github_access_token_encrypted,
-        github_encryption_key,
-        cloudflare_api_token_encrypted,
-        cloudflare_encryption_key,
+        github_token_encrypted,
+        cloudflare_token_encrypted,
         cloudflare_account_id
        FROM users
        WHERE id = $1`,
@@ -109,11 +122,11 @@ export async function fetchUserCredentials(userId: string): Promise<UserCredenti
     const credentials: UserCredentials = {};
 
     // Decrypt GitHub access token if present
-    if (row.github_access_token_encrypted && row.github_encryption_key) {
+    if (row.github_token_encrypted) {
       try {
         credentials.githubAccessToken = await decrypt(
-          row.github_access_token_encrypted,
-          row.github_encryption_key
+          row.github_token_encrypted,
+          githubEncryptionKey
         );
       } catch (error) {
         console.error(`[Database] Failed to decrypt GitHub token for user ${userId}:`, error);
@@ -122,11 +135,11 @@ export async function fetchUserCredentials(userId: string): Promise<UserCredenti
     }
 
     // Decrypt Cloudflare API token if present
-    if (row.cloudflare_api_token_encrypted && row.cloudflare_encryption_key) {
+    if (row.cloudflare_token_encrypted) {
       try {
         credentials.cloudflareApiToken = await decrypt(
-          row.cloudflare_api_token_encrypted,
-          row.cloudflare_encryption_key
+          row.cloudflare_token_encrypted,
+          cloudflareEncryptionKey
         );
       } catch (error) {
         console.error(`[Database] Failed to decrypt Cloudflare token for user ${userId}:`, error);
