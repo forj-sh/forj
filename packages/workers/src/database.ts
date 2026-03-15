@@ -8,6 +8,7 @@
 import { Pool, neonConfig } from '@neondatabase/serverless';
 import ws from 'ws';
 import type { ServiceType, ServiceState } from '@forj/shared';
+import { decrypt } from './encryption.js';
 
 // Configure Neon to use WebSocket for serverless environments
 neonConfig.webSocketConstructor = ws;
@@ -64,6 +65,96 @@ export async function updateProjectService(
     );
   } catch (error) {
     console.error(`[Database] Failed to update project service:`, error);
+    throw error;
+  }
+}
+
+/**
+ * User credentials interface
+ */
+export interface UserCredentials {
+  githubAccessToken?: string;
+  cloudflareApiToken?: string;
+  cloudflareAccountId?: string;
+}
+
+/**
+ * Fetch and decrypt user credentials from database
+ *
+ * @param userId - User ID to fetch credentials for
+ * @returns Decrypted credentials or null if user not found
+ * @throws Error if decryption fails
+ */
+export async function fetchUserCredentials(userId: string): Promise<UserCredentials | null> {
+  try {
+    const db = getDb();
+
+    // Get service-specific encryption keys from environment
+    const cloudflareEncryptionKey = process.env.CLOUDFLARE_ENCRYPTION_KEY;
+    const githubEncryptionKey = process.env.GITHUB_ENCRYPTION_KEY;
+
+    if (!cloudflareEncryptionKey) {
+      console.error('[Database] CLOUDFLARE_ENCRYPTION_KEY environment variable is not set');
+      throw new Error('CLOUDFLARE_ENCRYPTION_KEY environment variable is required');
+    }
+
+    if (!githubEncryptionKey) {
+      console.error('[Database] GITHUB_ENCRYPTION_KEY environment variable is not set');
+      throw new Error('GITHUB_ENCRYPTION_KEY environment variable is required');
+    }
+
+    const result = await db.query(
+      `SELECT
+        github_token_encrypted,
+        cloudflare_token_encrypted,
+        cloudflare_account_id
+       FROM users
+       WHERE id = $1`,
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      console.warn(`[Database] User ${userId} not found`);
+      return null;
+    }
+
+    const row = result.rows[0];
+    const credentials: UserCredentials = {};
+
+    // Decrypt GitHub access token if present
+    if (row.github_token_encrypted) {
+      try {
+        credentials.githubAccessToken = await decrypt(
+          row.github_token_encrypted,
+          githubEncryptionKey
+        );
+      } catch (error) {
+        console.error(`[Database] Failed to decrypt GitHub token for user ${userId}:`, error);
+        throw new Error('Failed to decrypt GitHub credentials');
+      }
+    }
+
+    // Decrypt Cloudflare API token if present
+    if (row.cloudflare_token_encrypted) {
+      try {
+        credentials.cloudflareApiToken = await decrypt(
+          row.cloudflare_token_encrypted,
+          cloudflareEncryptionKey
+        );
+      } catch (error) {
+        console.error(`[Database] Failed to decrypt Cloudflare token for user ${userId}:`, error);
+        throw new Error('Failed to decrypt Cloudflare credentials');
+      }
+    }
+
+    // Cloudflare account ID is not encrypted
+    if (row.cloudflare_account_id) {
+      credentials.cloudflareAccountId = row.cloudflare_account_id;
+    }
+
+    return credentials;
+  } catch (error) {
+    console.error(`[Database] Failed to fetch credentials for user ${userId}:`, error);
     throw error;
   }
 }

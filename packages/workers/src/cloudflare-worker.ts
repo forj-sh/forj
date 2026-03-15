@@ -28,7 +28,7 @@ import {
   CloudflareWorkerEventType,
   isValidCloudflareStateTransition,
 } from '@forj/shared';
-import { updateProjectService } from './database.js';
+import { updateProjectService, fetchUserCredentials } from './database.js';
 
 /**
  * Sanitize error messages to remove sensitive credentials
@@ -185,7 +185,7 @@ export class CloudflareWorker {
    * Handle zone creation
    */
   private async handleCreateZone(job: Job<CreateZoneJobData>): Promise<void> {
-    const { userId, projectId, domain, apiToken, accountId } = job.data;
+    const { userId, projectId, domain } = job.data;
 
     // Track current state locally (starts as QUEUED when job is picked up)
     let currentState = CloudflareJobStatus.QUEUED;
@@ -201,6 +201,18 @@ export class CloudflareWorker {
       timestamp: new Date().toISOString(),
       data: { domain, status: CloudflareJobStatus.CREATING_ZONE },
     });
+
+    // Fetch user credentials from database (outside try block so they're in scope for error handler)
+    const credentials = await fetchUserCredentials(userId);
+    if (!credentials?.cloudflareApiToken || !credentials?.cloudflareAccountId) {
+      throw new CloudflareApiError(
+        [{ code: 1000, message: `Cloudflare credentials not found for user ${userId}` }],
+        CloudflareErrorCategory.AUTH
+      );
+    }
+
+    const apiToken = credentials.cloudflareApiToken;
+    const accountId = credentials.cloudflareAccountId;
 
     try {
       const client = new CloudflareClient({ apiToken, accountId });
@@ -475,7 +487,7 @@ export class CloudflareWorker {
     zone: { id: string; name_servers: string[]; status: string },
     alreadyExisted: boolean = false
   ): Promise<void> {
-    const { userId, projectId, domain, apiToken, accountId } = job.data;
+    const { userId, projectId, domain } = job.data;
 
     // Update state: CREATING_ZONE → ZONE_CREATED
     await this.updateJobState(job, currentState, CloudflareJobStatus.ZONE_CREATED);
@@ -505,14 +517,13 @@ export class CloudflareWorker {
     } as CreateZoneJobData);
 
     // Auto-queue nameserver update job to hand off DNS authority to Cloudflare
+    // Note: Credentials are NOT passed in job data (PR #85) - they will be fetched from database
     await this.queueNameserverUpdate({
       userId,
       projectId,
       domain,
       zoneId: zone.id,
       nameservers: zone.name_servers,
-      apiToken,
-      accountId,
     });
   }
 
@@ -521,6 +532,9 @@ export class CloudflareWorker {
    *
    * After zone creation, we need to update the domain's nameservers at the registrar
    * (Namecheap) to point to Cloudflare's nameservers. This hands off DNS authority.
+   *
+   * NOTE: Credentials are NOT passed in job data (PR #85). The UpdateNameserversJob handler
+   * will fetch credentials from the database when processing.
    */
   private async queueNameserverUpdate(data: {
     userId: string;
@@ -528,18 +542,15 @@ export class CloudflareWorker {
     domain: string;
     zoneId: string;
     nameservers: string[];
-    apiToken: string;
-    accountId?: string;
   }): Promise<void> {
-    const { userId, projectId, domain, zoneId, nameservers, apiToken, accountId } = data;
+    const { userId, projectId, domain, zoneId, nameservers } = data;
 
     const jobData: UpdateNameserversJobData = {
       operation: CloudflareOperationType.UPDATE_NAMESERVERS,
       userId,
       projectId,
       domain,
-      apiToken,
-      accountId,
+      // apiToken and accountId removed (PR #85) - fetched from database in handler
       zoneId,
       nameservers,
       namecheapAccessToken: undefined, // Not used - we get creds from env

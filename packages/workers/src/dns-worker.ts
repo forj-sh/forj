@@ -16,6 +16,7 @@ import { promises as dns } from 'dns';
 import {
   CloudflareClient,
   CloudflareApiError,
+  CloudflareErrorCategory,
   type DNSJobData,
   type DNSWorkerConfig,
   type DNSWorkerEvent,
@@ -30,7 +31,7 @@ import {
   DEFAULT_SPF_RECORDS,
   DEFAULT_DMARC_RECORD,
 } from '@forj/shared';
-import { updateProjectService } from './database.js';
+import { updateProjectService, fetchUserCredentials } from './database.js';
 
 /**
  * DNS wiring worker class
@@ -134,7 +135,6 @@ export class DNSWorker {
       projectId,
       domain,
       zoneId,
-      cloudflareApiToken,
       emailProvider,
       customMXRecords,
       customSPF,
@@ -144,7 +144,16 @@ export class DNSWorker {
       customCNAMEs,
     } = job.data;
 
-    const client = new CloudflareClient({ apiToken: cloudflareApiToken });
+    // Fetch user credentials from database
+    const credentials = await fetchUserCredentials(userId);
+    if (!credentials?.cloudflareApiToken) {
+      throw new CloudflareApiError(
+        [{ code: 1000, message: `Cloudflare credentials not found for user ${userId}` }],
+        CloudflareErrorCategory.AUTH
+      );
+    }
+
+    const client = new CloudflareClient({ apiToken: credentials.cloudflareApiToken });
     let recordsCreated = 0;
 
     // Track current state locally (starts as QUEUED when job is picked up)
