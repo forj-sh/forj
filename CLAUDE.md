@@ -632,12 +632,14 @@ done
 - [ ] Log aggregation (Datadog, Logtail)
 - [ ] Uptime monitoring (BetterUptime, Checkly)
 - [ ] Metrics dashboard (Prometheus + Grafana)
-- [ ] Alerts configured in Sentry:
+- [ ] Alerts configured in Sentry (use `npm run configure-sentry-alerts`):
   - [ ] High error rates (> 5% in 5 min)
   - [ ] Failed jobs (> 10 in 1 hour)
   - [ ] Rate limit violations (> 100 in 1 hour)
   - [ ] Database connection pool exhaustion
   - [ ] Redis memory > 80%
+  - **Script:** `scripts/configure-sentry-alerts.ts` (see `scripts/README.md`)
+  - **Usage:** `SENTRY_AUTH_TOKEN=your_token npm run configure-sentry-alerts`
 
 **6. Documentation**
 - [ ] API documentation (all endpoints)
@@ -739,6 +741,42 @@ EOF
 chmod +x health-check.sh
 ./health-check.sh
 ```
+
+**Configure Sentry Alerts (Production)**
+```bash
+# Step 1: Get Sentry auth token
+# Visit: https://forj-sh.sentry.io/settings/account/api/auth-tokens/
+# Create token with scopes: org:read, project:read, project:write
+
+# Step 2: Set the token
+export SENTRY_AUTH_TOKEN=sntrys_your_token_here
+
+# Step 3: Install dependencies (if not already installed)
+npm install
+
+# Step 4: Run the alert configuration script
+npm run configure-sentry-alerts
+
+# The script will create:
+# - High error rate alerts (>5% in 5 min for API/Workers, >2% in 10 min for CLI)
+# - Critical error alerts (fatal level)
+# - Rate limit violation alerts (>100/hour)
+# - Database connection pool alerts
+# - Failed BullMQ job alerts (>10/hour)
+# - Redis memory alerts
+# - CLI crash alerts
+
+# Step 5: Verify in Sentry dashboard
+# API: https://forj-sh.sentry.io/alerts/forj-api/
+# Workers: https://forj-sh.sentry.io/alerts/forj-workers/
+# CLI: https://forj-sh.sentry.io/alerts/forj-cli/
+
+# Step 6: Configure Slack integration (optional)
+# Go to: https://forj-sh.sentry.io/settings/integrations/slack/
+# Connect workspace and update alert actions
+```
+
+For detailed information, see `scripts/README.md`.
 
 ### Next Steps After Documentation Update
 

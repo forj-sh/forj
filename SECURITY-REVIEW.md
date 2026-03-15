@@ -847,11 +847,17 @@ GIT_COMMIT_SHA=$(git rev-parse HEAD)  # For release tracking
 
 ### Remaining Tasks
 
-- [ ] Configure Sentry alerts in production:
+- [ ] Configure Sentry alerts in production (automated via script):
+  - **Script:** `scripts/configure-sentry-alerts.ts`
+  - **Usage:** `SENTRY_AUTH_TOKEN=your_token npm run configure-sentry-alerts`
+  - **Documentation:** See `scripts/README.md` for full instructions
   - [ ] High error rate (> 5% in 5 minutes)
   - [ ] Failed BullMQ jobs (> 10 in 1 hour)
   - [ ] Critical errors (any error with `level: 'fatal'`)
   - [ ] Rate limit violations (> 100 in 1 hour)
+  - [ ] Database connection pool exhaustion
+  - [ ] Redis memory issues
+  - [ ] CLI crash detection
 - [ ] Set up Slack integration for critical alerts
 - [ ] Create Sentry dashboard for key metrics
 - [ ] Document incident response workflow with Sentry
