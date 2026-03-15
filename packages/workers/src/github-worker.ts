@@ -26,7 +26,7 @@ import {
   isValidGitHubStateTransition,
   DEFAULT_BRANCH_PROTECTION,
 } from '@forj/shared';
-import { updateProjectService } from './database.js';
+import { updateProjectService, fetchUserCredentials } from './database.js';
 
 /**
  * GitHub worker class
@@ -64,7 +64,7 @@ export class GitHubWorker {
       // and the 'completed' event fires for each operation. We only want to mark
       // the service complete when repository configuration finishes successfully.
       if (job.data.operation === GitHubOperationType.CONFIGURE_REPO) {
-        const value = 'repoUrl' in job.data ? job.data.repoUrl : job.data.orgName;
+        const value = ('repoUrl' in job.data ? job.data.repoUrl : job.data.orgName) as string | undefined;
         const now = new Date().toISOString();
 
         void updateProjectService(job.data.projectId, 'github', {
@@ -123,7 +123,7 @@ export class GitHubWorker {
    * Handle organization verification
    */
   private async handleVerifyOrg(job: Job<VerifyOrgJobData>): Promise<void> {
-    const { userId, projectId, orgName, accessToken } = job.data;
+    const { userId, projectId, orgName } = job.data;
 
     // Track current state locally (starts as QUEUED when job is picked up)
     let currentState = GitHubJobStatus.QUEUED;
@@ -142,7 +142,16 @@ export class GitHubWorker {
     });
 
     try {
-      const client = new GitHubClient({ accessToken });
+      // Fetch user credentials from database
+      const credentials = await fetchUserCredentials(userId);
+      if (!credentials?.githubAccessToken) {
+        throw new GitHubError(
+          `GitHub credentials not found for user ${userId}`,
+          GitHubErrorCategory.AUTH
+        );
+      }
+
+      const client = new GitHubClient({ accessToken: credentials.githubAccessToken });
       const org = await client.verifyOrg(orgName);
 
       // Update state: VERIFYING_ORG → ORG_VERIFIED
@@ -188,7 +197,6 @@ export class GitHubWorker {
       autoInit,
       gitignoreTemplate,
       licenseTemplate,
-      accessToken,
     } = job.data;
 
     // Track current state locally (starts as ORG_VERIFIED)
@@ -211,7 +219,16 @@ export class GitHubWorker {
     });
 
     try {
-      const client = new GitHubClient({ accessToken });
+      // Fetch user credentials from database
+      const credentials = await fetchUserCredentials(userId);
+      if (!credentials?.githubAccessToken) {
+        throw new GitHubError(
+          `GitHub credentials not found for user ${userId}`,
+          GitHubErrorCategory.AUTH
+        );
+      }
+
+      const client = new GitHubClient({ accessToken: credentials.githubAccessToken });
 
       // Create repository
       const repo = await client.createRepo(orgName, {
@@ -265,8 +282,17 @@ export class GitHubWorker {
           githubError.response?.errors?.some(e => e.code === 'already_exists')) {
         console.log(`Repository ${orgName}/${repoName} already exists, continuing...`);
 
+        // Fetch user credentials from database (reuse from earlier)
+        const credentials = await fetchUserCredentials(userId);
+        if (!credentials?.githubAccessToken) {
+          throw new GitHubError(
+            `GitHub credentials not found for user ${userId}`,
+            GitHubErrorCategory.AUTH
+          );
+        }
+
         // Fetch existing repo details
-        const client = new GitHubClient({ accessToken });
+        const client = new GitHubClient({ accessToken: credentials.githubAccessToken });
         const repo = await client.getRepo(orgName, repoName);
 
         await this.updateJobState(job, currentState, GitHubJobStatus.REPO_CREATED);
@@ -316,7 +342,6 @@ export class GitHubWorker {
       pagesPath,
       customDomain,
       topics,
-      accessToken,
     } = job.data;
 
     // Track current state locally (starts as REPO_CREATED)
@@ -339,7 +364,16 @@ export class GitHubWorker {
     });
 
     try {
-      const client = new GitHubClient({ accessToken });
+      // Fetch user credentials from database
+      const credentials = await fetchUserCredentials(userId);
+      if (!credentials?.githubAccessToken) {
+        throw new GitHubError(
+          `GitHub credentials not found for user ${userId}`,
+          GitHubErrorCategory.AUTH
+        );
+      }
+
+      const client = new GitHubClient({ accessToken: credentials.githubAccessToken });
       const repo = await client.getRepo(orgName, repoName);
       const configSteps: string[] = [];
 
