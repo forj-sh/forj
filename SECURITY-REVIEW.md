@@ -733,7 +733,7 @@ Comprehensive error tracking and monitoring infrastructure implemented across al
 ### Implementation Details
 
 **1. API Server (`forj-api`)**
-- **SDK**: `@sentry/node` v8.x
+- **SDK**: `@sentry/node` ^10.43.0
 - **Integration**: Fastify error handler (`Sentry.setupFastifyErrorHandler`)
 - **Instrumentation**: `src/instrument.ts` (imported before all other modules)
 - **DSN**: `SENTRY_DSN_API` environment variable
@@ -746,7 +746,7 @@ Comprehensive error tracking and monitoring infrastructure implemented across al
   - Git commit SHA release tracking
 
 **2. Workers (`forj-workers`)**
-- **SDK**: `@sentry/node` v8.x
+- **SDK**: `@sentry/node` ^10.43.0
 - **Instrumentation**: `src/instrument.ts` (loaded after dotenv config)
 - **DSN**: `SENTRY_DSN_WORKERS` environment variable
 - **Sample Rate**: 10% of transactions
@@ -757,7 +757,7 @@ Comprehensive error tracking and monitoring infrastructure implemented across al
   - Scrubbed job data in error context
 
 **3. CLI (`forj-cli`)**
-- **SDK**: `@sentry/node` v8.x
+- **SDK**: `@sentry/node` ^10.43.0
 - **Integration**: Opt-in telemetry (user consent required)
 - **Configuration**: `~/.forj/telemetry.json` (enabled flag + anonymous ID)
 - **DSN**: `SENTRY_DSN_CLI` environment variable (baked into build)
@@ -826,15 +826,15 @@ curl http://localhost:3000/debug-sentry/message
 **Environment Variables**:
 ```bash
 # API
-SENTRY_DSN_API=https://7dd97ec0955ca3ee00205fb39eb8ded0@o4511042868805632.ingest.us.sentry.io/4511042872541184
+SENTRY_DSN_API=https://<key>@<org-id>.ingest.us.sentry.io/<project-id>
 SENTRY_ENVIRONMENT=production
 SENTRY_TRACES_SAMPLE_RATE=0.1
 
 # Workers
-SENTRY_DSN_WORKERS=https://833159a139cea08124c841435074d59c@o4511042868805632.ingest.us.sentry.io/4511042877456384
+SENTRY_DSN_WORKERS=https://<key>@<org-id>.ingest.us.sentry.io/<project-id>
 
 # CLI (baked into build)
-SENTRY_DSN_CLI=https://a3d77463b5f9c10877032491f0d4cc86@o4511042868805632.ingest.us.sentry.io/4511042880864256
+SENTRY_DSN_CLI=https://<key>@<org-id>.ingest.us.sentry.io/<project-id>
 
 # Optional
 GIT_COMMIT_SHA=$(git rev-parse HEAD)  # For release tracking
