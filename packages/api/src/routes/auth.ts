@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { SignJWT } from 'jose';
 import type { CLIAuthRequest, CLIAuthResponse } from '@forj/shared';
 import { ipRateLimit } from '../middleware/ip-rate-limit.js';
+import { db } from '../lib/database.js';
 
 // Token expiration constants
 const ONE_DAY_IN_SECONDS = 24 * 60 * 60; // 86400 seconds
@@ -35,7 +36,24 @@ export async function authRoutes(server: FastifyInstance) {
 
         // Mock user ID with better uniqueness (timestamp + random component)
         const mockUserId = 'mock-user-' + Date.now().toString(36) + Math.random().toString(36).slice(2);
-        const mockEmail = 'developer@forj.sh';
+        // Generate unique email per user to satisfy UNIQUE constraint on users.email
+        const mockEmail = `${mockUserId}@forj.sh`;
+
+        // Create user record in database (required for foreign key constraints on api_keys table)
+        // Note: mockUserId is randomized, so ON CONFLICT rarely triggers (not true idempotency)
+        try {
+          await db.query(
+            `INSERT INTO users (id, email, created_at, updated_at)
+             VALUES ($1, $2, NOW(), NOW())
+             ON CONFLICT (id) DO NOTHING`,
+            [mockUserId, mockEmail]
+          );
+          request.log.debug({ userId: mockUserId }, 'Mock user record created');
+        } catch (error) {
+          request.log.error({ error, userId: mockUserId }, 'Failed to create mock user record');
+          // Continue anyway - user creation is not critical for JWT generation
+          // This allows mock auth to work even if database is unavailable
+        }
 
         // Calculate timestamps consistently
         const now = Date.now();
