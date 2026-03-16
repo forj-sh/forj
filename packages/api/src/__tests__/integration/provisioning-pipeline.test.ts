@@ -13,6 +13,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
+import { randomUUID } from 'crypto';
 import { ProvisioningOrchestrator, type ProvisioningConfig } from '../../lib/orchestrator.js';
 import { getDomainQueue, getGitHubQueue, getCloudflareQueue, getDNSQueue } from '../../lib/queues.js';
 import { redisPubSub } from '../../lib/redis-pubsub.js';
@@ -30,7 +31,9 @@ import {
 } from '@forj/shared';
 
 describe('Provisioning Pipeline Integration', () => {
-  const testProjectId = 'test-project-provision-e2e';
+  // Generate valid RFC4122 UUIDs dynamically for better test isolation
+  // Note: projects.id column is UUID type, requires valid UUID format
+  const testProjectId = randomUUID();
   const testUserId = 'test-user-123';
   let isRedisAvailable = false;
 
@@ -155,7 +158,8 @@ describe('Provisioning Pipeline Integration', () => {
     // In a real scenario, workers would publish these events as they process jobs
 
     const receivedEvents: any[] = [];
-    const testProjectId2 = 'test-project-events';
+    // Generate valid RFC4122 UUID dynamically for test isolation
+    const testProjectId2 = randomUUID();
 
     // Subscribe to worker events
     const unsubscribe = await redisPubSub.subscribeWorkerEvents(
