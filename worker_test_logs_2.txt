@@ -1,0 +1,117 @@
+[dotenv@17.3.1] injecting env (35) from packages/api/.env -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+[Sentry] Initialized for development environment (workers)
+📁 Loaded environment from: /Users/danieldewar/Documents/dev/forj/packages/api/.env
+
+🔌 Connecting to Redis at localhost:6379...
+
+🚀 Starting workers...
+
+✅ Domain worker started (concurrency: 5)
+✅ Cloudflare worker started (concurrency: 3)
+✅ DNS worker started (concurrency: 3)
+✅ GitHub worker started (concurrency: 3)
+
+✨ Workers ready. Listening for jobs...
+
+ℹ️  Active: Domain, Cloudflare, DNS, GitHub
+✅ Redis connected
+Worker event published (no subscribers): {
+  type: 'job_started',
+  jobId: '',
+  projectId: 'e84000c0-c9a8-444a-bce9-2d6ebbc1a25f',
+  operation: 'register',
+  status: 'pending',
+  timestamp: 1773629368775,
+  error: undefined
+}
+Worker event published (no subscribers): {
+  type: 'job_progress',
+  jobId: '',
+  projectId: 'e84000c0-c9a8-444a-bce9-2d6ebbc1a25f',
+  operation: 'register',
+  status: 'checking',
+  timestamp: 1773629368779,
+  data: { step: 'checking', progress: 25 },
+  error: undefined
+}
+Cloudflare job 6 failed: Cloudflare API error [AUTH]: [1000] Cloudflare credentials not found for user mock-user-mmshmzv2euy53yur5n8
+GitHub job 12 failed: UnrecoverableError: GitHub credentials not found for user mock-user-mmshmzv2euy53yur5n8
+    at GitHubWorker.handleJobError (file:///Users/danieldewar/Documents/dev/forj/packages/workers/dist/chunk-W5N3R72K.js:953:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async GitHubWorker.handleCreateRepo (file:///Users/danieldewar/Documents/dev/forj/packages/workers/dist/chunk-W5N3R72K.js:817:9)
+    at async /Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:570:32
+GitHub job 11 failed: UnrecoverableError: GitHub credentials not found for user mock-user-mmshmzv2euy53yur5n8
+    at GitHubWorker.handleJobError (file:///Users/danieldewar/Documents/dev/forj/packages/workers/dist/chunk-W5N3R72K.js:953:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async GitHubWorker.handleVerifyOrg (file:///Users/danieldewar/Documents/dev/forj/packages/workers/dist/chunk-W5N3R72K.js:694:7)
+    at async /Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:570:32
+Job 6 failed: Domain get-e2e-final-7.com is not available
+Worker event published to 1 subscriber(s): {
+  type: 'job_failed',
+  jobId: '6',
+  projectId: 'e84000c0-c9a8-444a-bce9-2d6ebbc1a25f',
+  operation: 'register',
+  status: 'failed',
+  timestamp: 1773629369485,
+  error: 'Domain get-e2e-final-7.com is not available'
+}
+Cloudflare job 6 failed: Cloudflare API error [AUTH]: [1000] Cloudflare credentials not found for user mock-user-mmshmzv2euy53yur5n8
+Worker event published (no subscribers): {
+  type: 'job_started',
+  jobId: '',
+  projectId: 'e84000c0-c9a8-444a-bce9-2d6ebbc1a25f',
+  operation: 'register',
+  status: 'pending',
+  timestamp: 1773629374491,
+  error: undefined
+}
+Worker event published (no subscribers): {
+  type: 'job_progress',
+  jobId: '',
+  projectId: 'e84000c0-c9a8-444a-bce9-2d6ebbc1a25f',
+  operation: 'register',
+  status: 'checking',
+  timestamp: 1773629374492,
+  data: { step: 'checking', progress: 25 },
+  error: undefined
+}
+Cloudflare job 6 failed: Cloudflare API error [AUTH]: [1000] Cloudflare credentials not found for user mock-user-mmshmzv2euy53yur5n8
+Job 6 failed: Domain get-e2e-final-7.com is not available
+Worker event published (no subscribers): {
+  type: 'job_failed',
+  jobId: '6',
+  projectId: 'e84000c0-c9a8-444a-bce9-2d6ebbc1a25f',
+  operation: 'register',
+  status: 'failed',
+  timestamp: 1773629375258,
+  error: 'Domain get-e2e-final-7.com is not available'
+}
+Worker event published (no subscribers): {
+  type: 'job_started',
+  jobId: '',
+  projectId: 'e84000c0-c9a8-444a-bce9-2d6ebbc1a25f',
+  operation: 'register',
+  status: 'pending',
+  timestamp: 1773629385315,
+  error: undefined
+}
+Worker event published (no subscribers): {
+  type: 'job_progress',
+  jobId: '',
+  projectId: 'e84000c0-c9a8-444a-bce9-2d6ebbc1a25f',
+  operation: 'register',
+  status: 'checking',
+  timestamp: 1773629385318,
+  data: { step: 'checking', progress: 25 },
+  error: undefined
+}
+Job 6 failed: Domain get-e2e-final-7.com is not available
+Worker event published (no subscribers): {
+  type: 'job_failed',
+  jobId: '6',
+  projectId: 'e84000c0-c9a8-444a-bce9-2d6ebbc1a25f',
+  operation: 'register',
+  status: 'failed',
+  timestamp: 1773629385940,
+  error: 'Domain get-e2e-final-7.com is not available'
+}

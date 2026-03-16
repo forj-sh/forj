@@ -10,7 +10,7 @@
  * - DNS record verification
  */
 
-import { Worker, Job } from 'bullmq';
+import { Worker, Job, UnrecoverableError } from 'bullmq';
 import { Redis } from 'ioredis';
 import { promises as dns } from 'dns';
 import {
@@ -555,7 +555,7 @@ export class DNSWorker {
       throw error; // Let BullMQ retry
     } else {
       // Non-retryable error - fail permanently
-      await job.moveToFailed(error, job.token || '', true);
+      throw new UnrecoverableError(error.message);
     }
   }
 

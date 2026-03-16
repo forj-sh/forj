@@ -1,0 +1,254 @@
+[dotenv@17.3.1] injecting env (35) from packages/api/.env -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[Sentry] Initialized for development environment (workers)
+📁 Loaded environment from: /Users/danieldewar/Documents/dev/forj/packages/api/.env
+
+🔌 Connecting to Redis at localhost:6379...
+
+🚀 Starting workers...
+
+✅ Domain worker started (concurrency: 5)
+✅ Cloudflare worker started (concurrency: 3)
+✅ DNS worker started (concurrency: 3)
+✅ GitHub worker started (concurrency: 3)
+
+✨ Workers ready. Listening for jobs...
+
+ℹ️  Active: Domain, Cloudflare, DNS, GitHub
+✅ Redis connected
+Wo[Database] User test-user-123 not found
+GitHub worker error: Error: Missing lock for job 8. moveToFinished
+    at Scripts.finishedErrors (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/scripts.js:1151:25)
+    at Scripts.moveToFinished (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/scripts.js:478:24)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async /Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/job.js:465:28
+    at async Worker.handleCompleted (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:607:31)
+    at async Worker.reGitHub worker error: Error: Missing lock for job 7. moveToFinished
+    at Scripts.finishedErrors (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/scripts.js:1151:25)
+    at Scripts.moveToFinished (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/scripts.js:478:24)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async /Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/job.js:465:28
+    at async Worker.handleCompleted (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:607:31)
+    at async Worker.retryIfFailed (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:832:24)
+    at async /Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:573:24 {
+  code: -2
+}
+GitHub worker error: Error: Missing lock for job 7. moveToDelayed
+    at Scripts.finishedErrors (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/scripts.js:1151:25)
+    at Scripts.moveToDelayed [Database] User test-user-123 not found
+GitHub worker error: Error: Missing lock for job 7. moveToFinished
+    at Scripts.finishedErrors (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/scripts.js:1151:25)
+    at Scripts.moveToFinished (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/scripts.js:478:24)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async /Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/job.js:465:28
+    at async Worker.handleCompleted (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:607:31)
+    at async Worker.retryIfFailed (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:832:24)
+    at async /Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:573:24 {
+  code: -2
+}
+GitHub worker error: Error: Missing lock for job 7. moveToFinished
+    at Scripts.finishedErrors (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/scripts.js:1151:25)
+    at Scripts.moveToFinished (/Users/danieldewar/DoGitHub worker error: Error: Missing lock for job 8. moveToFinished
+    at Scripts.finishedErrors (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/scripts.js:1151:25)
+    at Scripts.moveToFinished (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/scripts.js:478:24)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async /Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/job.js:465:28
+    at async Worker.handleCompleted (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:607:31)
+Worker event published (no subscribers): {
+  type: 'job_started',
+  jobId: '',
+  projectId: '0575ac91-47c4-4253-8435-81fe43058a75',
+  operation: 'register',
+  status: 'pending',
+  timestamp: 1773629242819,
+  error: undefined
+}
+Worker event published (no subscribers): {
+  type: 'job_progress',
+  jobId: '',
+  projectId: '0575ac91-47c4-4253-8435-81fe43058a75',
+  operation: 'register',
+  status: 'checking',
+  timestamp: 1773629242820,
+  data: { step: 'checking', progress: 25 },
+  error: undefined
+}
+Job 4 failed: Domain test-example.com is not available
+Worker event published (no subscribers): {
+  type: 'job_failed',
+  jobId: '4',
+  projectId: '0575ac91-47c4-4253-8435-81fe43058a75',
+  operation: 'register',
+  status: 'failed',
+  timestamp: 1773629243210,
+  error: 'Domain test-example.com is not available'
+}
+[Database] User test-user-123 not found
+Cloudflare job 4 failed: Cloudflare API error [AUTH]: [1000] Cloudflare credentials not found for user test-user-123
+[Database] User test-user-123 not found
+GitHub worker error: Error: Missing lock for job 7. moveToFinished
+    at Scripts.finishedErrors (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/scripts.js:1151:25)
+    at Scripts.moveToFinished (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/scripts.js:478:24)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async /Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/job.js:465:28
+    at async Worker.handleCompleted (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:607:31)
+    at async Worker.retryIfFailed (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:832:24)
+    at async /Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:573:24 {
+  code: -2
+}
+GitHub worker error: Error: Missing lock for job 7. moveToFinished
+    at Scripts.finishedErrors (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/scripts.js:1151:25)
+    at Scripts.moveToFinished (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/scripts.js:478:24)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async /Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/job.js:538:26
+    at async Worker.handleFailed (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:639:28)
+    at async Worker.retryIfFailed (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:832:24)
+    at async /Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:579:32 {
+  code: -2
+}
+Worker event published (no subscribers): {
+  type: 'job_started',
+  jobId: '',
+  projectId: '0575ac91-47c4-4253-8435-81fe43058a75',
+  operation: 'register'Cloudflare job 5 failed: Cloudflare API error [AUTH]: [1000] Cloudflare credentials not found for user mock-user-mmshmzv2euy53yur5n8
+GitHub worker error: Error: Missing lock for job 10. moveToFinished
+    at Scripts.finishedErrors (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/scripts.js:1151:25)
+    at Scripts.moveToFinished (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/scripts.js:478:24)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async /Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/job.js:465:28
+    at async Worker.handleCompleted (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:607:31)
+    at async Worker.retryIfFailed (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:832:24)
+    at async /Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:573:24 {
+  code: -2
+}
+GitHub worker error: Error: Missing lock for job 10. moveToFinished
+    at Scripts.finishedErrors (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/scripts.js:1151:25)
+    at Scripts.moveToFinished (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/scripts.js:478:24)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async /Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/job.js:538:26
+    at async Worker.handleFailed (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:639:28)
+    at async Worker.retryIfFailed (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:832:24)
+    at async /Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:579:32 {
+  code: -2
+}
+Worker event published (no subscribers): {
+  type: 'job_started',
+  jobId: '',
+  projectId: '8361ded5-c602-45a6-8df4-180d78f1b6ca',
+  operation: 'register',
+  status: 'pending',
+  timestamp: 1773629260193,
+  error: undefined
+}
+Worker event published (no subscribers): {
+  type: 'job_progress',
+  jobId: '',
+  projectId: '8361ded5-c602-45a6-8df4-180d78f1b6ca',
+  operation: 'register',
+  status: 'checking',
+  timestamp: 1773629260195,
+  data: { step: 'checking', progress: 25 },
+  error: undefined
+}
+Job 5 failed: Domain get-e2e-final-6.com is not available
+Worker event published (no subscribers): {
+  type: 'job_failed',
+  jobId: '5',
+  projectId: '8361ded5-c602-45a6-8df4-180d78f1b6ca',
+  operation: 'register',
+  status: 'failed',
+  timestamp: 1773629260762,
+  error: 'Domain get-e2e-final-6.com is not available'
+}
+Cloudflare job 5 failed: Cloudflare API error [AUTH]: [1000] Cloudflare credentials not found for user mock-user-mmshmzv2euy53yur5n8
+GitHub worker error: Error: Missing lock for job 9. moveToFinished
+    at Scripts.finishedErrors (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/scripts.js:1151:25)
+    at Scripts.moveToFinished (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/scripts.js:478:24)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async /Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/job.js:465:28
+    at async Worker.handleCompleted (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:607:31)
+    at async Worker.retryIfFailed (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:832:24)
+    at async /Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:573:24 {
+  code: -2
+}
+GitHub worker error: Error: Missing lock for job 9. moveToFinished
+    at Scripts.finishedErrors (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/scripts.js:1151:25)
+    at Scripts.moveToFinished (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/scripts.js:478:24)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async /Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/job.js:538:26
+    at async Worker.handleFailed (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:639:28)
+    at async Worker.retryIfFailed (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:832:24)
+    at async /Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:579:32 {
+  code: -2
+}
+Worker event published (no subscribers): {
+  type: 'job_started',
+  jobId: '',
+  projectId: '8361ded5-c602-45a6-8df4-180d78f1b6ca',
+  operation: 'register',
+  status: 'pending',
+  timestamp: 1773629270798,
+  error: undefined
+}
+Worker event published (no subscribers): {
+  type: 'job_progress',
+  jobId: '',
+  projectId: '8361ded5-c602-45a6-8df4-180d78f1b6ca',
+  operation: 'register',
+  status: 'checking',
+  timestamp: 1773629270801,
+  data: { step: 'checking', progress: 25 },
+  error: undefined
+}
+Job 5 failed: Domain get-e2e-final-6.com is not available
+Worker event published (no subscribers): {
+  type: 'job_failed',
+  jobId: '5',
+  projectId: '8361ded5-c602-45a6-8df4-180d78f1b6ca',
+  operation: 'register',
+  status: 'failed',
+  timestamp: 1773629271076,
+  error: 'Domain get-e2e-final-6.com is not available'
+}
+
+🛑 Shutting down workers...
+✅ All workers stopped
+ections (node:internal/process/task_queues:105:5)
+    at async /Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/job.js:465:28
+    at async Worker.handleCompleted (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:607:31)
+    at async Worker.retryIfFailed (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:832:24)
+    at async /Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:573:24 {
+  code: -2
+}
+GitHub worker error: Error: Missing lock for job 9. moveToFinished
+    at Scripts.finishedErrors (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/scripts.js:1151:25)
+    at Scripts.moveToFinished (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/scripts.js:478:24)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async /Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/job.js:538:26
+    at async Worker.handleFailed (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:639:28)
+    at async Worker.retryIfFailed (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:832:24)
+    at async /Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:579:32 {
+  code: -2
+}
+GitHub worker error: Error: Missing lock for job 10. moveToFinished
+    at Scripts.finishedErrors (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/scripts.js:1151:25)
+    at Scripts.moveToFinished (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/scripts.js:478:24)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async /Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/job.js:465:28
+    at async Worker.handleCompleted (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:607:31)
+    at async Worker.retryIfFailed (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:832:24)
+    at async /Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:573:24 {
+  code: -2
+}
+GitHub worker error: Error: Missing lock for job 10. moveToFinished
+    at Scripts.finishedErrors (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/scripts.js:1151:25)
+    at Scripts.moveToFinished (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/scripts.js:478:24)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async /Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/job.js:538:26
+    at async Worker.handleFailed (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:639:28)
+    at async Worker.retryIfFailed (/Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:832:24)
+    at async /Users/danieldewar/Documents/dev/forj/node_modules/bullmq/dist/cjs/classes/worker.js:579:32 {
+  code: -2
+}
+
+🛑 Shutting down workers...
+✅ All workers stopped

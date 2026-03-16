@@ -15,7 +15,13 @@
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { randomUUID } from 'crypto';
 import { ProvisioningOrchestrator, type ProvisioningConfig } from '../../lib/orchestrator.js';
-import { closeQueues } from '../../lib/queues.js';
+import {
+  closeQueues,
+  getDomainQueue,
+  getGitHubQueue,
+  getCloudflareQueue,
+  getDNSQueue,
+} from '../../lib/queues.js';
 import { redisPubSub } from '../../lib/redis-pubsub.js';
 import {
   DomainWorkerEventType,

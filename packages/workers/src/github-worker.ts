@@ -7,7 +7,7 @@
  * - Repository configuration (branch protection, Pages, topics)
  */
 
-import { Worker, Job } from 'bullmq';
+import { Worker, Job, UnrecoverableError } from 'bullmq';
 import { Redis } from 'ioredis';
 import {
   GitHubClient,
@@ -502,7 +502,7 @@ export class GitHubWorker {
       throw error; // Let BullMQ retry
     } else {
       // Non-retryable error - fail permanently
-      await job.moveToFailed(error, job.token || '', true);
+      throw new UnrecoverableError(error.message);
     }
   }
 

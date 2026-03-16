@@ -1,0 +1,34 @@
+
+> @forj/api@0.1.0 dev
+> tsx watch src/index.ts
+
+[Sentry] Initialized for development environment
+[Sentry] Debug endpoints registered:
+  GET /debug-sentry - Unhandled error test
+  GET /debug-sentry/handled - Handled error test
+  GET /debug-sentry/message - Message logging test
+[02:02:50 UTC] [32mINFO[39m: [36mDatabase connection successful[39m
+[02:02:50 UTC] [32mINFO[39m: [36mRedis connection successful[39m
+[02:02:50 UTC] [32mINFO[39m: [36mWarming up pricing cache for 7 TLDs...[39m
+    tldCount: 7
+[02:02:50 UTC] [32mINFO[39m: [36mNamecheap domain routes registered (production mode)[39m
+[02:02:50 UTC] [32mINFO[39m: [36mStripe client initialized[39m
+[02:02:50 UTC] [32mINFO[39m: [36mStripe checkout routes registered with server-side pricing validation[39m
+[02:02:50 UTC] [32mINFO[39m: [36mStripe webhook routes registered[39m
+[02:02:50 UTC] [32mINFO[39m: [36mProvisioning and API key routes registered[39m
+[02:02:50 UTC] [31mERROR[39m: [36mFailed to start server[39m
+    err: {
+      "type": "Error",
+      "message": "listen EADDRINUSE: address already in use 0.0.0.0:3000",
+      "stack":
+          Error: listen EADDRINUSE: address already in use 0.0.0.0:3000
+              at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+              at listenInCluster (node:net:1997:12)
+              at node:net:2206:7
+              at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+      "code": "EADDRINUSE",
+      "errno": -48,
+      "syscall": "listen",
+      "address": "0.0.0.0",
+      "port": 3000
+    }
