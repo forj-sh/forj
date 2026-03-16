@@ -27,6 +27,8 @@ import {
   CloudflareJobStatus,
   CloudflareWorkerEventType,
   isValidCloudflareStateTransition,
+  WORKER_LOCK_DURATION,
+  WORKER_LOCK_RENEW_TIME,
 } from '@forj/shared';
 import { updateProjectService, fetchUserCredentials } from './database.js';
 
@@ -102,6 +104,10 @@ export class CloudflareWorker {
       {
         connection: config.redis,
         concurrency: config.concurrency || 3,
+        // Lock configuration to prevent "Missing lock" errors
+        // See packages/shared/src/worker-config.ts for default values
+        lockDuration: WORKER_LOCK_DURATION,
+        lockRenewTime: WORKER_LOCK_RENEW_TIME,
       }
     );
 
