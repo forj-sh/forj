@@ -1,13 +1,9 @@
 import type { FastifyInstance } from 'fastify';
-import { readFileSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
 import { getDatabaseStatus } from '../lib/database.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const packageJson = JSON.parse(
-  readFileSync(join(__dirname, '../../package.json'), 'utf-8')
-);
+// Read version from environment or use fallback
+const packageVersion = process.env.npm_package_version || '0.1.0';
+const packageDescription = process.env.npm_package_description || 'Forj API server';
 
 /**
  * Health check routes
@@ -43,8 +39,8 @@ export async function healthRoutes(server: FastifyInstance) {
       success: true,
       data: {
         name: 'Forj API',
-        version: packageJson.version,
-        description: packageJson.description,
+        version: packageVersion,
+        description: packageDescription,
       },
     };
   });
