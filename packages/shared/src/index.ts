@@ -279,3 +279,6 @@ export {
   DEFAULT_BRANCH_PROTECTION,
   FORJ_USER_AGENT as GITHUB_USER_AGENT,
 } from './github/index.js';
+
+// BullMQ Worker Configuration
+export { WORKER_LOCK_DURATION, WORKER_LOCK_RENEW_TIME } from './worker-config.js';
