@@ -15,7 +15,7 @@
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { randomUUID } from 'crypto';
 import { ProvisioningOrchestrator, type ProvisioningConfig } from '../../lib/orchestrator.js';
-import { getDomainQueue, getGitHubQueue, getCloudflareQueue, getDNSQueue } from '../../lib/queues.js';
+import { closeQueues } from '../../lib/queues.js';
 import { redisPubSub } from '../../lib/redis-pubsub.js';
 import {
   DomainWorkerEventType,
@@ -45,7 +45,12 @@ describe('Provisioning Pipeline Integration', () => {
   });
 
   afterAll(async () => {
+    // Close Redis pub/sub connections
     await redisPubSub.close();
+
+    // Close BullMQ queue connections to prevent Jest hanging
+    // Uses the closeQueues() utility from lib/queues.ts
+    await closeQueues();
   });
 
   it('should queue all provisioning jobs in correct order', async () => {
