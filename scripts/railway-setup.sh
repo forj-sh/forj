@@ -1,0 +1,102 @@
+#!/bin/bash
+set -e
+
+# Railway Setup Script for Forj
+# Generates encryption keys and outputs Railway variable commands
+
+echo "=== Forj Railway Setup Script ==="
+echo ""
+
+# Generate encryption keys
+echo "Generating encryption keys..."
+JWT_SECRET=$(openssl rand -base64 32)
+CLOUDFLARE_ENCRYPTION_KEY=$(openssl rand -base64 32)
+GITHUB_ENCRYPTION_KEY=$(openssl rand -base64 32)
+
+echo ""
+echo "✅ Generated encryption keys"
+echo ""
+
+# Output keys for reference
+echo "=== SAVE THESE KEYS SECURELY ==="
+echo ""
+echo "JWT_SECRET=$JWT_SECRET"
+echo "CLOUDFLARE_ENCRYPTION_KEY=$CLOUDFLARE_ENCRYPTION_KEY"
+echo "GITHUB_ENCRYPTION_KEY=$GITHUB_ENCRYPTION_KEY"
+echo ""
+
+# Generate Railway commands for API service
+echo "=== Railway Commands for API Service ==="
+echo ""
+echo "# Switch to forj-api service first:"
+echo "railway service link forj-api"
+echo ""
+echo "# Core configuration"
+echo "railway variables set NODE_ENV=production"
+echo "railway variables set HOST=0.0.0.0"
+echo "railway variables set PORT=3000"
+echo "railway variables set TRUST_PROXY=true"
+echo ""
+echo "# Security keys"
+echo "railway variables set JWT_SECRET=\"$JWT_SECRET\""
+echo "railway variables set CLOUDFLARE_ENCRYPTION_KEY=\"$CLOUDFLARE_ENCRYPTION_KEY\""
+echo "railway variables set GITHUB_ENCRYPTION_KEY=\"$GITHUB_ENCRYPTION_KEY\""
+echo "railway variables set ENABLE_MOCK_AUTH=false"
+echo ""
+echo "# Namecheap (UPDATE THESE VALUES)"
+echo "railway variables set ENABLE_NAMECHEAP_ROUTES=true"
+echo "railway variables set NAMECHEAP_API_USER=\"YOUR_USERNAME\""
+echo "railway variables set NAMECHEAP_API_KEY=\"YOUR_API_KEY\""
+echo "railway variables set NAMECHEAP_USERNAME=\"YOUR_USERNAME\""
+echo "railway variables set NAMECHEAP_CLIENT_IP=\"0.0.0.0\""
+echo "railway variables set NAMECHEAP_SANDBOX=true"
+echo ""
+echo "# GitHub OAuth (UPDATE THESE VALUES)"
+echo "railway variables set GITHUB_CLIENT_ID=\"YOUR_GITHUB_CLIENT_ID\""
+echo "railway variables set GITHUB_CLIENT_SECRET=\"YOUR_GITHUB_CLIENT_SECRET\""
+echo ""
+echo "# Stripe (UPDATE THESE VALUES)"
+echo "railway variables set STRIPE_SECRET_KEY=\"sk_test_...\""
+echo "railway variables set STRIPE_WEBHOOK_SECRET=\"whsec_...\""
+echo "railway variables set STRIPE_PUBLISHABLE_KEY=\"pk_test_...\""
+echo "railway variables set REQUIRE_PAYMENT=false"
+echo ""
+echo "# Sentry (UPDATE THESE VALUES)"
+echo "railway variables set SENTRY_DSN_API=\"YOUR_SENTRY_DSN\""
+echo "railway variables set SENTRY_ENVIRONMENT=production"
+echo "railway variables set SENTRY_TRACES_SAMPLE_RATE=0.1"
+echo ""
+echo "# Rate limiting"
+echo "railway variables set RATE_LIMITING_ENABLED=true"
+echo "railway variables set ENABLE_BULL_BOARD=false"
+echo ""
+
+# Generate Railway commands for Workers service
+echo "=== Railway Commands for Workers Service ==="
+echo ""
+echo "# Switch to forj-workers service first:"
+echo "railway service link forj-workers"
+echo ""
+echo "# Core configuration"
+echo "railway variables set NODE_ENV=production"
+echo ""
+echo "# Encryption keys (must match API service)"
+echo "railway variables set CLOUDFLARE_ENCRYPTION_KEY=\"$CLOUDFLARE_ENCRYPTION_KEY\""
+echo "railway variables set GITHUB_ENCRYPTION_KEY=\"$GITHUB_ENCRYPTION_KEY\""
+echo ""
+echo "# Worker configuration"
+echo "railway variables set DOMAIN_WORKER_CONCURRENCY=5"
+echo ""
+echo "# Sentry (UPDATE THESE VALUES)"
+echo "railway variables set SENTRY_DSN_WORKERS=\"YOUR_SENTRY_DSN\""
+echo "railway variables set SENTRY_ENVIRONMENT=production"
+echo ""
+
+echo "=== Next Steps ==="
+echo ""
+echo "1. Copy the commands above and run them in your terminal"
+echo "2. Update the placeholder values (YOUR_USERNAME, YOUR_API_KEY, etc.)"
+echo "3. Deploy services: railway up --service forj-api && railway up --service forj-workers"
+echo "4. Run migrations: railway run --service forj-api npm run db:migrate -w packages/api"
+echo ""
+echo "See RAILWAY_DEPLOYMENT.md for full deployment guide"

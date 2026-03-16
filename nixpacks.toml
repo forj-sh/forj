@@ -1,0 +1,12 @@
+# Nixpacks Configuration for Forj Monorepo
+# Ensures proper Node.js version and npm workspace support
+
+[phases.setup]
+nixPkgs = ["nodejs-18_x", "npm-9_x"]
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+# Build command is specified per-service in packages/*/railway.toml
+cmds = []

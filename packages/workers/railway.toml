@@ -1,0 +1,21 @@
+# Railway Service Configuration: BullMQ Workers
+# Service name: forj-workers
+
+[build]
+builder = "NIXPACKS"
+# Build from monorepo root to access all workspaces
+buildCommand = "npm install && npm run build -w packages/shared && npm run build -w packages/workers"
+
+[deploy]
+startCommand = "npm run start -w packages/workers"
+# Workers don't have HTTP endpoints, so no healthcheck
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+
+[[deploy.environmentVariables]]
+name = "NODE_ENV"
+value = "production"
+
+[[deploy.environmentVariables]]
+name = "DOMAIN_WORKER_CONCURRENCY"
+value = "5"
