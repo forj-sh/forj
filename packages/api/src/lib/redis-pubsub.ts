@@ -18,9 +18,19 @@
  */
 
 import Redis from 'ioredis';
-import type { DomainWorkerEvent } from '@forj/shared';
+import type {
+  DomainWorkerEvent,
+  GitHubWorkerEvent,
+  CloudflareWorkerEvent,
+  DNSWorkerEvent,
+} from '@forj/shared';
 import { DomainWorkerEventType, DomainOperationType, DomainJobStatus } from '@forj/shared';
 import { logger } from './logger.js';
+
+/**
+ * Union type for all worker events
+ */
+export type WorkerEvent = DomainWorkerEvent | GitHubWorkerEvent | CloudflareWorkerEvent | DNSWorkerEvent;
 
 const REDIS_URL = process.env.REDIS_URL;
 
@@ -119,7 +129,7 @@ export class RedisPubSub {
    */
   async publishWorkerEvent(
     projectId: string,
-    event: DomainWorkerEvent
+    event: WorkerEvent
   ): Promise<number | null> {
     const publisher = await this.getPublisher();
 

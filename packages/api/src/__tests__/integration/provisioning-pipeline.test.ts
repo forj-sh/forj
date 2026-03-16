@@ -18,9 +18,14 @@ import { getDomainQueue, getGitHubQueue, getCloudflareQueue, getDNSQueue } from 
 import { redisPubSub } from '../../lib/redis-pubsub.js';
 import {
   DomainWorkerEventType,
+  DomainOperationType,
+  DomainJobStatus,
   GitHubWorkerEventType,
+  GitHubOperationType,
   CloudflareWorkerEventType,
+  CloudflareOperationType,
   DNSWorkerEventType,
+  DNSOperationType,
   EmailProvider,
 } from '@forj/shared';
 
@@ -50,6 +55,7 @@ describe('Provisioning Pipeline Integration', () => {
       userId: testUserId,
       projectId: testProjectId,
       domain: 'test-example.com',
+      services: ['domain', 'github', 'cloudflare'], // Services to provision
 
       // Service credentials (would be real in production)
       namecheapApiUser: 'test-user',
@@ -165,20 +171,22 @@ describe('Provisioning Pipeline Integration', () => {
     const events = [
       // Domain registration started
       {
-        type: DomainWorkerEventType.DOMAIN_REGISTRATION_STARTED,
+        type: DomainWorkerEventType.JOB_STARTED,
         projectId: testProjectId2,
-        userId: testUserId,
         jobId: 'job-domain-1',
-        timestamp: new Date().toISOString(),
+        operation: DomainOperationType.REGISTER,
+        status: DomainJobStatus.REGISTERING,
+        timestamp: Date.now(),
         data: { domain: 'test-example.com' },
       },
       // Domain registration complete
       {
-        type: DomainWorkerEventType.DOMAIN_REGISTRATION_COMPLETE,
+        type: DomainWorkerEventType.JOB_COMPLETED,
         projectId: testProjectId2,
-        userId: testUserId,
         jobId: 'job-domain-1',
-        timestamp: new Date().toISOString(),
+        operation: DomainOperationType.REGISTER,
+        status: DomainJobStatus.COMPLETE,
+        timestamp: Date.now(),
         data: { domain: 'test-example.com', domainId: 12345 },
       },
       // GitHub org verification started (parallel with Cloudflare)
@@ -271,8 +279,8 @@ describe('Provisioning Pipeline Integration', () => {
     expect(receivedEvents.length).toBe(8);
 
     // Verify event sequence
-    expect(receivedEvents[0].type).toBe(DomainWorkerEventType.DOMAIN_REGISTRATION_STARTED);
-    expect(receivedEvents[1].type).toBe(DomainWorkerEventType.DOMAIN_REGISTRATION_COMPLETE);
+    expect(receivedEvents[0].type).toBe(DomainWorkerEventType.JOB_STARTED);
+    expect(receivedEvents[1].type).toBe(DomainWorkerEventType.JOB_COMPLETED);
     expect(receivedEvents[2].type).toBe(GitHubWorkerEventType.ORG_VERIFICATION_STARTED);
     expect(receivedEvents[3].type).toBe(CloudflareWorkerEventType.ZONE_CREATION_STARTED);
     expect(receivedEvents[4].type).toBe(GitHubWorkerEventType.ORG_VERIFICATION_COMPLETE);
@@ -295,6 +303,7 @@ describe('Provisioning Pipeline Integration', () => {
       userId: 'user-123',
       projectId: 'proj-456',
       domain: 'example.com',
+      services: ['domain', 'github', 'cloudflare'], // Services to provision
       namecheapApiUser: 'test',
       namecheapApiKey: 'test',
       namecheapUsername: 'test',
