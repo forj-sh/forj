@@ -119,6 +119,19 @@ export function createSSEClient(options: SSEClientOptions): {
           onComplete(data.data);
           close();
         }
+
+        // Handle error event (provisioning failure)
+        if (data.type === 'error') {
+          const errorMessage = (typeof data.error === 'string' && data.error) ? data.error : 'Provisioning failed';
+          const errorCode = (typeof data.code === 'string' && data.code) ? data.code : 'UNKNOWN_ERROR';
+          const provisioningError = new ForjError(errorMessage, errorCode);
+
+          if (onError) {
+            onError(provisioningError);
+          }
+
+          close();
+        }
       } catch (error) {
         logger.error(`Failed to parse SSE event: ${error}`);
       }
