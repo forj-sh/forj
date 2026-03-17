@@ -1,0 +1,50 @@
+# Dependencies (installed inside container)
+node_modules
+
+# Build artifacts
+dist
+build
+out
+
+# Git
+.git
+.gitignore
+
+# Environment files
+.env
+.env.*
+
+# IDE
+.vscode
+.idea
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docs and non-essential files
+project-docs
+*.md
+!packages/*/package.json
+LICENSE
+
+# Testing
+coverage
+*.lcov
+.nyc_output
+
+# Vercel / Turbo
+.vercel
+.turbo
+
+# Railway local state
+.railway
+
+# Landing page (not needed for API/workers builds)
+packages/landing
+
+# CLI (not needed for API/workers builds)
+packages/cli
+
+# Redis dump
+dump.rdb
