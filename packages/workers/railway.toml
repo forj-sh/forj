@@ -4,6 +4,7 @@
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "packages/workers/Dockerfile"
+dockerContext = "../.."
 watchPatterns = ["packages/shared/**", "packages/workers/**"]
 
 [deploy]

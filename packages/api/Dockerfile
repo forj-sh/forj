@@ -1,5 +1,5 @@
 # Railway Dockerfile for Forj API (Monorepo)
-# Handles workspace dependencies correctly
+# Build context should be set to monorepo root (../../ from service directory)
 
 FROM node:18-slim
 
