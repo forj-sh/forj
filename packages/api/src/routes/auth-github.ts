@@ -1,36 +1,75 @@
 /**
  * GitHub authentication routes
  *
- * Implements OAuth Device Flow (RFC 8628)
+ * **V1 PRIMARY AUTHENTICATION METHOD**
+ *
+ * Implements OAuth Device Flow (RFC 8628) as the ONLY authentication method for V1.
+ * There is no separate signup flow - GitHub authorization creates the user account.
+ *
+ * V1 DESIGN DECISION:
+ * - No email/password auth
+ * - No separate "create account" flow
+ * - GitHub identity IS the Forj identity
+ * - User ID format: github:<numeric_id> (e.g., github:583231 - immutable GitHub user ID)
+ * - Username stored separately (can change without orphaning account)
+ * - This means users MUST have a GitHub account to use Forj V1
+ *
+ * NEW USER ONBOARDING FLOW (V1 - `forj init` or `forj login`):
+ * 1. Unauthenticated CLI calls POST /auth/github/device (public, no auth required)
+ * 2. API returns device_code, user_code, and verification_uri
+ * 3. CLI opens browser to github.com/login/device
+ * 4. User enters user_code and authorizes Forj app (scopes: repo read:org)
+ * 5. CLI polls POST /auth/github/poll with device_code (public, no auth required)
+ * 6. API exchanges device_code for GitHub access token via GitHub's OAuth API
+ * 7. API fetches user info from GitHub (username, email)
+ * 8. API creates user record in database (first-time users) OR updates existing record
+ * 9. API stores encrypted GitHub token for GitHub API operations (repo creation, etc.)
+ * 10. API generates JWT token with userId and email
+ * 11. API returns { status: 'authorized', token: '<jwt>', user: { id, email }, username }
+ * 12. CLI stores JWT in ~/.forj/config.json
+ * 13. CLI uses JWT for all subsequent authenticated API calls
+ *
+ * CLI INTEGRATION NOTES:
+ * - CLI should call FORJ API endpoints (/auth/github/device, /auth/github/poll)
+ * - CLI should NOT call GitHub OAuth endpoints directly
+ * - CLI stores the JWT token returned in the poll response
+ * - JWT token is used for all authenticated API requests (Authorization: Bearer <token>)
+ * - GitHub access token is stored server-side (encrypted) and never sent to CLI
  *
  * TOKEN ROTATION WORKFLOW:
- * 1. User calls POST /auth/github/device to initiate new device flow
- * 2. User authorizes at github.com/login/device with provided user code
- * 3. Client polls POST /auth/github/poll with device code
- * 4. Server gets new access token and stores it (replaces old token)
- * 5. Old token is implicitly superseded (GitHub doesn't support explicit revocation)
+ * - Same flow as initial auth (endpoints are idempotent)
+ * - Replaces stored GitHub token with new one
+ * - Returns a new JWT token
  *
  * To completely remove credentials:
- * - Call DELETE /auth/github to clear stored token
- * - User can revoke access at github.com/settings/applications
+ * - Call DELETE /auth/github to clear stored GitHub token (requires JWT auth)
+ * - User can revoke app access at github.com/settings/applications
+ * - CLI can delete ~/.forj/config.json to clear JWT
  *
- * ENCRYPTION: Stack 7 - Service-specific encryption keys
- * - Tokens are encrypted using AES-256-GCM before storage
- * - Encryption key: GITHUB_ENCRYPTION_KEY environment variable (GitHub-specific)
+ * ENCRYPTION:
+ * - GitHub access tokens encrypted using AES-256-GCM before storage
+ * - Encryption key: GITHUB_ENCRYPTION_KEY environment variable
  * - Format: salt:iv:authTag:ciphertext (all base64)
- * - Security isolation: Separate key from Cloudflare credentials
+ * - Separate key from Cloudflare credentials (security isolation)
  *
  * SECURITY:
+ * - /auth/github/device and /auth/github/poll are PUBLIC endpoints (no JWT required)
+ * - IP rate limiting prevents abuse (rate-limit-config.ts)
+ * - GitHub OAuth flow provides authentication (device code is one-time nonce)
  * - Server enforces scopes (repo read:org) - client cannot escalate privileges
- * - User ID extracted from JWT - no IDOR vulnerability
- * - Tokens never logged or exposed in responses
+ * - User ID derived from GitHub username (prevents impersonation)
+ * - JWT tokens issued only after successful GitHub authorization
+ * - GitHub access tokens never exposed to CLI (stored encrypted server-side)
+ * - All secrets sanitized in error logs
  */
 
 import type { FastifyInstance } from 'fastify';
+import { SignJWT } from 'jose';
 import { GitHubDeviceFlow } from '../lib/github-oauth.js';
 import { encrypt, decrypt, isValidEncryptionKey } from '../lib/encryption.js';
-import { db } from '../lib/database.js';
+import { db, upsertUser } from '../lib/database.js';
 import { requireAuth } from '../middleware/auth.js';
+import { ipRateLimit } from '../middleware/ip-rate-limit.js';
 
 interface GitHubDeviceInitRequest {
   scope?: string;
@@ -52,12 +91,20 @@ interface GitHubPollResponse {
   status: 'pending' | 'slow_down' | 'expired' | 'denied' | 'authorized';
   username?: string;
   message?: string;
+  token?: string; // JWT token returned on successful authorization
+  user?: {
+    id: string;
+    email: string;
+  };
 }
 
 interface GitHubStatusResponse {
   hasToken: boolean;
   username?: string;
 }
+
+// JWT token expiration (1 year for primary authentication tokens)
+const ONE_YEAR_IN_SECONDS = 365 * 24 * 60 * 60;
 
 /**
  * GitHub authentication routes
@@ -78,16 +125,21 @@ export async function githubAuthRoutes(server: FastifyInstance) {
   /**
    * POST /auth/github/device
    * Initiate GitHub OAuth Device Flow
+   *
+   * PUBLIC ENDPOINT - No authentication required
+   * This is the entry point for new user onboarding
    */
   server.post<{ Body: GitHubDeviceInitRequest }>(
     '/auth/github/device',
     {
-      preHandler: requireAuth,
+      preHandler: [
+        ipRateLimit('auth-github-device', {
+          maxRequests: 20, // Allow 20 device flow initiations per hour per IP
+          windowMs: 60 * 60 * 1000, // 1 hour window
+        }),
+      ],
     },
     async (request, reply) => {
-      // Get userId from authenticated user (no IDOR)
-      const userId = request.user!.userId;
-
       // Enforce server-side scope to prevent privilege escalation
       const scope = 'repo read:org';
 
@@ -95,12 +147,7 @@ export async function githubAuthRoutes(server: FastifyInstance) {
         const client = getGitHubClient();
         const deviceCode = await client.initiateDeviceFlow(scope);
 
-        request.log.info(
-          {
-            userId,
-          },
-          'GitHub device flow initiated'
-        );
+        request.log.info('GitHub device flow initiated (public endpoint)');
 
         const response: GitHubDeviceInitResponse = {
           deviceCode: deviceCode.device_code,
@@ -135,16 +182,22 @@ export async function githubAuthRoutes(server: FastifyInstance) {
   /**
    * POST /auth/github/poll
    * Poll for GitHub OAuth token
+   *
+   * PUBLIC ENDPOINT - No authentication required
+   * Creates new user account on first successful authorization
+   * Returns JWT token for authenticated API access
    */
   server.post<{ Body: GitHubPollRequest }>(
     '/auth/github/poll',
     {
-      preHandler: requireAuth,
+      preHandler: [
+        ipRateLimit('auth-github-poll', {
+          maxRequests: 200, // Allow frequent polling (5s interval for ~15 minutes = 180 requests)
+          windowMs: 15 * 60 * 1000, // 15 minute window (typical device code expiry)
+        }),
+      ],
     },
     async (request, reply) => {
-      // Get userId from authenticated user (no IDOR)
-      const userId = request.user!.userId;
-      const email = request.user!.email;
       const { deviceCode } = request.body || {};
 
       if (!deviceCode) {
@@ -169,6 +222,16 @@ export async function githubAuthRoutes(server: FastifyInstance) {
         return reply.status(500).send({
           success: false,
           error: 'Server configuration error - invalid encryption key format',
+        });
+      }
+
+      // Get JWT secret for token generation
+      const jwtSecret = process.env.JWT_SECRET;
+      if (!jwtSecret) {
+        request.log.error('JWT_SECRET not configured');
+        return reply.status(500).send({
+          success: false,
+          error: 'Server configuration error',
         });
       }
 
@@ -198,37 +261,52 @@ export async function githubAuthRoutes(server: FastifyInstance) {
         const userInfo = await client.getUserInfo(result.accessToken);
         const encryptedToken = await encrypt(result.accessToken, encryptionKey);
 
-        // Store in database (upsert user)
-        await db.query(
-          `
-          INSERT INTO users (id, email, github_token_encrypted, github_username)
-          VALUES ($1, $2, $3, $4)
-          ON CONFLICT (id)
-          DO UPDATE SET
-            github_token_encrypted = $3,
-            github_username = $4,
-            updated_at = now()
-        `,
-          [
-            userId,
-            userInfo.email || `${userInfo.login}@users.noreply.github.com`,
-            encryptedToken,
-            userInfo.login,
-          ]
-        );
+        // Generate user ID from GitHub numeric ID (immutable - survives username changes)
+        // Using numeric ID prevents orphaned accounts when users rename their GitHub username
+        const userId = `github:${userInfo.id}`;
+        const email = userInfo.email || `${userInfo.login}@users.noreply.github.com`;
+
+        // Store in database using upsertUser helper (handles COALESCE logic for token updates)
+        await upsertUser({
+          id: userId,
+          email,
+          githubTokenEncrypted: encryptedToken,
+          githubUsername: userInfo.login,
+        });
+
+        // Generate JWT token for authenticated API access (1 year expiration)
+        // CLI will store this token and use it for all subsequent authenticated requests
+        const now = Math.floor(Date.now() / 1000);
+        const secret = new TextEncoder().encode(jwtSecret);
+
+        const jwtToken = await new SignJWT({
+          userId,
+          email,
+        })
+          .setProtectedHeader({ alg: 'HS256' })
+          .setIssuedAt(now)
+          .setExpirationTime(now + ONE_YEAR_IN_SECONDS)
+          .sign(secret);
 
         request.log.info(
           {
             userId,
             githubUsername: userInfo.login,
           },
-          'GitHub token stored successfully'
+          'GitHub authorization successful - user authenticated'
         );
 
+        // Return JWT token + user info to CLI
+        // CLI stores token in ~/.forj/config.json and uses for all authenticated API calls
         const response: GitHubPollResponse = {
           status: 'authorized',
-          username: userInfo.login,
+          username: userInfo.login, // Display name (can change)
           message: 'GitHub authorization successful',
+          token: jwtToken, // CLI stores this JWT
+          user: {
+            id: userId, // github:<numeric_id> - immutable identifier
+            email,
+          },
         };
 
         return reply.send({ success: true, data: response });
