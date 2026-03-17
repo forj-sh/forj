@@ -3,8 +3,7 @@
 
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "packages/api/Dockerfile"
-dockerContext = "../.."
+dockerfilePath = "Dockerfile.api"
 watchPatterns = ["packages/shared/**", "packages/api/**"]
 
 [deploy]
