@@ -2,9 +2,9 @@
 # Service name: forj-api
 
 [build]
-builder = "NIXPACKS"
-# Build from monorepo root to access all workspaces
-buildCommand = "npm install && npm run build -w packages/shared && npm run build -w packages/api"
+builder = "DOCKERFILE"
+dockerfilePath = "packages/api/Dockerfile"
+watchPatterns = ["packages/shared/**", "packages/api/**"]
 
 [deploy]
 startCommand = "npm run start -w packages/api"

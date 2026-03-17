@@ -2,9 +2,9 @@
 # Service name: forj-workers
 
 [build]
-builder = "NIXPACKS"
-# Build from monorepo root to access all workspaces
-buildCommand = "npm install && npm run build -w packages/shared && npm run build -w packages/workers"
+builder = "DOCKERFILE"
+dockerfilePath = "packages/workers/Dockerfile"
+watchPatterns = ["packages/shared/**", "packages/workers/**"]
 
 [deploy]
 startCommand = "npm run start -w packages/workers"
