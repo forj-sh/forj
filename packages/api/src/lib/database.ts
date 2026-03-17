@@ -1,10 +1,7 @@
-import { Pool, neonConfig } from '@neondatabase/serverless';
-import ws from 'ws';
+import pg from 'pg';
+const { Pool } = pg;
 import { logger } from './logger.js';
 import type { Project, ServiceState, ServiceType } from '@forj/shared';
-
-// Configure Neon to use WebSocket for serverless environments
-neonConfig.webSocketConstructor = ws;
 
 const DATABASE_URL = process.env.DATABASE_URL;
 
@@ -13,7 +10,7 @@ if (!DATABASE_URL) {
 }
 
 /**
- * Neon Postgres connection pool
+ * Postgres connection pool
  */
 export const db = new Pool({
   connectionString: DATABASE_URL,

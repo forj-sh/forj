@@ -9,4 +9,5 @@ export default defineConfig({
   minify: false,
   target: 'node18',
   outDir: 'dist',
+  external: ['pg', 'ioredis', 'ws', '@neondatabase/serverless'],
 });

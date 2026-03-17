@@ -5,13 +5,10 @@
  * from background workers.
  */
 
-import { Pool, neonConfig } from '@neondatabase/serverless';
-import ws from 'ws';
+import pg from 'pg';
+const { Pool } = pg;
 import type { ServiceType, ServiceState } from '@forj/shared';
 import { decrypt } from './encryption.js';
-
-// Configure Neon to use WebSocket for serverless environments
-neonConfig.webSocketConstructor = ws;
 
 /**
  * Lazy-initialized database pool
