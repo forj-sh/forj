@@ -13,6 +13,7 @@ import {
   type ServiceStatusDisplay,
 } from '@forj/shared';
 import { DNSHealthChecker, type ExpectedDNSConfig } from '../lib/dns-health-checker.js';
+import { getCloudflareToken } from './auth-cloudflare.js';
 import { requireAuth } from '../middleware/auth.js';
 import { ipRateLimit } from '../middleware/ip-rate-limit.js';
 import { rateLimit } from '../middleware/rate-limit.js';
@@ -490,36 +491,67 @@ export async function projectRoutes(server: FastifyInstance) {
    * Auto-repair DNS issues by recreating missing/invalid records
    *
    * AUTHENTICATION: Requires JWT or API key
+   * AUTHORIZATION: Verify user owns this project
    * RATE LIMITING: IP-based + user-based
-   * TODO: Verify user owns this project (check user_id in database)
-   * TODO: Fetch project configuration and API token from database
+   *
+   * Cloudflare API token is fetched from encrypted storage, never from request body.
    */
   server.post<{
     Params: { id: string };
-    Body: { domain: string; zoneId: string; cloudflareApiToken: string; recordTypes?: DNSRecordType[] };
+    Body: { recordTypes?: DNSRecordType[] };
   }>(
     '/projects/:id/dns/fix',
     { preHandler: [requireAuth, ipRateLimit('projects'), rateLimit('projects')] },
     async (request, reply) => {
       const { id } = request.params;
-      const { domain, zoneId, cloudflareApiToken, recordTypes } = request.body;
+      const userId = request.user?.userId;
+      if (!userId) {
+        return reply.status(500).send({
+          success: false,
+          error: 'User ID not found after authentication',
+        });
+      }
+      const { recordTypes } = request.body || {};
 
-      // TODO: Fetch from database once project storage is implemented
-      // For now, require domain, zoneId, and cloudflareApiToken in request body for testing
-      if (!domain || !zoneId || !cloudflareApiToken) {
+      const project = await getProjectByIdAndUserId(id, userId);
+      if (!project) {
+        return reply.status(404).send({
+          success: false,
+          error: 'Project not found',
+        });
+      }
+
+      const domain = project.domain;
+      const zoneId = project.services?.cloudflare?.value;
+
+      if (!domain || !zoneId) {
         return reply.status(400).send({
           success: false,
-          error: 'Missing required fields: domain, zoneId, cloudflareApiToken',
-          message:
-            'These fields required until project database integration is complete. Example: {"domain":"example.com","zoneId":"abc123","cloudflareApiToken":"xxx"}',
+          error: 'Cloudflare DNS not provisioned for this project',
+        });
+      }
+
+      let cloudflareApiToken: string | null;
+      try {
+        cloudflareApiToken = await getCloudflareToken(userId);
+      } catch (error) {
+        request.log.error({ error, projectId: id }, 'Failed to decrypt Cloudflare token');
+        return reply.status(500).send({
+          success: false,
+          error: 'Failed to retrieve Cloudflare credentials',
+        });
+      }
+      if (!cloudflareApiToken) {
+        return reply.status(400).send({
+          success: false,
+          error: 'No Cloudflare API token found — connect Cloudflare first',
         });
       }
 
       const config: ExpectedDNSConfig = {
         domain,
         zoneId,
-        // TODO: Pull from database - this is a mock value
-        emailProvider: 'GOOGLE_WORKSPACE' as EmailProvider,
+        emailProvider: (project.services?.dns?.meta?.emailProvider as EmailProvider) ?? EmailProvider.GOOGLE_WORKSPACE,
       };
 
       try {
