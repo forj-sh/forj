@@ -82,7 +82,7 @@ async function interactiveInit(
   projectName?: string,
   options: InitOptions = {}
 ): Promise<InitResult | null> {
-  logger.log(chalk.bold('\n✦ forj') + ' — project infrastructure provisioning\n');
+  logger.log(chalk.bold('\n✦ forj 鍛冶場') + ' — project infrastructure provisioning\n');
 
   // Step 1: Get project name
   const name = projectName || (await promptProjectName());

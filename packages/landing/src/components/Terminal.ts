@@ -19,7 +19,7 @@ export function Terminal(): HTMLElement {
         <div class="terminal-body">
           <div class="t-line">
             <span class="t-prompt">$</span>
-            <span class="t-cmd">npx forj init acme</span>
+            <span class="t-cmd">npx forj-cli init acme</span>
           </div>
           <br>
           <div>&nbsp;&nbsp;<span class="t-dim">✦ forj 鍛冶場 — project infrastructure provisioning</span></div>
