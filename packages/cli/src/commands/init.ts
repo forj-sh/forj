@@ -16,6 +16,14 @@ import { streamProvisioningProgress } from '../lib/sse-client.js';
 import { withErrorHandling, ForjError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 import { formatDuration } from '../utils/formatters.js';
+import {
+  generatePhase1,
+  generatePhase2,
+  getTier,
+  sortResults,
+  sanitizeName,
+  type DomainResult,
+} from '../lib/domain-suggestions.js';
 
 interface InitOptions {
   domain?: string;
@@ -52,8 +60,25 @@ function ensureGitignore(): void {
   }
 }
 
+/** Response shape from the Namecheap /domains/check endpoint */
+interface ApiDomainResult {
+  domain: string;
+  available: boolean;
+  isPremium?: boolean;
+  price: number;
+  retailPrice?: number;
+  icannFee?: number;
+  registrar?: string;
+}
+
+/** Minimum available results before triggering Phase 2 */
+const PHASE2_THRESHOLD = 2;
+
 /**
- * Check domain availability via API
+ * Check domain availability via API using two-phase suggestion.
+ *
+ * Phase 1: exact name on premium TLDs + top .com variants (~7 domains)
+ * Phase 2: secondary TLDs + more variants (only if Phase 1 yields <2 available)
  */
 async function checkDomainAvailability(
   projectName: string
@@ -62,13 +87,60 @@ async function checkDomainAvailability(
   spinner.start();
 
   try {
-    const result = await api.post<{ domains: DomainOption[] }>(
+    // Phase 1: high-value candidates
+    const phase1Candidates = generatePhase1(projectName);
+    if (phase1Candidates.length === 0) {
+      spinner.fail('Invalid project name for domain generation');
+      return [];
+    }
+
+    const phase1Raw = await api.post<{ domains: ApiDomainResult[] }>(
       '/domains/check',
-      { query: projectName }
+      { domains: phase1Candidates }
     );
 
+    const baseName = sanitizeName(projectName);
+
+    const mapResults = (domains: ApiDomainResult[]): DomainResult[] =>
+      (domains || []).map((d) => ({
+        name: d.domain,
+        price: d.price.toFixed(2),
+        available: d.available,
+        tier: getTier(d.domain, baseName),
+        registrar: d.registrar,
+      }));
+
+    let allResults = mapResults(phase1Raw.domains);
+
+    const availableCount = allResults.filter((d) => d.available).length;
+
+    // Phase 2: expand if not enough available
+    if (availableCount < PHASE2_THRESHOLD) {
+      const phase2Candidates = generatePhase2(projectName);
+
+      if (phase2Candidates.length > 0) {
+        spinner.text = 'Expanding search...';
+
+        const phase2Raw = await api.post<{ domains: ApiDomainResult[] }>(
+          '/domains/check',
+          { domains: phase2Candidates }
+        );
+
+        allResults = [...allResults, ...mapResults(phase2Raw.domains)];
+      }
+    }
+
+    // Sort by tier and availability
+    const sorted = sortResults(allResults, baseName);
+
     spinner.succeed('Domain availability checked');
-    return result.domains;
+
+    // Map to DomainOption for the prompt
+    return sorted.map((d) => ({
+      name: d.name,
+      price: d.price,
+      available: d.available,
+    }));
   } catch (error) {
     spinner.fail('Failed to check domain availability');
     throw error;
