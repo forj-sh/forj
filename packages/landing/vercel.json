@@ -7,6 +7,14 @@
   "devCommand": "npm run dev",
   "rewrites": [
     {
+      "source": "/success",
+      "destination": "/success.html"
+    },
+    {
+      "source": "/cancel",
+      "destination": "/cancel.html"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

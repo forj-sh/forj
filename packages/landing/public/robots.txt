@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /success
+Disallow: /cancel
+
+Sitemap: https://forj.sh/sitemap.xml
