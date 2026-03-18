@@ -235,7 +235,7 @@
         },
         {
           "name": "check_dns_health",
-          "description": "Check DNS health for a project's domain",
+          "description": "Check DNS health for a project's domain. Domain and Cloudflare zone are loaded from the project record.",
           "endpoint": "/projects/{id}/dns/health",
           "method": "GET",
           "parameters": {
@@ -243,22 +243,12 @@
               "type": "string",
               "description": "Project ID",
               "required": true
-            },
-            "domain": {
-              "type": "string",
-              "description": "Domain to check",
-              "required": true
-            },
-            "zoneId": {
-              "type": "string",
-              "description": "Cloudflare zone ID",
-              "required": true
             }
           }
         },
         {
           "name": "fix_dns_issues",
-          "description": "Auto-repair DNS issues by recreating missing/invalid records",
+          "description": "Auto-repair DNS issues by recreating missing/invalid records. Cloudflare token is fetched from encrypted storage.",
           "endpoint": "/projects/{id}/dns/fix",
           "method": "POST",
           "parameters": {
@@ -267,20 +257,13 @@
               "description": "Project ID",
               "required": true
             },
-            "domain": {
-              "type": "string",
-              "description": "Domain to fix",
-              "required": true
-            },
-            "zoneId": {
-              "type": "string",
-              "description": "Cloudflare zone ID",
-              "required": true
-            },
-            "cloudflareApiToken": {
-              "type": "string",
-              "description": "Cloudflare API token",
-              "required": true
+            "recordTypes": {
+              "type": "array",
+              "description": "Specific record types to fix (e.g., MX, SPF, DKIM, DMARC). If omitted, fixes all issues.",
+              "required": false,
+              "items": {
+                "type": "string"
+              }
             }
           }
         }

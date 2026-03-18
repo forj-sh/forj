@@ -265,33 +265,27 @@ Claude, what's the status of project proj_abc-123?
 
 #### `check_dns_health`
 
-Check DNS health for a project's domain.
+Check DNS health for a project's domain. Domain and Cloudflare zone ID are loaded automatically from the project record.
 
 **Parameters**:
 - `id` (string, required): Project ID
-- `domain` (string, required): Domain to check
-- `zoneId` (string, required): Cloudflare zone ID
 
 **Example Usage**:
 ```
-Claude, check the DNS health for my project's domain example.com
+Claude, check the DNS health for project proj_abc-123
 ```
 
 **Rate Limits**: 30 requests/hour (user) + 20 requests/hour (IP)
-
-**Note**: Parameters `domain` and `zoneId` should be passed as query parameters for GET requests.
 
 ---
 
 #### `fix_dns_issues`
 
-Auto-repair DNS issues by recreating missing/invalid records.
+Auto-repair DNS issues by recreating missing/invalid records. The Cloudflare API token is fetched from encrypted storage — no credentials need to be passed.
 
 **Parameters**:
 - `id` (string, required): Project ID
-- `domain` (string, required): Domain to fix
-- `zoneId` (string, required): Cloudflare zone ID
-- `cloudflareApiToken` (string, required): Cloudflare API token
+- `recordTypes` (array of strings, optional): Specific record types to fix (e.g., "MX", "SPF", "DKIM", "DMARC"). If omitted, fixes all issues.
 
 **Example Usage**:
 ```
@@ -378,7 +372,7 @@ The old key is now invalid and cannot be used.
 User: Claude, my emails aren't working for project proj_startup_001.
       Can you check the DNS?
 
-Claude: [calls check_dns_health tool]
+Claude: [calls check_dns_health with id="proj_startup_001"]
 
 I found several DNS issues for your domain startup.io:
 - ❌ MX records: Missing
@@ -390,7 +384,7 @@ Would you like me to auto-fix these issues?
 
 User: Yes, please fix them
 
-Claude: [calls fix_dns_issues tool]
+Claude: [calls fix_dns_issues with id="proj_startup_001"]
 
 ✅ DNS issues fixed!
 
@@ -400,6 +394,10 @@ Fixed 3 records:
 - Created DMARC record with recommended policy
 
 Your email should work within 5-10 minutes (DNS propagation time).
+```
+
+Note: No credentials are needed — the Cloudflare API token is fetched
+from encrypted storage using the authenticated user's stored credentials.
 ```
 
 ## Security Considerations
