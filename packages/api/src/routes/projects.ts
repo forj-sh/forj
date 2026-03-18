@@ -365,8 +365,8 @@ export async function projectRoutes(server: FastifyInstance) {
    * Add service to project - returns success
    *
    * AUTHENTICATION: Requires JWT or API key
+   * AUTHORIZATION: Verify user owns this project
    * RATE LIMITING: IP-based + user-based
-   * TODO: Verify user owns this project (check user_id in database)
    * TODO: Validate service type against allowed values
    */
   server.post<{ Params: { id: string }; Body: AddServiceRequest }>(
@@ -374,6 +374,13 @@ export async function projectRoutes(server: FastifyInstance) {
     { preHandler: [requireAuth, ipRateLimit('projects'), rateLimit('projects')] },
     async (request, reply) => {
       const { id } = request.params;
+      const userId = request.user?.userId;
+      if (!userId) {
+        return reply.status(500).send({
+          success: false,
+          error: 'User ID not found after authentication',
+        });
+      }
       const { service } = request.body;
 
       if (!service) {
@@ -383,12 +390,19 @@ export async function projectRoutes(server: FastifyInstance) {
         });
       }
 
+      const project = await getProjectByIdAndUserId(id, userId);
+      if (!project) {
+        return reply.status(404).send({
+          success: false,
+          error: 'Project not found',
+        });
+      }
+
       request.log.info({
         projectId: id,
         service,
       }, 'Add service to project');
 
-      // Use consistent ApiResponse structure (message at top-level)
       return {
         success: true,
         message: `Service '${service}' queued for provisioning`,
