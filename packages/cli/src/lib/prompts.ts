@@ -321,7 +321,7 @@ export async function promptPostDomainServices(
       checked: true,
     },
     {
-      name: `DNS + email  ${chalk.dim('MX, SPF, DKIM, DMARC via Cloudflare')}`,
+      name: `Cloudflare DNS  ${chalk.dim('Set up Cloudflare as your DNS provider')}`,
       value: 'cloudflare',
       checked: true,
     },
