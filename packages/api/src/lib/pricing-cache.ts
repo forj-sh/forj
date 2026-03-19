@@ -225,7 +225,7 @@ export class PricingCache {
    *
    * Preloads pricing for popular TLDs to reduce latency.
    */
-  async warmup(tlds: string[] = ['COM', 'NET', 'ORG', 'IO', 'CO', 'AI', 'XYZ', 'APP', 'DEV']): Promise<void> {
+  async warmup(tlds: string[] = ['COM', 'NET', 'ORG', 'IO', 'CO', 'XYZ', 'APP', 'DEV']): Promise<void> {
     this.logger.info({ tldCount: tlds.length }, `Warming up pricing cache for ${tlds.length} TLDs...`);
 
     await Promise.all(
