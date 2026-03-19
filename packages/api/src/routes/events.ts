@@ -146,10 +146,17 @@ export async function eventRoutes(server: FastifyInstance) {
           }
 
           // Close stream on completion or failure
-          if (
-            workerEvent.type === DomainWorkerEventType.JOB_COMPLETED ||
-            workerEvent.type === DomainWorkerEventType.JOB_FAILED
-          ) {
+          if (workerEvent.type === DomainWorkerEventType.JOB_COMPLETED) {
+            // Send explicit 'complete' event so CLI resolves the promise before connection closes
+            sendEvent({ type: 'complete', data: { projectId } });
+            request.log.info(
+              { projectId, eventType: workerEvent.type },
+              'SSE stream closing (job terminal state)'
+            );
+            cleanup().catch((err) => {
+              request.log.error({ err }, 'Error during SSE cleanup');
+            });
+          } else if (workerEvent.type === DomainWorkerEventType.JOB_FAILED) {
             request.log.info(
               { projectId, eventType: workerEvent.type },
               'SSE stream closing (job terminal state)'
