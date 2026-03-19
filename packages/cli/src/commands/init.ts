@@ -109,7 +109,7 @@ async function checkDomainAvailability(
     const mapResults = (domains: ApiDomainResult[]): DomainResult[] =>
       (domains || []).map((d) => ({
         name: d.domain,
-        price: d.price.toFixed(2),
+        price: (d.price + (d.icannFee || 0)).toFixed(2),
         available: d.available,
         tier: getTier(d.domain, baseName),
         registrar: d.registrar,
