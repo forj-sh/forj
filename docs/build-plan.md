@@ -1,6 +1,6 @@
 # Forj Build Plan
 
-Last updated: 2026-03-13 (Phase 6 complete - all stacks merged)
+Last updated: 2026-03-19 (Phase 7 in progress — two-phase init flow shipped)
 
 ## V1 — MVP (Core Infrastructure)
 
@@ -250,7 +250,42 @@ Last updated: 2026-03-13 (Phase 6 complete - all stacks merged)
 - Lines changed: ~500 across 15 files
 - Review method: Automated AI code review (Gemini Code Assist + GitHub Copilot) + manual verification
 
-### Phase 7: Ship
+### Phase 7: Ship ⏳ IN PROGRESS
+
+**Two-Phase Init Flow** ✅ COMPLETE (March 19, 2026, PRs #104-#106)
+
+Major restructure of `forj init` from a single-shot flow into two sequential phases. Domain registration is a paid ICANN transaction — it must complete before asking about GitHub/Cloudflare.
+
+**Phase 1 — Domain purchase:**
+1. Company name → domain candidates → batch availability check
+2. Select domain → show price
+3. Contact info (ICANN-required, with one-click WHOIS privacy option)
+4. Stripe Checkout → opens browser, CLI polls until payment confirmed
+5. Webhook triggers domain registration → CLI watches via SSE
+6. Confirm: domain is registered
+
+**Phase 2 — Service provisioning (after domain confirmed):**
+7. "What else do you want to set up?" → GitHub, Cloudflare/DNS
+8. GitHub Device Flow / Cloudflare token guided creation
+9. `POST /projects/:id/provision-services` → SSE stream
+
+**Key changes:**
+- New shared types: `ProjectCreateRequest`, `RegistrantContact`, `ContactInfoRequest`, `ProjectPhase`, `AddServicesRequest`
+- Constants: `PROJECT_PHASE`, `STRIPE_PAYMENT_STATUS`, `PHASE1_ONLY_SERVICES`, `isValidDomain()`
+- DB migration: `phase`, `contact_info` (JSONB), `stripe_session_id`, `stripe_payment_status`, `use_whois_privacy` columns with CHECK constraints
+- New API endpoints: `POST /projects/create`, `POST /projects/:id/contact-info`, `POST /projects/:id/provision-services`
+- Stripe webhook `handleCheckoutCompleted` now reads stored contact info (fixes critical TODO with hardcoded placeholders)
+- CLI: new `promptContactInfo()`, `promptPostDomainServices()`, `openCheckoutAndWaitForPayment()`
+- `--skip-payment` flag for dev testing (server-side endpoint gated to non-production)
+- Non-interactive mode: `--whois-privacy` + `--services` flags, no prompts
+- DNS auto-includes Cloudflare when requested (dependency enforcement)
+- Old `POST /projects/init` kept as deprecated backward-compat
+
+**Stripe Webhook Infrastructure** ✅ FIXED (March 19, 2026, PRs #105-#106)
+- Installed `fastify-raw-body@4` (v5 requires Fastify 5, project uses Fastify 4)
+- Registered in `server.ts` with `{ runFirst: true, encoding: false, global: false }`
+- Only `/webhooks/stripe` route opts in via `config.rawBody = true`
+- Without this, all Stripe webhooks returned 400 "raw body missing"
 
 **Monitoring & Observability** ✅ STARTED (March 14, 2026)
 - ✅ Sentry error tracking configured (API, Workers, CLI)
@@ -262,11 +297,14 @@ Last updated: 2026-03-13 (Phase 6 complete - all stacks merged)
 - [ ] Log aggregation (Datadog, Logtail)
 
 **Pre-Launch Validation**
-- [ ] End-to-end testing: `forj init` → domain check → provisioning → credentials
+- [ ] Run DB migration on production (`npm run db:migrate -w packages/api`)
+- [ ] Configure Stripe webhook in dashboard → `https://<api-host>/webhooks/stripe`
+- [ ] End-to-end testing: `forj init` → domain check → payment → domain registration → services
 - [ ] GitHub OAuth Device Flow test (real GitHub App)
 - [ ] Cloudflare zone creation + DNS wiring test
 - [ ] API key authentication and rate limiting stress test
 - [ ] Penetration testing (focus on credential handoff flow)
+- [ ] Publish `forj-cli` to npm
 
 **Launch Preparation**
 - [ ] Landing page update + CLI demo GIF
@@ -320,6 +358,14 @@ Last updated: 2026-03-13 (Phase 6 complete - all stacks merged)
 
 Note: No Cloudflare OAuth client ID/secret needed — users provide their own API token via guided creation flow.
 
+### Phase 7 (New)
+
+| Variable | Description | How to get |
+|----------|-------------|------------|
+| `GITHUB_ENCRYPTION_KEY` | Key for encrypting stored GitHub access tokens | `openssl rand -base64 32` |
+
+Note: `GITHUB_ENCRYPTION_KEY` was added in Phase 6 Audit (PR #88) for service-specific key isolation. Both encryption keys are now required for the two-phase init flow since credentials are decrypted during Phase 2 provisioning.
+
 ---
 
 ## Security Status
@@ -346,6 +392,10 @@ Note: No Cloudflare OAuth client ID/secret needed — users provide their own AP
 | **API key rotation implementation bugs** | ✅ Fixed (Phase 6 Audit, PR #86) |
 | **IP spoofing via forged proxy headers** | ✅ Fixed (Phase 6 Audit, PR #87) |
 | **Insecure example encryption keys** | ✅ Fixed (Phase 6 Audit, PR #88) |
+| **Hardcoded contact info in domain registration** | ✅ Fixed (Phase 7, PR #104) |
+| **Stripe webhook raw body missing** | ✅ Fixed (Phase 7, PRs #105-#106) |
+| **Phase 2 endpoint allows re-registering domain** | ✅ Fixed (Phase 7, PR #104 — `PHASE1_ONLY_SERVICES` block) |
+| **Webhook project ID mismatch** | ✅ Fixed (Phase 7, PR #104 — session ID + project ID cross-check) |
 
 ### Remaining (Pre-Launch)
 

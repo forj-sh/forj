@@ -1,8 +1,8 @@
 # Production Deployment Guide
 
-**Last Updated**: March 11, 2026
+**Last Updated**: March 19, 2026
 **Target Environment**: Railway / Render / Fly.io
-**Prerequisites**: Phase 5 complete, security review passed
+**Prerequisites**: Phase 6 complete, security review passed, two-phase init flow merged
 
 ---
 
@@ -221,6 +221,18 @@ psql $DATABASE_URL -c "\dt"
 #  public | audit_log       | table | postgres
 #  public | credentials     | table | postgres
 ```
+
+**Migration 005 (Two-Phase Init Flow)**: Adds `phase`, `contact_info`, `stripe_session_id`, `stripe_payment_status`, `use_whois_privacy` columns to `projects` table. Includes CHECK constraints on `phase` and `stripe_payment_status`. Required for `POST /projects/create` and the Stripe webhook domain registration flow.
+
+### 5. Stripe Webhook Configuration
+
+After deploying the API, configure the Stripe webhook endpoint:
+
+1. Go to [Stripe Dashboard → Developers → Webhooks](https://dashboard.stripe.com/webhooks)
+2. Add endpoint: `https://<your-api-host>/webhooks/stripe`
+3. Select events: `checkout.session.completed`
+4. Copy the signing secret → set as `STRIPE_WEBHOOK_SECRET` env var
+5. Verify: `curl -X POST https://<your-api-host>/webhooks/stripe` should return 400 "Missing Stripe signature header" (not 404)
 
 ---
 
