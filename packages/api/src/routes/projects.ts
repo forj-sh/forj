@@ -114,38 +114,32 @@ export async function projectRoutes(server: FastifyInstance) {
           });
         }
 
-        // Only require encryption key when we actually need to decrypt tokens
-        const encryptionKey = process.env.CLOUDFLARE_ENCRYPTION_KEY;
-        if (!encryptionKey) {
-          request.log.error('CLOUDFLARE_ENCRYPTION_KEY not configured');
-          return reply.status(500).send({
-            success: false,
-            error: 'Server encryption not configured',
-          });
-        }
-
-        // Decrypt user credentials
+        // Decrypt user credentials using service-specific encryption keys
         if (user.cloudflareTokenEncrypted && services.includes('cloudflare')) {
+          const cfKey = process.env.CLOUDFLARE_ENCRYPTION_KEY;
+          if (!cfKey) {
+            request.log.error('CLOUDFLARE_ENCRYPTION_KEY not configured');
+            return reply.status(500).send({ success: false, error: 'Server encryption not configured' });
+          }
           try {
-            cloudflareToken = await decrypt(user.cloudflareTokenEncrypted, encryptionKey);
+            cloudflareToken = await decrypt(user.cloudflareTokenEncrypted, cfKey);
           } catch (error) {
             request.log.error(error, 'Failed to decrypt Cloudflare token');
-            return reply.status(500).send({
-              success: false,
-              error: 'Failed to decrypt Cloudflare credentials',
-            });
+            return reply.status(500).send({ success: false, error: 'Failed to decrypt Cloudflare credentials' });
           }
         }
 
         if (user.githubTokenEncrypted && services.includes('github')) {
+          const ghKey = process.env.GITHUB_ENCRYPTION_KEY;
+          if (!ghKey) {
+            request.log.error('GITHUB_ENCRYPTION_KEY not configured');
+            return reply.status(500).send({ success: false, error: 'Server encryption not configured' });
+          }
           try {
-            githubToken = await decrypt(user.githubTokenEncrypted, encryptionKey);
+            githubToken = await decrypt(user.githubTokenEncrypted, ghKey);
           } catch (error) {
             request.log.error(error, 'Failed to decrypt GitHub token');
-            return reply.status(500).send({
-              success: false,
-              error: 'Failed to decrypt GitHub credentials',
-            });
+            return reply.status(500).send({ success: false, error: 'Failed to decrypt GitHub credentials' });
           }
         }
       }
