@@ -185,8 +185,9 @@ export class NamecheapClient {
 
     const response = await this.executeRequest('namecheap.users.getPricing', params);
 
-    // Parse nested pricing structure
-    const productTypes = normalizeArray((response.data as any).ProductType);
+    // Parse nested pricing structure (Namecheap wraps data in UserGetPricingResult)
+    const pricingResult = (response.data as any)?.UserGetPricingResult;
+    const productTypes = normalizeArray(pricingResult?.ProductType);
 
     const pricingResults: import('./types.js').TldPricing[] = [];
 

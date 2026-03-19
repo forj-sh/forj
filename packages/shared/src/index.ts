@@ -101,6 +101,11 @@ export {
   type PositionUpdateEvent,
   type MetricsUpdateEvent,
   type QueueEventData,
+  parseResponse,
+  normalizeArray,
+  parseBoolean,
+  parseNumber,
+  getAttribute,
 } from './namecheap/index.js';
 
 // Domain worker types

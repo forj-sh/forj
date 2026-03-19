@@ -34,6 +34,15 @@ import {
   splitDomain,
   WORKER_LOCK_DURATION,
   WORKER_LOCK_RENEW_TIME,
+  type DomainCheckResult,
+  type DomainCreateResult,
+  type DomainRenewResult,
+  type DomainInfo,
+  type NamecheapApiResponse,
+  normalizeArray,
+  parseBoolean,
+  parseNumber,
+  getAttribute,
 } from '@forj/shared';
 import { updateProjectService } from './database.js';
 
@@ -55,6 +64,86 @@ function sanitizeErrorMessage(error: unknown): string {
   message = message.replace(/apikey=[^&\s]+/gi, 'apikey=***REDACTED***');
 
   return message;
+}
+
+/**
+ * Parse Namecheap domain check response into structured results
+ */
+function parseDomainCheckResponse(response: NamecheapApiResponse<any>): DomainCheckResult[] {
+  const rawResults = normalizeArray((response.data as any)?.DomainCheckResult);
+  return rawResults.map((result: any) => ({
+    domain: getAttribute(result, 'Domain') || '',
+    available: parseBoolean(getAttribute(result, 'Available')),
+    isPremium: parseBoolean(getAttribute(result, 'IsPremiumName')),
+    premiumRegistrationPrice: parseNumber(getAttribute(result, 'PremiumRegistrationPrice')),
+    premiumRenewalPrice: parseNumber(getAttribute(result, 'PremiumRenewalPrice')),
+    icannFee: parseNumber(getAttribute(result, 'IcannFee')),
+    errorNo: getAttribute(result, 'ErrorNo') || '0',
+    description: getAttribute(result, 'Description') || '',
+  }));
+}
+
+function parseDomainCreateResponse(response: NamecheapApiResponse<any>): DomainCreateResult {
+  const rawResult = (response.data as any)?.DomainCreateResult;
+  if (!rawResult) {
+    throw new Error('Invalid Namecheap response: DomainCreateResult missing');
+  }
+
+  return {
+    domain: getAttribute(rawResult, 'Domain') || '',
+    registered: parseBoolean(getAttribute(rawResult, 'Registered')),
+    chargedAmount: parseNumber(getAttribute(rawResult, 'ChargedAmount')),
+    domainId: parseNumber(getAttribute(rawResult, 'DomainID')),
+    orderId: parseNumber(getAttribute(rawResult, 'OrderID')),
+    transactionId: parseNumber(getAttribute(rawResult, 'TransactionID')),
+    whoisguardEnabled: parseBoolean(getAttribute(rawResult, 'WhoisguardEnable')),
+    nonRealTimeDomain: parseBoolean(getAttribute(rawResult, 'NonRealTimeDomain')),
+  };
+}
+
+function parseDomainRenewResponse(response: NamecheapApiResponse<any>): DomainRenewResult {
+  const rawResult = (response.data as any)?.DomainRenewResult;
+  if (!rawResult) {
+    throw new Error('Invalid Namecheap response: DomainRenewResult missing');
+  }
+
+  return {
+    domainName: getAttribute(rawResult, 'DomainName') || '',
+    domainId: parseNumber(getAttribute(rawResult, 'DomainID')),
+    renewed: parseBoolean(getAttribute(rawResult, 'Renew')),
+    chargedAmount: parseNumber(getAttribute(rawResult, 'ChargedAmount')),
+    orderId: parseNumber(getAttribute(rawResult, 'OrderID')),
+    transactionId: parseNumber(getAttribute(rawResult, 'TransactionID')),
+  };
+}
+
+function parseSetNameserversResponse(response: NamecheapApiResponse<any>): boolean {
+  const rawResult = (response.data as any)?.DomainDNSSetCustomResult;
+  if (!rawResult) {
+    throw new Error('Invalid Namecheap response: DomainDNSSetCustomResult missing');
+  }
+  return parseBoolean(getAttribute(rawResult, 'Updated'));
+}
+
+function parseDomainInfoResponse(response: NamecheapApiResponse<any>): DomainInfo {
+  const rawResult = (response.data as any)?.DomainGetInfoResult;
+  if (!rawResult) {
+    throw new Error('Invalid Namecheap response: DomainGetInfoResult missing');
+  }
+
+  const status = getAttribute(rawResult, 'Status');
+  if (!status) {
+    throw new Error('API response missing required Status field');
+  }
+
+  return {
+    status: status as DomainInfo['status'],
+    id: parseNumber(getAttribute(rawResult, 'ID')),
+    domainName: getAttribute(rawResult, 'DomainName') || '',
+    ownerName: getAttribute(rawResult, 'OwnerName') || '',
+    isOwner: parseBoolean(getAttribute(rawResult, 'IsOwner')),
+    isPremium: parseBoolean(getAttribute(rawResult, 'IsPremium')),
+  };
 }
 
 /**
@@ -237,15 +326,15 @@ export class DomainWorker {
     data.updatedAt = Date.now();
 
     // Check domains via priority queue (executes API call with rate limiting)
-    const checkResults = await this.requestQueue.submit<any>(
+    const checkResponse = await this.requestQueue.submit<NamecheapApiResponse<any>>(
       'namecheap.domains.check',
       { DomainList: data.domains.join(',') },
       RequestPriority.INTERACTIVE,
       data.userId
     );
 
-    // Update job data with results
-    data.results = checkResults;
+    // Update job data with parsed results
+    data.results = parseDomainCheckResponse(checkResponse);
     data.status = DomainJobStatus.COMPLETE;
     data.updatedAt = Date.now();
 
@@ -279,14 +368,15 @@ export class DomainWorker {
     });
 
     // Route availability check through queue
-    const checkResult = await this.requestQueue.submit<any>(
+    const checkResponse = await this.requestQueue.submit<NamecheapApiResponse<any>>(
       'namecheap.domains.check',
       { DomainList: data.domainName },
       RequestPriority.CRITICAL,
       data.userId
     );
 
-    if (!checkResult[0]?.available) {
+    const parsedCheck = parseDomainCheckResponse(checkResponse);
+    if (!parsedCheck[0]?.available) {
       data.status = DomainJobStatus.UNAVAILABLE;
       data.error = `Domain ${data.domainName} is not available`;
       throw new Error(data.error);
@@ -364,13 +454,14 @@ export class DomainWorker {
       registerParams.PromotionCode = data.promotionCode;
     }
 
-    const registerResult = await this.requestQueue.submit<any>(
+    const registerResponse = await this.requestQueue.submit<NamecheapApiResponse<any>>(
       'namecheap.domains.create',
       registerParams,
       RequestPriority.CRITICAL,
       data.userId
     );
 
+    const registerResult = parseDomainCreateResponse(registerResponse);
     data.result = registerResult;
     await job.updateProgress(75);
 
@@ -445,14 +536,14 @@ export class DomainWorker {
       params.PromotionCode = data.promotionCode;
     }
 
-    const result = await this.requestQueue.submit<any>(
+    const renewResponse = await this.requestQueue.submit<NamecheapApiResponse<any>>(
       'namecheap.domains.renew',
       params,
       RequestPriority.CRITICAL,
       data.userId
     );
 
-    data.result = result;
+    data.result = parseDomainRenewResponse(renewResponse);
     data.status = DomainJobStatus.COMPLETE;
     data.updatedAt = Date.now();
 
@@ -473,7 +564,7 @@ export class DomainWorker {
     data.updatedAt = Date.now();
 
     const { sld, tld } = splitDomain(data.domainName);
-    const updated = await this.requestQueue.submit<any>(
+    const updateResponse = await this.requestQueue.submit<NamecheapApiResponse<any>>(
       'namecheap.domains.dns.setCustom',
       {
         SLD: sld,
@@ -484,6 +575,7 @@ export class DomainWorker {
       data.userId
     );
 
+    const updated = parseSetNameserversResponse(updateResponse);
     data.result = { updated };
     data.status = DomainJobStatus.COMPLETE;
     data.updatedAt = Date.now();
@@ -502,14 +594,14 @@ export class DomainWorker {
     const data = job.data;
 
     // Get domain info via queue (BACKGROUND priority - monitoring/status check)
-    const result = await this.requestQueue.submit<any>(
+    const infoResponse = await this.requestQueue.submit<NamecheapApiResponse<any>>(
       'namecheap.domains.getInfo',
       { DomainName: data.domainName },
       RequestPriority.BACKGROUND,
       data.userId
     );
 
-    data.result = result;
+    data.result = parseDomainInfoResponse(infoResponse);
     data.status = DomainJobStatus.COMPLETE;
     data.updatedAt = Date.now();
 
