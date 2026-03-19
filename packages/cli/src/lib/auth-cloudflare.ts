@@ -109,29 +109,8 @@ export async function verifyCloudflareToken(token: string): Promise<boolean> {
       return false;
     }
 
-    logger.success('Token verified successfully!');
-    logger.info(`Token ID: ${verification.id}`);
-
-    // Note: Cloudflare's verify endpoint returns permission group UUIDs, not
-    // friendly names, so we can't reliably check permissions here.
-    // The real validation happens when we call listAccounts and create zones.
-    // If the token is active, we trust the user set it up correctly.
-
-    if (false) {
-      // Placeholder — permission pre-check removed (unreliable UUID matching)
-      const { continueAnyway } = await inquirer.prompt([
-        {
-          type: 'confirm',
-          name: 'continueAnyway',
-          message: 'Token may have insufficient permissions. Continue anyway?',
-          default: false,
-        },
-      ]);
-
-      if (!continueAnyway) {
-        return false;
-      }
-    }
+    logger.success('This API Token is valid and active');
+    logger.dim(`Token ID: ${verification.id}`);
 
     return true;
   } catch (error) {
