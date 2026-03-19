@@ -1,7 +1,7 @@
 /**
  * Redis-backed sliding window rate limiter for Namecheap API
  *
- * Reference: project-docs/namecheap-integration-spec.md Section 4.5
+ * Reference: docs/namecheap-integration.md Section 4.5
  *
  * Namecheap enforces ~20 API requests per minute. This rate limiter uses
  * a Redis sorted set to track requests in a sliding 60-second window.

@@ -138,7 +138,7 @@ The script checks for existing alerts by name before creating new ones. You can 
 
 4. **Update documentation:**
    - Mark alert configuration tasks as complete in CLAUDE.md
-   - Update SECURITY-REVIEW.md with alert confirmation
+   - Update docs/security-review.md with alert confirmation
 
 ### Alert Tuning
 

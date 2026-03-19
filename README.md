@@ -1,83 +1,88 @@
 # forj 鍛冶場
 
-**Project infrastructure provisioning CLI — One command. Production-ready infrastructure.**
+**One command. Production-ready infrastructure.**
 
-`npx forj-cli init my-startup` provisions domain, GitHub repos, Cloudflare DNS, and automatically wires all DNS records (MX, SPF, DKIM, DMARC) in under 2 minutes.
+`npx forj-cli init my-startup` provisions a domain, GitHub repos, Cloudflare DNS zone, and wires all DNS records (MX, SPF, DKIM, DMARC) in under 2 minutes.
 
 ---
 
-## 🌐 Links
+## Links
 
 - **Website**: [forj.sh](https://forj.sh)
 - **GitHub**: [forj-sh/forj](https://github.com/forj-sh/forj)
-- **npm**: forj-cli (coming soon)
+- **npm**: [forj-cli](https://www.npmjs.com/package/forj-cli)
 
 ---
 
-## 📁 Repository Structure
+## Quick Start
 
-This is a monorepo containing all Forj components:
+```bash
+# Install globally
+npm install -g forj-cli
+
+# Or run directly
+npx forj-cli init my-startup
+```
+
+## Development
+
+```bash
+npm install
+npm run db:migrate -w packages/api
+npm run build
+
+# Start services (each in a separate terminal)
+npm run dev -w packages/api        # API server on :3000
+npm run dev -w packages/workers    # BullMQ workers
+npm run dev -w packages/cli        # CLI watch mode
+
+# Run tests
+npm test -w packages/api
+```
+
+## Repository Structure
 
 ```
 forj/
 ├── packages/
-│   ├── landing/     - Marketing landing page (Vite + TypeScript)
-│   ├── cli/         - CLI client (coming soon)
-│   ├── api/         - API server (coming soon)
-│   ├── workers/     - BullMQ workers (coming soon)
-│   └── shared/      - Shared types & utilities (coming soon)
-├── project-docs/    - Product specifications
-├── CLAUDE.md        - AI assistant context
-└── README.md        - This file
+│   ├── api/         - Fastify API server (auth, routes, Stripe, JWT)
+│   ├── cli/         - CLI client (commander, inquirer, SSE streaming)
+│   ├── workers/     - BullMQ workers (domain, GitHub, Cloudflare, DNS)
+│   ├── shared/      - Shared types & API clients
+│   └── landing/     - Landing page (Vite + TypeScript, forj.sh)
+├── docs/            - Documentation
+├── scripts/         - Deployment & setup scripts
+└── CLAUDE.md        - AI assistant context
 ```
 
-## 🚀 Quick Start
-
-### Landing Page (Current Focus)
-
-```bash
-# Install dependencies
-npm install
-
-# Run landing page locally
-npm run dev -w packages/landing
-
-# Build for production
-npm run build -w packages/landing
-```
-
-## 📖 Documentation
-
-- **Product Specification**: [`project-docs/forj-spec.md`](./project-docs/forj-spec.md) (v0.2)
-- **AI Context**: [`CLAUDE.md`](./CLAUDE.md)
-- **Landing Page**: [`packages/landing/README.md`](./packages/landing/README.md) (coming soon)
-
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Package | Technologies |
 |---------|-------------|
-| **Landing** | Vite, TypeScript, Web3Forms, Cloudflare Turnstile |
-| **CLI** | Node.js, TypeScript, commander.js, inquirer (planned) |
-| **API** | Fastify, TypeScript, Postgres, BullMQ, Redis (planned) |
+| **API** | Fastify, TypeScript, Postgres (Neon), BullMQ, Redis, Stripe |
+| **CLI** | commander.js, inquirer, chalk, ora, eventsource |
+| **Workers** | BullMQ, Namecheap API, GitHub API, Cloudflare API |
+| **Shared** | TypeScript, API clients (Namecheap, Cloudflare, GitHub) |
+| **Landing** | Vite, TypeScript, Cloudflare Turnstile |
 
-## 🎯 Current Status
+## Documentation
 
-**Phase:** Pre-launch validation
-**Goal:** 200 waitlist signups before building MVP
+- [Product Specification](./docs/spec.md)
+- [Build Plan](./docs/build-plan.md)
+- [Testing Guide](./docs/testing-guide.md)
+- [Deployment Guide](./docs/deployment.md)
+- [MCP Integration](./docs/mcp-integration.md)
+- [Security Review](./docs/security-review.md)
+- [Troubleshooting](./docs/troubleshooting.md)
 
-- ✅ Product specification (v0.2)
-- ✅ API feasibility assessment
-- ✅ Landing page (live at forj.sh)
-- ⏳ MVP (4 week build after validation)
-
-## 📦 Branding
+## Branding
 
 - **Domain**: forj.sh
 - **GitHub org**: forj-sh
 - **npm package**: forj-cli
-- **CLI usage**: `npx forj-cli init <project>` or `forj init <project>` (after global install)
+- **CLI**: `npx forj-cli init <project>` or `forj init <project>`
 
-## 📝 License
+## License
 
 MIT
 

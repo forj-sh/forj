@@ -52,7 +52,7 @@ npx forj-cli init my-startup \
 
 - **Website**: [forj.sh](https://forj.sh)
 - **GitHub**: [forj-sh/forj](https://github.com/forj-sh/forj)
-- **API docs**: [MCP Integration Guide](https://github.com/forj-sh/forj/blob/main/docs/MCP_INTEGRATION.md)
+- **API docs**: [MCP Integration Guide](https://github.com/forj-sh/forj/blob/main/docs/mcp-integration.md)
 
 ## License
 

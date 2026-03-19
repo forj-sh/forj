@@ -79,3 +79,9 @@ credentials.json
 
 # Redis dump
 dump.rdb
+
+# Test logs
+*_test_logs*.txt
+
+# OS files (duplicate removed above)
+.DS_Store

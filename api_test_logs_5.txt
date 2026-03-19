@@ -1,5 +1,0 @@
-
-> @forj/api@0.1.0 dev
-> tsx watch src/index.ts
-
-[Sentry] Initialized for development environment

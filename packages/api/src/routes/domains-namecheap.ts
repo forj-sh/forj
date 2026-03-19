@@ -1,7 +1,7 @@
 /**
  * Domain routes with Namecheap integration
  *
- * Reference: project-docs/namecheap-integration-spec.md
+ * Reference: docs/namecheap-integration.md
  *
  * INTEGRATION STATUS:
  * These routes are defined but NOT YET REGISTERED with the Fastify server.

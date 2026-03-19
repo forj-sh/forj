@@ -1,7 +1,7 @@
 /**
  * Queue events for SSE streaming
  *
- * Reference: project-docs/namecheap-integration-spec.md Section 4.6
+ * Reference: docs/namecheap-integration.md Section 4.6
  *
  * Emits queue position updates, processing events, and metrics
  * for real-time monitoring via Server-Sent Events.

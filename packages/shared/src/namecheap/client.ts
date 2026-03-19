@@ -2,7 +2,7 @@
  * Namecheap API client
  *
  * TypeScript client for Namecheap Reseller API
- * Reference: project-docs/namecheap-integration-spec.md Section 4
+ * Reference: docs/namecheap-integration.md Section 4
  */
 
 import { parseResponse, normalizeArray, parseBoolean, parseNumber, getAttribute } from './xml-parser.js';
@@ -120,7 +120,7 @@ export class NamecheapClient {
    * Check domain availability
    *
    * API: namecheap.domains.check
-   * Reference: project-docs/namecheap-integration-spec.md Section 3.1
+   * Reference: docs/namecheap-integration.md Section 3.1
    *
    * @param domains - List of domains to check (max 50)
    * @returns Array of domain check results
@@ -159,7 +159,7 @@ export class NamecheapClient {
    * Get TLD pricing information
    *
    * API: namecheap.users.getPricing
-   * Reference: project-docs/namecheap-integration-spec.md Section 3.2
+   * Reference: docs/namecheap-integration.md Section 3.2
    *
    * @param tld - Optional TLD to filter (e.g., 'COM', 'IO')
    * @param action - Optional action type ('REGISTER', 'RENEW', 'REACTIVATE', 'TRANSFER')
@@ -222,7 +222,7 @@ export class NamecheapClient {
    * Register a domain
    *
    * API: namecheap.domains.create
-   * Reference: project-docs/namecheap-integration-spec.md Section 3.3
+   * Reference: docs/namecheap-integration.md Section 3.3
    *
    * @param params - Domain creation parameters
    * @returns Domain creation result
@@ -283,7 +283,7 @@ export class NamecheapClient {
    * Set custom nameservers for a domain
    *
    * API: namecheap.domains.dns.setCustom
-   * Reference: project-docs/namecheap-integration-spec.md Section 3.4
+   * Reference: docs/namecheap-integration.md Section 3.4
    *
    * @param sld - Second-level domain (e.g., 'example' for 'example.com')
    * @param tld - Top-level domain (e.g., 'com')
@@ -311,7 +311,7 @@ export class NamecheapClient {
    * Get domain information
    *
    * API: namecheap.domains.getInfo
-   * Reference: project-docs/namecheap-integration-spec.md Section 3.5
+   * Reference: docs/namecheap-integration.md Section 3.5
    *
    * @param domainName - Full domain name
    * @returns Domain information
@@ -343,7 +343,7 @@ export class NamecheapClient {
    * Renew a domain
    *
    * API: namecheap.domains.renew
-   * Reference: project-docs/namecheap-integration-spec.md Section 3.6
+   * Reference: docs/namecheap-integration.md Section 3.6
    *
    * @param params - Domain renewal parameters
    * @returns Domain renewal result
@@ -385,7 +385,7 @@ export class NamecheapClient {
    * Get account balance information
    *
    * API: namecheap.users.getBalances
-   * Reference: project-docs/namecheap-integration-spec.md Section 3.7
+   * Reference: docs/namecheap-integration.md Section 3.7
    *
    * @returns Account balance information
    * @throws NamecheapApiError if request fails
@@ -412,7 +412,7 @@ export class NamecheapClient {
    * List domains in account
    *
    * API: namecheap.domains.getList
-   * Reference: project-docs/namecheap-integration-spec.md Section 3.8
+   * Reference: docs/namecheap-integration.md Section 3.8
    *
    * @param params - Optional filtering and pagination parameters
    * @returns Domain list result

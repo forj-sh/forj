@@ -2,7 +2,7 @@
  * Namecheap XML response parser
  *
  * Uses fast-xml-parser to convert Namecheap XML responses to JavaScript objects
- * Reference: project-docs/namecheap-integration-spec.md Section 4.4
+ * Reference: docs/namecheap-integration.md Section 4.4
  */
 
 import { XMLParser } from 'fast-xml-parser';

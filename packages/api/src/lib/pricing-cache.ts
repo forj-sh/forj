@@ -1,7 +1,7 @@
 /**
  * Pricing cache - Redis-backed cache for Namecheap pricing
  *
- * Reference: project-docs/namecheap-integration-spec.md Section 4.7
+ * Reference: docs/namecheap-integration.md Section 4.7
  *
  * Caches TLD pricing for 1 hour to reduce API calls to Namecheap.
  */

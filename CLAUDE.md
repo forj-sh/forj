@@ -36,7 +36,7 @@ gt log short                          # View stack tree
 
 ## Project Overview
 
-**Forj** provisions production-ready project infrastructure with a single command: domain registration (Namecheap), GitHub repos, Cloudflare DNS zone, and DNS records (MX, SPF, DKIM, DMARC) in under 2 minutes. Full spec: `project-docs/forj-spec.md`.
+**Forj** provisions production-ready project infrastructure with a single command: domain registration (Namecheap), GitHub repos, Cloudflare DNS zone, and DNS records (MX, SPF, DKIM, DMARC) in under 2 minutes. Full spec: `docs/spec.md`.
 
 **Branding:** domain `forj.sh`, GitHub org `forj-sh`, npm package `forj-cli`, CLI invocation `npx forj-cli init acme`.
 
@@ -95,7 +95,7 @@ CLI → HTTPS + SSE → API Server (Fastify) → BullMQ + Redis → Worker Pool 
 - Mock strategy: `global.fetch` for HTTP, `jest.fn()` for Redis
 - Test files in `__tests__/` directories adjacent to source
 - Integration tests require Redis running locally
-- See `project-docs/testing-guide.md` for full guide
+- See `docs/testing-guide.md` for full guide
 
 ## Code Patterns
 
@@ -127,10 +127,11 @@ All feature development uses **Graphite CLI (`gt`)** for stacked PRs. Each stack
 
 ## References
 
-- Product spec: `project-docs/forj-spec.md`
-- Build plan & phase details: `project-docs/build-plan.md`
-- Testing guide: `project-docs/testing-guide.md`
-- Security review: `SECURITY-REVIEW.md`
-- Production deployment: `PRODUCTION-DEPLOYMENT.md`
-- MCP integration: `docs/MCP_INTEGRATION.md`
-- Troubleshooting: `project-docs/troubleshooting.md`
+- Product spec: `docs/spec.md`
+- Build plan & phase details: `docs/build-plan.md`
+- Testing guide: `docs/testing-guide.md`
+- Security review: `docs/security-review.md`
+- Production deployment: `docs/deployment.md`
+- Railway deployment: `docs/railway-deployment.md`
+- MCP integration: `docs/mcp-integration.md`
+- Troubleshooting: `docs/troubleshooting.md`

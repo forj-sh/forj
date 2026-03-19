@@ -2,7 +2,7 @@
  * @forj/shared/namecheap - Namecheap API client
  *
  * TypeScript client for Namecheap Reseller API
- * Reference: project-docs/namecheap-integration-spec.md
+ * Reference: docs/namecheap-integration.md
  */
 
 // Types

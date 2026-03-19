@@ -703,7 +703,7 @@ server.register(cors, {
 
 **⚠️ CRITICAL - MUST IMPLEMENT BEFORE LAUNCH**
 
-See `SECURITY-REVIEW.md` for implementation details.
+See `docs/security-review.md` for implementation details.
 
 ---
 
@@ -797,7 +797,7 @@ railway run npm run db:migrate -w packages/api
 
 ### Before Launch
 
-- [ ] All security issues from `SECURITY-REVIEW.md` addressed
+- [ ] All security issues from `docs/security-review.md` addressed
 - [ ] Rate limiting implemented on all endpoints
 - [ ] Audit logging enabled
 - [ ] Error tracking configured (Sentry)

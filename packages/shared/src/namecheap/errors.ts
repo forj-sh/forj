@@ -2,7 +2,7 @@
  * Namecheap API error handling
  *
  * Error categorization based on Namecheap error codes
- * Reference: project-docs/namecheap-integration-spec.md Section 6
+ * Reference: docs/namecheap-integration.md Section 6
  */
 
 import type { NamecheapError } from './types.js';

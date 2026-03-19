@@ -1,7 +1,7 @@
 /**
  * Domain worker - BullMQ worker for domain operations
  *
- * Reference: project-docs/namecheap-integration-spec.md Section 5
+ * Reference: docs/namecheap-integration.md Section 5
  *
  * Processes domain operations (check, register, renew, configure) using
  * Namecheap API with priority queue and rate limiting.

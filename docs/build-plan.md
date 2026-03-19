@@ -392,4 +392,4 @@ Note: No Cloudflare OAuth client ID/secret needed — users provide their own AP
 - Same pattern as `gh auth login` — familiar to developers
 - One-time code displayed in terminal, user approves in browser
 
-See `project-docs/forj-spec.md` for original product specification.
+See `docs/spec.md` for original product specification.

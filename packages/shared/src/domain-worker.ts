@@ -1,7 +1,7 @@
 /**
  * Domain worker types and state machine
  *
- * Reference: project-docs/namecheap-integration-spec.md Section 5
+ * Reference: docs/namecheap-integration.md Section 5
  *
  * Defines job types, state machine, and worker configuration for
  * domain operations (check, register, configure DNS).

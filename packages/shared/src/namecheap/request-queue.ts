@@ -1,7 +1,7 @@
 /**
  * Priority queue for Namecheap API requests
  *
- * Reference: project-docs/namecheap-integration-spec.md Section 4.6
+ * Reference: docs/namecheap-integration.md Section 4.6
  *
  * Manages request prioritization with three levels:
  * - CRITICAL: Registration/renewal (user paid, must succeed)

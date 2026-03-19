@@ -6,7 +6,7 @@ Forj BullMQ workers — Idempotent service provisioning workers.
 
 🚧 **Coming Soon** — Implementation planned for V1 MVP (Week 1-2)
 
-See `project-docs/forj-spec.md` for detailed specifications.
+See `docs/spec.md` for detailed specifications.
 
 ## Planned Workers
 
