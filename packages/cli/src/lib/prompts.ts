@@ -227,28 +227,6 @@ export async function promptContactInfo(): Promise<{
   contact: ContactInfoInput;
   useWhoisPrivacy: boolean;
 }> {
-  const { approach } = await inquirer.prompt([
-    {
-      type: 'list',
-      name: 'approach',
-      message: 'Domain registrant contact info (required by ICANN):',
-      choices: [
-        {
-          name: `${chalk.green('⚡')} Use WHOIS privacy — hide your info from public lookups`,
-          value: 'privacy',
-        },
-        {
-          name: '  Enter contact details manually',
-          value: 'manual',
-        },
-      ],
-    },
-  ]);
-
-  const useWhoisPrivacy = approach === 'privacy';
-
-  // Even with WHOIS privacy, ICANN requires valid contact info
-  // (it just won't be publicly visible)
   const contact = await inquirer.prompt([
     {
       type: 'input',
@@ -325,7 +303,7 @@ export async function promptContactInfo(): Promise<{
       postalCode: contact.postalCode.trim(),
       country: contact.country.trim(),
     },
-    useWhoisPrivacy,
+    useWhoisPrivacy: true,
   };
 }
 
