@@ -137,7 +137,7 @@ export async function eventRoutes(server: FastifyInstance) {
       // Subscribe to worker events from Redis
       unsubscribe = await redisPubSub.subscribeWorkerEvents(
         projectId,
-        (workerEvent: DomainWorkerEvent) => {
+        (workerEvent: any) => {
           // Convert worker event to SSE event format
           const sseEvent = convertWorkerEventToSSE(workerEvent);
 
@@ -145,20 +145,19 @@ export async function eventRoutes(server: FastifyInstance) {
             sendEvent(sseEvent);
           }
 
-          // Close stream on completion or failure
-          if (workerEvent.type === DomainWorkerEventType.JOB_COMPLETED) {
-            // Send explicit 'complete' event so CLI resolves the promise before connection closes
-            sendEvent({ type: 'complete', data: { projectId } });
+          // Track terminal states per service to know when all are done
+          const eventType = workerEvent.type as string;
+          const isCompleted = eventType.includes('completed') || eventType === DomainWorkerEventType.JOB_COMPLETED;
+          const isFailed = eventType.includes('failed') || eventType === DomainWorkerEventType.JOB_FAILED;
+
+          if (isCompleted || isFailed) {
+            // For single-service flows (domain only), close immediately
+            // For multi-service flows, the CLI will handle the completion
+            if (isCompleted) {
+              sendEvent({ type: 'complete', data: { projectId } });
+            }
             request.log.info(
-              { projectId, eventType: workerEvent.type },
-              'SSE stream closing (job terminal state)'
-            );
-            cleanup().catch((err) => {
-              request.log.error({ err }, 'Error during SSE cleanup');
-            });
-          } else if (workerEvent.type === DomainWorkerEventType.JOB_FAILED) {
-            request.log.info(
-              { projectId, eventType: workerEvent.type },
+              { projectId, eventType },
               'SSE stream closing (job terminal state)'
             );
             cleanup().catch((err) => {
@@ -212,76 +211,77 @@ export async function eventRoutes(server: FastifyInstance) {
 }
 
 /**
- * Convert domain worker event to SSE event format
+ * Convert any worker event to SSE event format
  *
- * Maps worker-specific events to the CLI's expected ServiceEvent format.
+ * Handles domain, GitHub, Cloudflare, and DNS worker events.
+ * Maps to the CLI's expected ServiceEvent format.
  */
 function convertWorkerEventToSSE(
-  workerEvent: DomainWorkerEvent
+  workerEvent: any
 ): ProvisioningEvent | null {
-  // Map worker event types to SSE events
-  switch (workerEvent.type) {
-    case DomainWorkerEventType.JOB_CREATED:
-    case DomainWorkerEventType.JOB_QUEUED:
-      return {
-        type: 'status',
-        service: 'domain',
-        status: 'pending',
-        message: 'Domain job queued',
-      };
+  const eventType = (workerEvent.type as string) || '';
 
-    case DomainWorkerEventType.JOB_STARTED:
-      return {
-        type: 'status',
-        service: 'domain',
-        status: 'running',
-        message: 'Starting domain provisioning',
-      };
-
-    case DomainWorkerEventType.JOB_PROGRESS:
-      // Extract progress info from event data
-      const progressData = workerEvent.data as { step?: string; progress?: number } | undefined;
-      const step = progressData?.step || 'processing';
-      const stepMessages: Record<string, string> = {
-        checking: 'Checking domain availability...',
-        registering: 'Registering domain with Namecheap...',
-        configuring: 'Configuring nameservers...',
-      };
-
-      return {
-        type: 'status',
-        service: 'domain',
-        status: 'running',
-        message: stepMessages[step] || `Domain ${step}...`,
-        data: workerEvent.data as Record<string, unknown> | undefined,
-      };
-
-    case DomainWorkerEventType.JOB_COMPLETED:
-      return {
-        type: 'status',
-        service: 'domain',
-        status: 'complete',
-        message: 'Domain provisioned successfully',
-        data: workerEvent.data as Record<string, unknown> | undefined,
-      };
-
-    case DomainWorkerEventType.JOB_FAILED:
-      return {
-        type: 'error',
-        error: workerEvent.error || 'Domain provisioning failed',
-        code: 'DOMAIN_PROVISIONING_FAILED',
-      };
-
-    case DomainWorkerEventType.JOB_RETRYING:
-      return {
-        type: 'status',
-        service: 'domain',
-        status: 'running',
-        message: 'Retrying domain provisioning...',
-      };
-
-    default:
-      // Unknown event type, log but don't send to client
-      return null;
+  // Domain worker events (specific handling for progress steps)
+  if (eventType === DomainWorkerEventType.JOB_PROGRESS) {
+    const progressData = workerEvent.data as { step?: string; progress?: number } | undefined;
+    const step = progressData?.step || 'processing';
+    const stepMessages: Record<string, string> = {
+      checking: 'Checking domain availability...',
+      registering: 'Registering domain with Namecheap...',
+      configuring: 'Configuring nameservers...',
+    };
+    return {
+      type: 'status',
+      service: 'domain',
+      status: 'running',
+      message: stepMessages[step] || `Domain ${step}...`,
+    };
   }
+
+  // Detect service from event type or data
+  const service = detectService(eventType, workerEvent);
+
+  // Generic event mapping based on event type patterns
+  if (eventType.includes('started') || eventType.includes('queued') || eventType.includes('created')) {
+    return { type: 'status', service, status: 'running', message: `${service}: Starting...` };
+  }
+
+  if (eventType.includes('completed') || eventType.includes('complete') || eventType.includes('verified')) {
+    return { type: 'status', service, status: 'complete', message: `${service}: Complete` };
+  }
+
+  if (eventType.includes('failed')) {
+    return { type: 'status', service, status: 'failed', error: workerEvent.error || `${service} failed` };
+  }
+
+  if (eventType.includes('progress') || eventType.includes('running') || eventType.includes('creating') || eventType.includes('verifying')) {
+    return { type: 'status', service, status: 'running', message: workerEvent.message || `${service}: In progress...` };
+  }
+
+  // Pass through any event with a recognizable structure
+  if (service) {
+    return { type: 'status', service, status: 'running', message: workerEvent.message || `${service}: Processing...` };
+  }
+
+  return null;
+}
+
+/**
+ * Detect which service a worker event belongs to
+ */
+function detectService(eventType: string, event: any): any {
+  // Check event data for explicit service
+  if (event.service) return event.service;
+
+  // Infer from event type naming convention
+  const lower = eventType.toLowerCase();
+  if (lower.includes('domain') || lower.includes('register') || lower.includes('nameserver')) return 'domain';
+  if (lower.includes('github') || lower.includes('repo') || lower.includes('org')) return 'github';
+  if (lower.includes('cloudflare') || lower.includes('zone')) return 'cloudflare';
+  if (lower.includes('dns') || lower.includes('mx') || lower.includes('spf') || lower.includes('dkim')) return 'dns';
+
+  // Check for domain worker specific types
+  if (Object.values(DomainWorkerEventType).includes(eventType as any)) return 'domain';
+
+  return 'unknown';
 }

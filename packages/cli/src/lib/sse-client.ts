@@ -199,6 +199,11 @@ export async function streamProvisioningProgress(
           return;
         }
 
+        // Stop the main spinner once we have service-level updates
+        if (spinner.isSpinning) {
+          spinner.stop();
+        }
+
         // Get or create spinner for this service
         let serviceSpinner = serviceSpinners.get(service);
 
@@ -213,7 +218,12 @@ export async function streamProvisioningProgress(
             break;
 
           case 'running':
-            serviceSpinner.start(`${service}: ${message || 'Running'}`);
+            // Update text without restarting to avoid flicker
+            if (serviceSpinner.isSpinning) {
+              serviceSpinner.text = `${service}: ${message || 'Running'}`;
+            } else {
+              serviceSpinner.start(`${service}: ${message || 'Running'}`);
+            }
             break;
 
           case 'complete':

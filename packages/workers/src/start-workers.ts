@@ -92,10 +92,11 @@ const eventPublisher = {
 };
 
 // Factory function to create project event publishers for workers
+// Uses same channel as domain worker so SSE stream receives all events
 const createProjectEventPublisher = (workerName: string) => ({
   async publishEvent(event: { projectId: string } & Record<string, any>): Promise<void> {
     try {
-      const channel = `project:${event.projectId}:events`;
+      const channel = `worker:events:${event.projectId}`;
       await redis.publish(channel, JSON.stringify(event));
     } catch (error) {
       console.error(`Failed to publish ${workerName} event:`, error);
