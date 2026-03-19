@@ -20,6 +20,7 @@ export async function guideCloudflareTokenCreation(): Promise<void> {
   logger.info('─────────────────────────');
   logger.info('');
   logger.info('Forj needs a Cloudflare API token with the following permissions:');
+  logger.info('  • Account → Account → Read');
   logger.info('  • Zone → Zone → Read');
   logger.info('  • Zone → Zone Settings → Edit');
   logger.info('  • Zone → DNS → Read');
@@ -58,12 +59,14 @@ export async function guideCloudflareTokenCreation(): Promise<void> {
   logger.info('  1. Click "Create Token"');
   logger.info('  2. Use the "Edit zone DNS" template (or create custom)');
   logger.info('  3. Set permissions:');
+  logger.info('     - Account → Account → Read');
   logger.info('     - Zone → Zone → Read');
   logger.info('     - Zone → Zone Settings → Edit');
   logger.info('     - Zone → DNS → Edit');
-  logger.info('  4. Select the zones you want Forj to manage (or "All zones")');
-  logger.info('  5. Click "Continue to summary" → "Create Token"');
-  logger.info('  6. Copy the token (you won\'t be able to see it again!)');
+  logger.info('  4. Under "Account Resources", select your account');
+  logger.info('  5. Under "Zone Resources", select "All zones" (or specific zones)');
+  logger.info('  6. Click "Continue to summary" → "Create Token"');
+  logger.info('  7. Copy the token (you won\'t be able to see it again!)');
   logger.info('');
 }
 
@@ -109,28 +112,13 @@ export async function verifyCloudflareToken(token: string): Promise<boolean> {
     logger.success('Token verified successfully!');
     logger.info(`Token ID: ${verification.id}`);
 
-    // Check required permissions (must match what we ask for in the guided flow)
-    const requiredPermissions = [
-      'zone:read',           // Zone:Read
-      'zone_settings:edit',  // Zone Settings:Edit (for zone creation)
-      'dns_records:read',    // DNS:Read
-      'dns_records:edit',    // DNS:Edit
-    ];
+    // Note: Cloudflare's verify endpoint returns permission group UUIDs, not
+    // friendly names, so we can't reliably check permissions here.
+    // The real validation happens when we call listAccounts and create zones.
+    // If the token is active, we trust the user set it up correctly.
 
-    const hasAllPermissions = requiredPermissions.every((requiredPerm) =>
-      verification.policies?.some((policy) =>
-        policy.permission_groups.some((group) => {
-          // Use exact match on permission ID to avoid false positives
-          // (e.g., zone:read should not match zone:edit)
-          return group.id === requiredPerm;
-        })
-      )
-    );
-
-    if (!hasAllPermissions) {
-      logger.warn('Token may be missing some required permissions');
-      logger.warn('Required: Zone→Zone→Read, Zone→Zone Settings→Edit, Zone→DNS→Read, Zone→DNS→Edit');
-
+    if (false) {
+      // Placeholder — permission pre-check removed (unreliable UUID matching)
       const { continueAnyway } = await inquirer.prompt([
         {
           type: 'confirm',
