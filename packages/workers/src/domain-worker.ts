@@ -400,6 +400,15 @@ export class DomainWorker {
       data: { step: 'registering', progress: 50 },
     });
 
+    // Namecheap requires phone in +CC.NNNNNNNNNN format (e.g., +1.5551234567)
+    // Convert plain international format (+15551234567) to dotted format
+    const formatPhone = (phone: string): string => {
+      if (phone.includes('.')) return phone; // Already in correct format
+      const match = phone.match(/^\+(\d{1,3})(\d{4,14})$/);
+      if (match) return `+${match[1]}.${match[2]}`;
+      return phone;
+    };
+
     // Route registration through queue
     const registerParams: Record<string, string> = {
       DomainName: data.domainName,
@@ -412,7 +421,7 @@ export class DomainWorker {
       RegistrantStateProvince: data.registrant.stateProvince,
       RegistrantPostalCode: data.registrant.postalCode,
       RegistrantCountry: data.registrant.country,
-      RegistrantPhone: data.registrant.phone,
+      RegistrantPhone: formatPhone(data.registrant.phone),
       RegistrantEmailAddress: data.registrant.emailAddress,
       TechFirstName: data.tech.firstName,
       TechLastName: data.tech.lastName,
@@ -421,7 +430,7 @@ export class DomainWorker {
       TechStateProvince: data.tech.stateProvince,
       TechPostalCode: data.tech.postalCode,
       TechCountry: data.tech.country,
-      TechPhone: data.tech.phone,
+      TechPhone: formatPhone(data.tech.phone),
       TechEmailAddress: data.tech.emailAddress,
       AdminFirstName: data.admin.firstName,
       AdminLastName: data.admin.lastName,
@@ -430,7 +439,7 @@ export class DomainWorker {
       AdminStateProvince: data.admin.stateProvince,
       AdminPostalCode: data.admin.postalCode,
       AdminCountry: data.admin.country,
-      AdminPhone: data.admin.phone,
+      AdminPhone: formatPhone(data.admin.phone),
       AdminEmailAddress: data.admin.emailAddress,
       AuxBillingFirstName: data.auxBilling.firstName,
       AuxBillingLastName: data.auxBilling.lastName,
@@ -439,7 +448,7 @@ export class DomainWorker {
       AuxBillingStateProvince: data.auxBilling.stateProvince,
       AuxBillingPostalCode: data.auxBilling.postalCode,
       AuxBillingCountry: data.auxBilling.country,
-      AuxBillingPhone: data.auxBilling.phone,
+      AuxBillingPhone: formatPhone(data.auxBilling.phone),
       AuxBillingEmailAddress: data.auxBilling.emailAddress,
       AddFreeWhoisguard: data.addFreeWhoisguard ? 'yes' : 'no',
       WGEnabled: data.wgEnabled ? 'yes' : 'no',

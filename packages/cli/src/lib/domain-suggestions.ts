@@ -9,11 +9,11 @@
  */
 
 // Phase 1: high-value candidates (one API call)
-const TIER_1_TLDS: readonly string[] = ['com', 'io', 'co', 'ai'];
+const TIER_1_TLDS: readonly string[] = ['com', 'io', 'co', 'ai', 'xyz'];
 const TIER_1_PREFIXES: readonly string[] = ['get', 'try', 'use'];
 
 // Phase 2: expanded candidates (second API call, only if needed)
-const TIER_2_TLDS: readonly string[] = ['sh', 'dev', 'app', 'xyz', 'run'];
+const TIER_2_TLDS: readonly string[] = ['sh', 'dev', 'app', 'run'];
 const TIER_2_PREFIXES: readonly string[] = ['with', 'go'];
 const TIER_2_SUFFIXES: readonly string[] = ['app', 'hq', 'labs'];
 

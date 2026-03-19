@@ -38,9 +38,9 @@ describe('sanitizeName', () => {
 });
 
 describe('generatePhase1', () => {
-  it('generates exactly 7 candidates for a valid name', () => {
+  it('generates exactly 8 candidates for a valid name', () => {
     const candidates = generatePhase1('newtech');
-    assert.equal(candidates.length, 7);
+    assert.equal(candidates.length, 8);
   });
 
   it('includes exact name on Tier 1 TLDs', () => {
@@ -49,6 +49,7 @@ describe('generatePhase1', () => {
     assert.ok(candidates.includes('newtech.io'));
     assert.ok(candidates.includes('newtech.co'));
     assert.ok(candidates.includes('newtech.ai'));
+    assert.ok(candidates.includes('newtech.xyz'));
   });
 
   it('includes .com prefix variants', () => {
@@ -81,7 +82,6 @@ describe('generatePhase2', () => {
     assert.ok(candidates.includes('newtech.sh'));
     assert.ok(candidates.includes('newtech.dev'));
     assert.ok(candidates.includes('newtech.app'));
-    assert.ok(candidates.includes('newtech.xyz'));
     assert.ok(candidates.includes('newtech.run'));
   });
 
@@ -113,8 +113,11 @@ describe('getTier', () => {
     assert.equal(getTier('newtechapp.com', 'newtech'), 2);
   });
 
+  it('classifies .xyz as Tier 1', () => {
+    assert.equal(getTier('newtech.xyz', 'newtech'), 1);
+  });
+
   it('classifies secondary TLDs as Tier 3', () => {
-    assert.equal(getTier('newtech.xyz', 'newtech'), 3);
     assert.equal(getTier('newtech.sh', 'newtech'), 3);
     assert.equal(getTier('newtech.dev', 'newtech'), 3);
   });
@@ -141,14 +144,14 @@ describe('sortResults', () => {
 
   it('sorts Tier 1 before Tier 2 before Tier 3', () => {
     const results: DomainResult[] = [
-      { name: 'newtech.xyz', price: '5.00', available: true, tier: 3 },
+      { name: 'newtech.sh', price: '5.00', available: true, tier: 3 },
       { name: 'getnewtech.com', price: '9.95', available: true, tier: 2 },
       { name: 'newtech.io', price: '29.00', available: true, tier: 1 },
     ];
     const sorted = sortResults(results, 'newtech');
     assert.equal(sorted[0].name, 'newtech.io');
     assert.equal(sorted[1].name, 'getnewtech.com');
-    assert.equal(sorted[2].name, 'newtech.xyz');
+    assert.equal(sorted[2].name, 'newtech.sh');
   });
 
   it('sorts by price within same tier', () => {
