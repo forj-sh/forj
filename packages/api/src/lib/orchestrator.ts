@@ -48,9 +48,9 @@ export interface ProvisioningConfig {
   cloudflareApiToken?: string;
   cloudflareAccountId?: string;
 
-  // Domain registration
+  // Domain registration (only required when services includes 'domain')
   years: number;
-  contactInfo: {
+  contactInfo?: {
     firstName: string;
     lastName: string;
     email: string;
@@ -181,6 +181,11 @@ export class ProvisioningOrchestrator {
    * Register domain with Namecheap
    */
   private async registerDomain(config: ProvisioningConfig): Promise<string> {
+    if (!config.contactInfo) {
+      throw new Error('contactInfo is required for domain registration');
+    }
+    const contactInfo = config.contactInfo;
+
     const jobData: RegisterDomainJobData = {
       jobId: '', // Placeholder - BullMQ will assign actual job ID
       operation: DomainOperationType.REGISTER,
@@ -194,10 +199,10 @@ export class ProvisioningOrchestrator {
       years: config.years,
       // Use the same contact info for all roles (standard for small teams)
       // Map 'email' to 'emailAddress' for Namecheap API
-      registrant: { ...config.contactInfo, emailAddress: config.contactInfo.email },
-      tech: { ...config.contactInfo, emailAddress: config.contactInfo.email },
-      admin: { ...config.contactInfo, emailAddress: config.contactInfo.email },
-      auxBilling: { ...config.contactInfo, emailAddress: config.contactInfo.email },
+      registrant: { ...contactInfo, emailAddress: contactInfo.email },
+      tech: { ...contactInfo, emailAddress: contactInfo.email },
+      admin: { ...contactInfo, emailAddress: contactInfo.email },
+      auxBilling: { ...contactInfo, emailAddress: contactInfo.email },
       // WhoisGuard settings (enabled by default for privacy)
       addFreeWhoisguard: true,
       wgEnabled: true,

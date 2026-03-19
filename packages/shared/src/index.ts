@@ -36,10 +36,27 @@ export type { Project, ProjectConfig, ProjectStatus } from './project.js';
 
 // Project API types
 export type {
+  ProjectCreateRequest,
+  ProjectCreateResponse,
+  RegistrantContact,
+  ContactInfoRequest,
+  ProjectPhase,
+  StripePaymentStatus,
+  AddServicesRequest,
+  AddServicesResponse,
   ProjectInitRequest,
   ProjectInitResponse,
   AddServiceRequest,
   AddServiceResponse,
+} from './projects.js';
+
+export {
+  PROJECT_PHASE,
+  STRIPE_PAYMENT_STATUS,
+  PHASE1_ONLY_SERVICES,
+  DOMAIN_REGEX,
+  isValidDomain,
+  validateRegistrantContact,
 } from './projects.js';
 
 // SSE event types

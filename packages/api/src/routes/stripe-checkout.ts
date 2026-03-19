@@ -13,6 +13,7 @@ import { splitDomain, dollarsToCents, centsToDollars } from '@forj/shared';
 import { createDomainCheckoutSession, getCheckoutSession } from '../lib/stripe-client.js';
 import { requireAuth } from '../middleware/auth.js';
 import { verifyProjectOwnership } from '../lib/authorization.js';
+import { updateProjectStripeSession } from '../lib/database.js';
 import type { PricingCache } from '../lib/pricing-cache.js';
 
 /**
@@ -264,6 +265,9 @@ export async function stripeCheckoutRoutes(
           isPremium,
           jobId,
         });
+
+        // Store Stripe session on project for webhook correlation
+        await updateProjectStripeSession(projectId, session.id);
 
         request.log.info(
           {

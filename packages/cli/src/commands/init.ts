@@ -5,15 +5,17 @@ import chalk from 'chalk';
 import {
   promptProjectName,
   promptDomainSelection,
-  promptServiceSelection,
   promptGitHubOrgConfirmation,
   promptConfirm,
+  promptContactInfo,
+  promptPostDomainServices,
   DomainOption,
-  ServiceOption,
 } from '../lib/prompts.js';
 import { api } from '../lib/api-client.js';
 import { ensureAuthenticated } from '../lib/auth.js';
+import { authenticateCloudflare } from '../lib/auth-cloudflare.js';
 import { streamProvisioningProgress } from '../lib/sse-client.js';
+import { openCheckoutAndWaitForPayment } from '../lib/stripe-checkout.js';
 import { withErrorHandling, ForjError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 import { formatDuration } from '../utils/formatters.js';
@@ -32,6 +34,8 @@ interface InitOptions {
   githubOrg?: string;
   nonInteractive?: boolean;
   json?: boolean;
+  whoisPrivacy?: boolean;
+  skipPayment?: boolean;
 }
 
 interface InitResult {
@@ -149,7 +153,7 @@ async function checkDomainAvailability(
 }
 
 /**
- * Interactive init flow
+ * Interactive init flow — two-phase: domain purchase first, then services
  */
 async function interactiveInit(
   projectName?: string,
@@ -157,16 +161,23 @@ async function interactiveInit(
 ): Promise<InitResult | null> {
   logger.log(chalk.bold('\n✦ forj 鍛冶場') + ' — project infrastructure provisioning\n');
 
+  const startTime = Date.now();
+
+  // ════════════════════════════════════════════
+  // Phase 1: Domain purchase
+  // ════════════════════════════════════════════
+
   // Step 1: Ensure authenticated
   await ensureAuthenticated();
   logger.newline();
 
-  // Step 2: Get project name
+  // Step 2: Company name
   const name = projectName || (await promptProjectName());
   logger.newline();
 
   // Step 3: Domain selection
   let selectedDomain: string;
+  let selectedDomainPrice: string = '?.??';
 
   if (options.domain) {
     selectedDomain = options.domain;
@@ -174,52 +185,145 @@ async function interactiveInit(
   } else {
     const domains = await checkDomainAvailability(name);
     selectedDomain = await promptDomainSelection(domains);
+    selectedDomainPrice = domains.find((d) => d.name === selectedDomain)?.price || '?.??';
   }
-
   logger.newline();
 
-  // Step 3: Service selection
-  const availableServices: ServiceOption[] = [
-    {
-      id: 'domain',
-      name: 'Domain',
-      description: `${selectedDomain} — registered and configured`,
-      enabled: true,
-    },
-    {
-      id: 'github',
-      name: 'GitHub',
-      description: `github.com/${name} — org + repo created`,
-      enabled: true,
-    },
-    {
-      id: 'cloudflare',
-      name: 'DNS + email',
-      description: 'MX, SPF, DKIM, DMARC — ready for Google Workspace',
-      enabled: true,
-    },
-    {
-      id: 'vercel',
-      name: 'Vercel',
-      description: `${selectedDomain} — deployed from GitHub`,
-      enabled: false,
-    },
-  ];
+  // Step 4: Create project (domain-only, no provisioning yet)
+  const { projectId } = await api.post<{ projectId: string }>(
+    '/projects/create',
+    { name, domain: selectedDomain }
+  );
+
+  // Step 5: Contact info
+  let contact;
+  let useWhoisPrivacy: boolean;
+
+  if (options.nonInteractive) {
+    // Non-interactive: require --whois-privacy or error
+    if (!options.whoisPrivacy) {
+      throw new ForjError(
+        'Contact info is required. Use --whois-privacy for WHOIS privacy defaults, or run interactively.',
+        'MISSING_OPTION'
+      );
+    }
+    // With --whois-privacy, Namecheap's WhoisGuard replaces all registrant data
+    // with proxy contact details in public WHOIS. The registrar requires syntactically
+    // valid contact fields but the actual values are never publicly visible.
+    // This is standard practice for privacy-protected registrations.
+    contact = {
+      firstName: 'WHOIS', lastName: 'Agent',
+      email: `noreply+${projectId.slice(0, 8)}@forj.sh`,
+      phone: '+1.0000000000',
+      address1: 'WHOIS Privacy Protection', city: 'Privacy',
+      stateProvince: 'CA', postalCode: '00000', country: 'US',
+    };
+    useWhoisPrivacy = true;
+  } else {
+    logger.log(chalk.bold('Domain registration requires contact info (ICANN requirement)'));
+    logger.dim('With WHOIS privacy enabled, this info stays hidden from public lookups.\n');
+
+    const result = await promptContactInfo();
+    contact = result.contact;
+    useWhoisPrivacy = result.useWhoisPrivacy;
+  }
+
+  await api.post(`/projects/${projectId}/contact-info`, {
+    contact,
+    useWhoisPrivacy,
+  });
+  logger.newline();
+
+  // Step 6: Show price and confirm
+  logger.log(chalk.bold('Summary:'));
+  logger.log(`  Domain: ${selectedDomain}  ${chalk.dim(`$${selectedDomainPrice}/yr`)}`);
+  logger.log(`  WHOIS privacy: ${useWhoisPrivacy ? chalk.green('enabled') : 'disabled'}`);
+  logger.newline();
+
+  if (!options.nonInteractive) {
+    const confirmed = await promptConfirm('Proceed to payment?');
+    if (!confirmed) {
+      logger.warn('Cancelled');
+      return null;
+    }
+    logger.newline();
+  }
+
+  // Step 7: Stripe Checkout — open browser, wait for payment
+  if (options.skipPayment) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new ForjError('--skip-payment is only allowed in non-production environments', 'INVALID_OPTION');
+    }
+    logger.warn('--skip-payment: bypassing Stripe checkout (dev mode only)');
+    await api.post(`/projects/${projectId}/dev/trigger-domain-registration`, {});
+  } else {
+    const checkout = await api.post<{
+      sessionId: string;
+      sessionUrl: string;
+      expiresAt: number;
+    }>('/stripe/create-checkout-session', {
+      projectId,
+      pricing: { domainName: selectedDomain }, // Server validates pricing
+      years: 1,
+      isPremium: false,
+    });
+
+    await openCheckoutAndWaitForPayment(checkout.sessionUrl, checkout.sessionId);
+  }
+  logger.newline();
+
+  // Step 8: Wait for domain registration via SSE
+  logger.log(chalk.bold('Registering domain...'));
+
+  await streamProvisioningProgress(`/events/stream/${projectId}`);
+
+  logger.newline();
+  logger.success(`${chalk.bold(selectedDomain)} is yours!`);
+  logger.newline();
+
+  // ════════════════════════════════════════════
+  // Phase 2: Additional services
+  // ════════════════════════════════════════════
 
   let selectedServices: string[];
 
   if (options.services) {
-    selectedServices = options.services.split(',');
-    logger.info(`Services: ${selectedServices.join(', ')}`);
+    // Use --services flag (filter out 'domain', already done)
+    selectedServices = options.services.split(',').filter((s) => s !== 'domain');
+    if (selectedServices.length > 0) {
+      logger.info(`Services: ${selectedServices.join(', ')}`);
+    }
+  } else if (options.nonInteractive) {
+    // Non-interactive without --services: skip additional services
+    selectedServices = [];
   } else {
-    selectedServices = await promptServiceSelection(availableServices);
+    selectedServices = await promptPostDomainServices(selectedDomain, name);
+  }
+
+  if (selectedServices.length === 0) {
+    logger.dim('No additional services selected.');
+
+    const durationMs = Date.now() - startTime;
+    const credentialsPath = join(process.cwd(), '.forj', 'credentials.json');
+    ensureGitignore();
+
+    logger.newline();
+    logger.success(`Setup complete in ${formatDuration(durationMs)}`);
+    logger.dim(`Run ${chalk.cyan('forj status')} to see your stack.`);
+
+    return {
+      project: name,
+      domain: selectedDomain,
+      services: { domain: { status: 'complete' } },
+      credentialsPath,
+      durationMs,
+    };
   }
 
   logger.newline();
 
-  // Step 4: GitHub org confirmation (if GitHub selected)
+  // GitHub auth (if selected)
   let githubOrg: string | undefined;
-
   if (selectedServices.includes('github')) {
     logger.warn('GitHub org must be created manually — takes 15 seconds.');
     logger.dim('Please create the organization on GitHub (URL: https://github.com/organizations/new)');
@@ -229,40 +333,26 @@ async function interactiveInit(
     logger.newline();
   }
 
-  // Step 5: Final confirmation
-  if (!options.nonInteractive) {
-    logger.log(chalk.bold('Summary:'));
-    logger.log(`  Project: ${name}`);
-    logger.log(`  Domain: ${selectedDomain}`);
-    logger.log(`  Services: ${selectedServices.join(', ')}`);
-    if (githubOrg) logger.log(`  GitHub org: ${githubOrg}`);
-    logger.newline();
+  // Cloudflare token (if DNS selected)
+  if (selectedServices.includes('cloudflare')) {
+    await authenticateCloudflare();
 
-    const confirmed = await promptConfirm('Continue with provisioning?');
-    if (!confirmed) {
-      logger.warn('Provisioning cancelled');
-      return null;
+    // Store token server-side
+    const { getCloudflareToken } = await import('../lib/auth-cloudflare.js');
+    const cfToken = getCloudflareToken();
+    if (cfToken) {
+      await api.post('/auth/cloudflare', { token: cfToken });
     }
     logger.newline();
   }
 
-  // Step 7: Start provisioning
-  const startTime = Date.now();
+  // Start service provisioning
+  await api.post(`/projects/${projectId}/provision-services`, {
+    services: selectedServices,
+    githubOrg,
+  });
 
-  const result = await api.post<{ projectId: string }>(
-    '/projects/init',
-    {
-      name,
-      domain: selectedDomain,
-      services: selectedServices,
-      githubOrg,
-    }
-  );
-
-  const { projectId } = result;
-
-  // Step 8: Stream progress via SSE
-  logger.log(chalk.bold('Provisioning...'));
+  logger.log(chalk.bold('Provisioning services...'));
 
   const provisioningResult = await streamProvisioningProgress(
     `/events/stream/${projectId}`
@@ -270,7 +360,7 @@ async function interactiveInit(
 
   const durationMs = Date.now() - startTime;
 
-  // Step 9: Save credentials
+  // Save credentials
   const credentialsPath = join(process.cwd(), '.forj', 'credentials.json');
   ensureGitignore();
 
@@ -303,14 +393,7 @@ async function nonInteractiveInit(
     );
   }
 
-  if (!options.services) {
-    throw new ForjError(
-      'Services are required in non-interactive mode (use --services)',
-      'MISSING_OPTION'
-    );
-  }
-
-  return interactiveInit(projectName, options);
+  return interactiveInit(projectName, { ...options, nonInteractive: true }) as Promise<InitResult>;
 }
 
 export function createInitCommand(): Command {
@@ -322,9 +405,11 @@ export function createInitCommand(): Command {
     .option('--domain <domain>', 'Domain name (e.g., "getacme.com")')
     .option(
       '--services <services>',
-      'Comma-separated services (e.g., "github,cloudflare,domain")'
+      'Comma-separated services (e.g., "github,cloudflare")'
     )
     .option('--github-org <org>', 'GitHub org name (assumes org exists)')
+    .option('--whois-privacy', 'Use WHOIS privacy with Forj defaults')
+    .option('--skip-payment', 'Skip Stripe checkout (dev mode only)')
     .option('--non-interactive', 'Skip prompts, use flags only')
     .option('--json', 'Output JSON (implies --non-interactive)')
     .action(

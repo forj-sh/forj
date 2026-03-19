@@ -203,3 +203,160 @@ export async function promptSelect<T extends string>(
 
   return selected;
 }
+
+/**
+ * Contact info for domain registration
+ */
+export interface ContactInfoInput {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  address1: string;
+  city: string;
+  stateProvince: string;
+  postalCode: string;
+  country: string;
+  organizationName?: string;
+}
+
+/**
+ * Prompt for ICANN-required contact info or WHOIS privacy shortcut
+ */
+export async function promptContactInfo(): Promise<{
+  contact: ContactInfoInput;
+  useWhoisPrivacy: boolean;
+}> {
+  const { approach } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'approach',
+      message: 'Domain registrant contact info (required by ICANN):',
+      choices: [
+        {
+          name: `${chalk.green('⚡')} Use WHOIS privacy — hide your info from public lookups`,
+          value: 'privacy',
+        },
+        {
+          name: '  Enter contact details manually',
+          value: 'manual',
+        },
+      ],
+    },
+  ]);
+
+  const useWhoisPrivacy = approach === 'privacy';
+
+  // Even with WHOIS privacy, ICANN requires valid contact info
+  // (it just won't be publicly visible)
+  const contact = await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'firstName',
+      message: 'First name:',
+      validate: (v: string) => v.trim().length > 0 || 'Required',
+    },
+    {
+      type: 'input',
+      name: 'lastName',
+      message: 'Last name:',
+      validate: (v: string) => v.trim().length > 0 || 'Required',
+    },
+    {
+      type: 'input',
+      name: 'email',
+      message: 'Email:',
+      validate: (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) || 'Valid email required',
+    },
+    {
+      type: 'input',
+      name: 'phone',
+      message: 'Phone (e.g., +1.5551234567):',
+      validate: (v: string) => {
+        // Accept Namecheap format (+N.NNNNN) or common international formats (+NNNNNNN)
+        if (/^\+\d{1,3}\.\d{4,14}$/.test(v)) return true;
+        // Also accept plain international format and auto-convert later
+        if (/^\+\d{7,15}$/.test(v)) return true;
+        return 'Phone must start with + and country code (e.g., +1.5551234567 or +15551234567)';
+      },
+    },
+    {
+      type: 'input',
+      name: 'address1',
+      message: 'Street address:',
+      validate: (v: string) => v.trim().length > 0 || 'Required',
+    },
+    {
+      type: 'input',
+      name: 'city',
+      message: 'City:',
+      validate: (v: string) => v.trim().length > 0 || 'Required',
+    },
+    {
+      type: 'input',
+      name: 'stateProvince',
+      message: 'State / province:',
+      validate: (v: string) => v.trim().length > 0 || 'Required',
+    },
+    {
+      type: 'input',
+      name: 'postalCode',
+      message: 'Postal code:',
+      validate: (v: string) => v.trim().length > 0 || 'Required',
+    },
+    {
+      type: 'input',
+      name: 'country',
+      message: 'Country code (e.g., US, GB, DE):',
+      validate: (v: string) => /^[A-Z]{2}$/i.test(v.trim()) || 'ISO 2-letter country code required',
+      filter: (v: string) => v.trim().toUpperCase(),
+    },
+  ]);
+
+  return {
+    contact: {
+      firstName: contact.firstName.trim(),
+      lastName: contact.lastName.trim(),
+      email: contact.email.trim(),
+      phone: contact.phone.trim(),
+      address1: contact.address1.trim(),
+      city: contact.city.trim(),
+      stateProvince: contact.stateProvince.trim(),
+      postalCode: contact.postalCode.trim(),
+      country: contact.country.trim(),
+    },
+    useWhoisPrivacy,
+  };
+}
+
+/**
+ * Prompt for services AFTER domain is registered
+ */
+export async function promptPostDomainServices(
+  domain: string,
+  projectName: string
+): Promise<string[]> {
+  const choices = [
+    {
+      name: `GitHub  ${chalk.dim(`github.com/${projectName} — org + repo`)}`,
+      value: 'github',
+      checked: true,
+    },
+    {
+      name: `DNS + email  ${chalk.dim('MX, SPF, DKIM, DMARC via Cloudflare')}`,
+      value: 'cloudflare',
+      checked: true,
+    },
+  ];
+
+  const { selected } = await inquirer.prompt([
+    {
+      type: 'checkbox',
+      name: 'selected',
+      message: 'What else do you want to set up?',
+      choices,
+    },
+  ]);
+
+  return selected;
+}
