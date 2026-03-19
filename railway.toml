@@ -1,8 +1,7 @@
 # Railway Configuration for Forj Monorepo
-# This file defines base settings; each service has its own config in packages/*/railway.toml
 
 [build]
-builder = "NIXPACKS"
+builder = "RAILPACK"
 
 [deploy]
 # Services are defined in packages/api/railway.toml and packages/workers/railway.toml
