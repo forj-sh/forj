@@ -182,26 +182,26 @@ async function interactiveInit(
   const availableServices: ServiceOption[] = [
     {
       id: 'domain',
-      name: 'Domain registration',
-      description: 'Namecheap reseller',
+      name: 'Domain',
+      description: `${selectedDomain} — registered and configured`,
       enabled: true,
     },
     {
       id: 'github',
-      name: 'GitHub org + repos',
-      description: `github.com/${name}`,
+      name: 'GitHub',
+      description: `github.com/${name} — org + repo created`,
       enabled: true,
     },
     {
       id: 'cloudflare',
-      name: 'Cloudflare zone + DNS wiring',
-      description: 'Auto-configured records',
+      name: 'DNS + email',
+      description: 'MX, SPF, DKIM, DMARC — ready for Google Workspace',
       enabled: true,
     },
     {
       id: 'vercel',
-      name: 'Vercel project',
-      description: 'Linked to GitHub',
+      name: 'Vercel',
+      description: `${selectedDomain} — deployed from GitHub`,
       enabled: false,
     },
   ];
