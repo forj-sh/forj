@@ -515,3 +515,35 @@ export async function upsertUser(params: {
 
   return result.rows[0];
 }
+
+/**
+ * Get user contact info
+ */
+export async function getUserContactInfo(
+  userId: string
+): Promise<RegistrantContact | null> {
+  const result = await db.query(
+    `SELECT contact_info as "contactInfo"
+     FROM users
+     WHERE id = $1 AND contact_info IS NOT NULL`,
+    [userId]
+  );
+
+  if (!result.rows[0]) return null;
+  return result.rows[0].contactInfo as RegistrantContact;
+}
+
+/**
+ * Save user contact info
+ */
+export async function saveUserContactInfo(
+  userId: string,
+  contact: RegistrantContact
+): Promise<void> {
+  await db.query(
+    `UPDATE users
+     SET contact_info = $1::jsonb, updated_at = NOW()
+     WHERE id = $2`,
+    [JSON.stringify(contact), userId]
+  );
+}

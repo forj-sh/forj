@@ -40,6 +40,8 @@ import {
   updateProjectPaymentStatus,
   updateProjectPhase,
   addProjectServices,
+  getUserContactInfo,
+  saveUserContactInfo,
   type User,
 } from '../lib/database.js';
 import { ProvisioningOrchestrator, type ProvisioningConfig } from '../lib/orchestrator.js';
@@ -383,6 +385,51 @@ export async function projectRoutes(server: FastifyInstance) {
           error: 'Failed to add services to project',
         });
       }
+    }
+  );
+
+  // ══════════════════════════════════════════════════════════════
+  // User contact info (saved on profile, reused across projects)
+  // ══════════════════════════════════════════════════════════════
+
+  /**
+   * GET /users/me/contact-info
+   * Get saved contact info from user profile
+   */
+  server.get(
+    '/users/me/contact-info',
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
+      const userId = request.user?.userId;
+      if (!userId) {
+        return reply.status(500).send({ success: false, error: 'User ID not found' });
+      }
+
+      const contact = await getUserContactInfo(userId);
+      return { success: true, data: { contact } };
+    }
+  );
+
+  /**
+   * PUT /users/me/contact-info
+   * Save contact info to user profile
+   */
+  server.put<{ Body: { contact: RegistrantContact } }>(
+    '/users/me/contact-info',
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
+      const userId = request.user?.userId;
+      if (!userId) {
+        return reply.status(500).send({ success: false, error: 'User ID not found' });
+      }
+
+      const { contact } = request.body;
+      if (!contact || !validateRegistrantContact(contact)) {
+        return reply.status(400).send({ success: false, error: 'Invalid contact info' });
+      }
+
+      await saveUserContactInfo(userId, contact);
+      return { success: true, data: { message: 'Contact info saved' } };
     }
   );
 

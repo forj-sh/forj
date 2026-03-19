@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import { writeFileSync, existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import chalk from 'chalk';
+import inquirer from 'inquirer';
 import {
   promptProjectName,
   promptDomainSelection,
@@ -195,22 +196,17 @@ async function interactiveInit(
     { name, domain: selectedDomain }
   );
 
-  // Step 5: Contact info
+  // Step 5: Contact info — check for saved profile first
   let contact;
-  let useWhoisPrivacy: boolean;
+  let useWhoisPrivacy = true; // Always on
 
   if (options.nonInteractive) {
-    // Non-interactive: require --whois-privacy or error
     if (!options.whoisPrivacy) {
       throw new ForjError(
         'Contact info is required. Use --whois-privacy for WHOIS privacy defaults, or run interactively.',
         'MISSING_OPTION'
       );
     }
-    // With --whois-privacy, Namecheap's WhoisGuard replaces all registrant data
-    // with proxy contact details in public WHOIS. The registrar requires syntactically
-    // valid contact fields but the actual values are never publicly visible.
-    // This is standard practice for privacy-protected registrations.
     contact = {
       firstName: 'WHOIS', lastName: 'Agent',
       email: `noreply+${projectId.slice(0, 8)}@forj.sh`,
@@ -218,14 +214,43 @@ async function interactiveInit(
       address1: 'WHOIS Privacy Protection', city: 'Privacy',
       stateProvince: 'CA', postalCode: '00000', country: 'US',
     };
-    useWhoisPrivacy = true;
   } else {
-    logger.log(chalk.bold('Domain registration requires contact info (ICANN requirement)'));
-    logger.dim('With WHOIS privacy enabled, this info stays hidden from public lookups.\n');
+    // Check for saved contact info on user profile
+    let savedContact = null;
+    try {
+      const saved = await api.get<{ contact: any }>('/users/me/contact-info');
+      savedContact = saved.contact;
+    } catch {
+      // No saved contact — that's fine
+    }
 
-    const result = await promptContactInfo();
-    contact = result.contact;
-    useWhoisPrivacy = result.useWhoisPrivacy;
+    if (savedContact) {
+      logger.dim(`Saved contact: ${savedContact.firstName} ${savedContact.lastName}, ${savedContact.email}`);
+      const { reuse } = await inquirer.prompt([{
+        type: 'confirm',
+        name: 'reuse',
+        message: 'Use saved contact info?',
+        default: true,
+      }]);
+
+      if (reuse) {
+        contact = savedContact;
+      }
+    }
+
+    if (!contact) {
+      logger.dim('Contact info required for domain registration (hidden by WHOIS privacy)\n');
+      const result = await promptContactInfo();
+      contact = result.contact;
+      useWhoisPrivacy = result.useWhoisPrivacy;
+
+      // Save to user profile for next time
+      try {
+        await api.put('/users/me/contact-info', { contact });
+      } catch {
+        // Non-critical — don't block the flow
+      }
+    }
   }
 
   await api.post(`/projects/${projectId}/contact-info`, {
