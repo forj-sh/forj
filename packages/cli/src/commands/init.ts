@@ -12,6 +12,7 @@ import {
   ServiceOption,
 } from '../lib/prompts.js';
 import { api } from '../lib/api-client.js';
+import { ensureAuthenticated } from '../lib/auth.js';
 import { streamProvisioningProgress } from '../lib/sse-client.js';
 import { withErrorHandling, ForjError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
@@ -156,11 +157,15 @@ async function interactiveInit(
 ): Promise<InitResult | null> {
   logger.log(chalk.bold('\n✦ forj 鍛冶場') + ' — project infrastructure provisioning\n');
 
-  // Step 1: Get project name
+  // Step 1: Ensure authenticated
+  await ensureAuthenticated();
+  logger.newline();
+
+  // Step 2: Get project name
   const name = projectName || (await promptProjectName());
   logger.newline();
 
-  // Step 2: Domain selection
+  // Step 3: Domain selection
   let selectedDomain: string;
 
   if (options.domain) {
@@ -241,7 +246,7 @@ async function interactiveInit(
     logger.newline();
   }
 
-  // Step 6: Start provisioning
+  // Step 7: Start provisioning
   const startTime = Date.now();
 
   const result = await api.post<{ projectId: string }>(
@@ -256,7 +261,7 @@ async function interactiveInit(
 
   const { projectId } = result;
 
-  // Step 7: Stream progress via SSE
+  // Step 8: Stream progress via SSE
   logger.log(chalk.bold('Provisioning...'));
 
   const provisioningResult = await streamProvisioningProgress(
@@ -265,7 +270,7 @@ async function interactiveInit(
 
   const durationMs = Date.now() - startTime;
 
-  // Step 8: Save credentials
+  // Step 9: Save credentials
   const credentialsPath = join(process.cwd(), '.forj', 'credentials.json');
   ensureGitignore();
 

@@ -33,12 +33,13 @@ function isValidConfig(obj: unknown): obj is ForjConfig {
   if (typeof obj !== 'object' || obj === null) return false;
   const config = obj as Record<string, unknown>;
 
-  // Optional fields must have correct types if present
-  if (config.apiUrl !== undefined && typeof config.apiUrl !== 'string') return false;
-  if (config.authToken !== undefined && typeof config.authToken !== 'string') return false;
-  if (config.currentProject !== undefined && typeof config.currentProject !== 'string') return false;
-  if (config.githubToken !== undefined && typeof config.githubToken !== 'string') return false;
-  if (config.cloudflareToken !== undefined && typeof config.cloudflareToken !== 'string') return false;
+  // Optional fields must be string, null, or undefined
+  const isStringOrEmpty = (v: unknown) => v === undefined || v === null || typeof v === 'string';
+  if (!isStringOrEmpty(config.apiUrl)) return false;
+  if (!isStringOrEmpty(config.authToken)) return false;
+  if (!isStringOrEmpty(config.currentProject)) return false;
+  if (!isStringOrEmpty(config.githubToken)) return false;
+  if (!isStringOrEmpty(config.cloudflareToken)) return false;
 
   return true;
 }
@@ -112,7 +113,7 @@ export function getApiUrl(): string {
  */
 export function getAuthToken(): string | undefined {
   const config = readConfig();
-  return config.authToken;
+  return config.authToken || undefined;
 }
 
 /**
