@@ -2,10 +2,20 @@ import type { FastifyInstance } from 'fastify';
 import { randomUUID } from 'crypto';
 import {
   EmailProvider,
+  validateRegistrantContact,
+  PHASE1_ONLY_SERVICES,
+  STRIPE_PAYMENT_STATUS,
+  isValidDomain,
+  type ProjectCreateRequest,
+  type ProjectCreateResponse,
   type ProjectInitRequest,
   type ProjectInitResponse,
   type ProjectStatus,
+  type AddServicesRequest,
+  type AddServicesResponse,
   type AddServiceRequest,
+  type ContactInfoRequest,
+  type RegistrantContact,
   type DNSHealthResult,
   type DNSFixResponse,
   type DNSRecordType,
@@ -19,10 +29,17 @@ import { ipRateLimit } from '../middleware/ip-rate-limit.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import {
   createProject,
+  createDomainProject,
   getProjectByIdAndUserId,
   isDomainTaken,
   getUser,
   updateProjectService,
+  updateProjectContactInfo,
+  getProjectContactInfo,
+  updateProjectStripeSession,
+  updateProjectPaymentStatus,
+  updateProjectPhase,
+  addProjectServices,
   type User,
 } from '../lib/database.js';
 import { ProvisioningOrchestrator, type ProvisioningConfig } from '../lib/orchestrator.js';
@@ -48,8 +65,404 @@ import {
  * TODO: User project quota limits
  */
 export async function projectRoutes(server: FastifyInstance) {
+  // ══════════════════════════════════════════════════════════════
+  // Phase 1: Domain purchase endpoints
+  // ══════════════════════════════════════════════════════════════
+
+  /**
+   * POST /projects/create
+   * Create project for domain purchase (Phase 1)
+   *
+   * Creates a project with only 'domain' service in pending state.
+   * Does NOT start provisioning — that happens after payment via webhook.
+   */
+  server.post<{ Body: ProjectCreateRequest }>(
+    '/projects/create',
+    { preHandler: [requireAuth, ipRateLimit('projects'), rateLimit('projects')] },
+    async (request, reply) => {
+      const { name, domain } = request.body;
+
+      if (!name || !domain) {
+        return reply.status(400).send({
+          success: false,
+          error: 'Missing required fields: name, domain',
+        });
+      }
+
+      // Validate domain format (shared regex from @forj/shared)
+      if (!isValidDomain(domain)) {
+        return reply.status(400).send({
+          success: false,
+          error: 'Invalid domain name format',
+        });
+      }
+
+      const userId = request.user?.userId;
+      if (!userId) {
+        return reply.status(500).send({
+          success: false,
+          error: 'User ID not found after authentication',
+        });
+      }
+
+      // Check domain uniqueness
+      const domainExists = await isDomainTaken(domain);
+      if (domainExists) {
+        return reply.status(409).send({
+          success: false,
+          error: `Domain ${domain} is already registered in Forj`,
+        });
+      }
+
+      const projectId = randomUUID();
+
+      try {
+        const project = await createDomainProject({
+          id: projectId,
+          name,
+          domain,
+          userId,
+        });
+
+        request.log.info(
+          { projectId: project.id, name, domain },
+          'Project created (Phase 1: domain purchase)'
+        );
+
+        const response: ProjectCreateResponse = { projectId: project.id };
+        return { success: true, data: response };
+      } catch (error) {
+        request.log.error(error, 'Failed to create project');
+        return reply.status(500).send({
+          success: false,
+          error: 'Failed to create project',
+        });
+      }
+    }
+  );
+
+  /**
+   * POST /projects/:id/contact-info
+   * Store ICANN-required contact info for domain registration
+   *
+   * Must be called before Stripe checkout. The webhook handler reads
+   * this data when creating the domain registration job.
+   */
+  server.post<{ Params: { id: string }; Body: ContactInfoRequest }>(
+    '/projects/:id/contact-info',
+    { preHandler: [requireAuth, ipRateLimit('projects'), rateLimit('projects')] },
+    async (request, reply) => {
+      const { id } = request.params;
+      const userId = request.user?.userId;
+      if (!userId) {
+        return reply.status(500).send({
+          success: false,
+          error: 'User ID not found after authentication',
+        });
+      }
+
+      const { contact, useWhoisPrivacy } = request.body;
+
+      // Validate required ICANN fields
+      if (!contact || !validateRegistrantContact(contact)) {
+        return reply.status(400).send({
+          success: false,
+          error: 'Missing required contact fields: firstName, lastName, email, phone, address1, city, stateProvince, postalCode, country',
+        });
+      }
+
+      // Ownership check
+      const project = await getProjectByIdAndUserId(id, userId);
+      if (!project) {
+        return reply.status(404).send({
+          success: false,
+          error: 'Project not found',
+        });
+      }
+
+      try {
+        await updateProjectContactInfo(id, contact, useWhoisPrivacy ?? true);
+
+        request.log.info({ projectId: id }, 'Contact info stored');
+        return { success: true, data: { message: 'Contact info saved' } };
+      } catch (error) {
+        request.log.error(error, 'Failed to store contact info');
+        return reply.status(500).send({
+          success: false,
+          error: 'Failed to store contact info',
+        });
+      }
+    }
+  );
+
+  // ══════════════════════════════════════════════════════════════
+  // Phase 2: Service provisioning endpoints
+  // ══════════════════════════════════════════════════════════════
+
+  /**
+   * POST /projects/:id/provision-services
+   * Add services to an existing project and start provisioning (Phase 2)
+   *
+   * Prerequisites:
+   * - Project must exist and belong to user
+   * - Domain service must be in 'complete' state (payment confirmed, domain registered)
+   * - Required credentials must be stored (GitHub token, Cloudflare token)
+   */
+  server.post<{ Params: { id: string }; Body: AddServicesRequest }>(
+    '/projects/:id/provision-services',
+    { preHandler: [requireAuth, ipRateLimit('projects'), rateLimit('projects')] },
+    async (request, reply) => {
+      const { id } = request.params;
+      const userId = request.user?.userId;
+      if (!userId) {
+        return reply.status(500).send({
+          success: false,
+          error: 'User ID not found after authentication',
+        });
+      }
+
+      const { services, githubOrg } = request.body;
+
+      if (!services || services.length === 0) {
+        return reply.status(400).send({
+          success: false,
+          error: 'At least one service is required',
+        });
+      }
+
+      // Block Phase 1 services from being added in Phase 2
+      const blockedServices = services.filter((s: ServiceType) =>
+        PHASE1_ONLY_SERVICES.includes(s)
+      );
+      if (blockedServices.length > 0) {
+        return reply.status(400).send({
+          success: false,
+          error: `Cannot add Phase 1 services in this endpoint: ${blockedServices.join(', ')}. Domain is already registered.`,
+        });
+      }
+
+      // DNS requires a Cloudflare zone — auto-include cloudflare if dns is requested
+      if (services.includes('dns') && !services.includes('cloudflare')) {
+        services.push('cloudflare' as ServiceType);
+      }
+
+      if (services.includes('github') && !githubOrg) {
+        return reply.status(400).send({
+          success: false,
+          error: 'githubOrg is required when github service is selected',
+        });
+      }
+
+      // Ownership check
+      const project = await getProjectByIdAndUserId(id, userId);
+      if (!project) {
+        return reply.status(404).send({
+          success: false,
+          error: 'Project not found',
+        });
+      }
+
+      // Verify domain is registered before allowing service provisioning
+      const domainState = project.services?.domain;
+      if (!domainState || domainState.status !== 'complete') {
+        return reply.status(400).send({
+          success: false,
+          error: 'Domain must be registered before provisioning other services',
+        });
+      }
+
+      // Get user credentials
+      const user = await getUser(userId);
+      if (!user) {
+        return reply.status(500).send({
+          success: false,
+          error: 'User not found',
+        });
+      }
+
+      let cloudflareToken: string | undefined;
+      let githubToken: string | undefined;
+
+      if (services.includes('cloudflare') || services.includes('dns')) {
+        if (!user.cloudflareTokenEncrypted) {
+          return reply.status(400).send({
+            success: false,
+            error: 'Cloudflare token not found — connect Cloudflare first',
+          });
+        }
+        const cfKey = process.env.CLOUDFLARE_ENCRYPTION_KEY;
+        if (!cfKey) {
+          return reply.status(500).send({ success: false, error: 'Server encryption not configured' });
+        }
+        try {
+          cloudflareToken = await decrypt(user.cloudflareTokenEncrypted, cfKey);
+        } catch (error) {
+          request.log.error(error, 'Failed to decrypt Cloudflare token');
+          return reply.status(500).send({ success: false, error: 'Failed to decrypt Cloudflare credentials' });
+        }
+      }
+
+      if (services.includes('github')) {
+        if (!user.githubTokenEncrypted) {
+          return reply.status(400).send({
+            success: false,
+            error: 'GitHub token not found — authenticate with GitHub first',
+          });
+        }
+        const ghKey = process.env.GITHUB_ENCRYPTION_KEY;
+        if (!ghKey) {
+          return reply.status(500).send({ success: false, error: 'Server encryption not configured' });
+        }
+        try {
+          githubToken = await decrypt(user.githubTokenEncrypted, ghKey);
+        } catch (error) {
+          request.log.error(error, 'Failed to decrypt GitHub token');
+          return reply.status(500).send({ success: false, error: 'Failed to decrypt GitHub credentials' });
+        }
+      }
+
+      try {
+        // Add services to project in database
+        await addProjectServices(id, services);
+
+        // Build provisioning config (domain excluded — already registered)
+        const provisioningConfig: ProvisioningConfig = {
+          userId,
+          projectId: id,
+          domain: project.domain,
+          services, // Only the new services (github, cloudflare, dns)
+          githubOrg: githubOrg || '',
+          years: 1,
+          // contactInfo omitted — not needed for Phase 2 (GitHub, Cloudflare, DNS)
+        };
+
+        if (services.includes('github')) {
+          provisioningConfig.githubToken = githubToken;
+          provisioningConfig.githubOrg = githubOrg!;
+        }
+
+        if (services.includes('cloudflare') || services.includes('dns')) {
+          provisioningConfig.cloudflareApiToken = cloudflareToken;
+          provisioningConfig.cloudflareAccountId = user.cloudflareAccountId ?? undefined;
+        }
+
+        // Start provisioning in background
+        const orchestrator = new ProvisioningOrchestrator(
+          getDomainQueue(),
+          getGitHubQueue(),
+          getCloudflareQueue(),
+          getDNSQueue()
+        );
+
+        orchestrator.provision(provisioningConfig)
+          .then(() => {
+            request.log.info({ projectId: id, services }, 'Phase 2 provisioning started');
+          })
+          .catch(async (error) => {
+            request.log.error(error, 'Failed to start Phase 2 provisioning');
+            try {
+              for (const service of services) {
+                await updateProjectService(id, service as any, {
+                  status: 'failed',
+                  error: 'Failed to queue provisioning job. Please try again or contact support.',
+                  startedAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                });
+              }
+            } catch (dbError) {
+              request.log.error(dbError, 'Failed to update project state after provisioning error');
+            }
+          });
+
+        const response: AddServicesResponse = { projectId: id };
+        return { success: true, data: response };
+      } catch (error) {
+        request.log.error(error, 'Failed to add services');
+        return reply.status(500).send({
+          success: false,
+          error: 'Failed to add services to project',
+        });
+      }
+    }
+  );
+
+  // ══════════════════════════════════════════════════════════════
+  // Dev-only endpoints
+  // ══════════════════════════════════════════════════════════════
+
+  /**
+   * POST /projects/:id/dev/trigger-domain-registration
+   * Dev-only: skip Stripe payment and trigger domain registration directly.
+   * Only available when NODE_ENV !== 'production'.
+   */
+  if (process.env.NODE_ENV !== 'production') {
+    server.post<{ Params: { id: string } }>(
+      '/projects/:id/dev/trigger-domain-registration',
+      { preHandler: [requireAuth] },
+      async (request, reply) => {
+        const { id } = request.params;
+        const userId = request.user?.userId;
+        if (!userId) {
+          return reply.status(500).send({ success: false, error: 'User ID not found' });
+        }
+
+        const project = await getProjectByIdAndUserId(id, userId);
+        if (!project) {
+          return reply.status(404).send({ success: false, error: 'Project not found' });
+        }
+
+        const contactData = await getProjectContactInfo(id);
+        if (!contactData) {
+          return reply.status(400).send({ success: false, error: 'Contact info not stored yet' });
+        }
+
+        // Mark payment as paid and start domain registration via orchestrator
+        await updateProjectPaymentStatus(id, STRIPE_PAYMENT_STATUS.PAID);
+
+        const provisioningConfig: ProvisioningConfig = {
+          userId,
+          projectId: id,
+          domain: project.domain,
+          services: ['domain'],
+          githubOrg: '',
+          years: 1,
+          contactInfo: {
+            firstName: contactData.contact.firstName,
+            lastName: contactData.contact.lastName,
+            email: contactData.contact.email,
+            phone: contactData.contact.phone,
+            address1: contactData.contact.address1,
+            city: contactData.contact.city,
+            stateProvince: contactData.contact.stateProvince,
+            postalCode: contactData.contact.postalCode,
+            country: contactData.contact.country,
+          },
+          namecheapApiUser: process.env.NAMECHEAP_API_USER,
+          namecheapApiKey: process.env.NAMECHEAP_API_KEY,
+          namecheapUsername: process.env.NAMECHEAP_USERNAME,
+        };
+
+        const orchestrator = new ProvisioningOrchestrator(
+          getDomainQueue(), getGitHubQueue(), getCloudflareQueue(), getDNSQueue()
+        );
+
+        orchestrator.provision(provisioningConfig).catch((error) => {
+          request.log.error(error, 'Dev domain registration failed');
+        });
+
+        request.log.warn({ projectId: id }, 'DEV: triggered domain registration without payment');
+        return { success: true, data: { message: 'Domain registration triggered (dev mode)' } };
+      }
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // Legacy endpoints (deprecated — kept for backward compatibility)
+  // ══════════════════════════════════════════════════════════════
+
   /**
    * POST /projects/init
+   * @deprecated Use POST /projects/create + POST /projects/:id/provision-services
    * Initialize new project and persist to database
    *
    * AUTHENTICATION: Requires JWT or API key
@@ -357,12 +770,7 @@ export async function projectRoutes(server: FastifyInstance) {
 
   /**
    * POST /projects/:id/services
-   * Add service to project - returns success
-   *
-   * AUTHENTICATION: Requires JWT or API key
-   * AUTHORIZATION: Verify user owns this project
-   * RATE LIMITING: IP-based + user-based
-   * TODO: Validate service type against allowed values
+   * @deprecated Use POST /projects/:id/provision-services instead
    */
   server.post<{ Params: { id: string }; Body: AddServiceRequest }>(
     '/projects/:id/services',
@@ -393,10 +801,10 @@ export async function projectRoutes(server: FastifyInstance) {
         });
       }
 
-      request.log.info({
-        projectId: id,
-        service,
-      }, 'Add service to project');
+      request.log.warn(
+        { projectId: id, service },
+        'Deprecated: POST /projects/:id/services — use POST /projects/:id/provision-services'
+      );
 
       return {
         success: true,

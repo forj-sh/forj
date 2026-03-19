@@ -88,6 +88,9 @@ CLI → HTTPS + SSE → API Server (Fastify) → BullMQ + Redis → Worker Pool 
 - **`ENABLE_NAMECHEAP_ROUTES=true`** required to mount production domain endpoints.
 - **`ENABLE_MOCK_AUTH`** defaults to `false` — mock auth endpoint only enabled when `!isProduction && mockAuthEnabled`.
 - **`TRUST_PROXY=false`** for local dev, `true` for production behind Cloudflare (gates proxy header trust).
+- **Sentry must be imported FIRST** in `packages/api/src/index.ts` (before Fastify server creation). Custom `errorHandler` must register before `Sentry.setupFastifyErrorHandler`.
+- **Environment variables:** See `packages/api/.env.example` for full reference. Notable: separate encryption keys for Cloudflare and GitHub tokens (security isolation), `REQUIRE_PAYMENT` enforced in production.
+- **Migrations use numeric timestamps** (e.g., `1741570800000`) not sequential numbers.
 
 ## Testing
 
@@ -95,13 +98,14 @@ CLI → HTTPS + SSE → API Server (Fastify) → BullMQ + Redis → Worker Pool 
 - Mock strategy: `global.fetch` for HTTP, `jest.fn()` for Redis
 - Test files in `__tests__/` directories adjacent to source
 - Integration tests require Redis running locally
+- Test timeout: 30 seconds (database-heavy tests)
 - See `docs/testing-guide.md` for full guide
 
 ## Code Patterns
 
 **API responses:** `{ success: boolean, data?: any, error?: string }`
 
-**Worker errors:** Throw to trigger BullMQ retry. Namecheap errors use 6 categories (AUTH, INPUT, AVAILABILITY, PAYMENT, SYSTEM, NETWORK) with retryability flags.
+**Worker errors:** Throw to trigger BullMQ retry. Error classes in `packages/shared/src/` use category enums (AUTH, VALIDATION, PAYMENT, AVAILABILITY, PROVIDER, NETWORK, UNKNOWN) with `isRetryable()` and `getUserMessage()` methods.
 
 **State machines:**
 - Domain: PENDING → QUEUED → CHECKING → AVAILABLE → REGISTERING → CONFIGURING → COMPLETE/FAILED
@@ -118,12 +122,17 @@ CLI → HTTPS + SSE → API Server (Fastify) → BullMQ + Redis → Worker Pool 
 **Backend:** Fastify 4, BullMQ + Redis, Neon Postgres (serverless), Pino logging
 **CLI:** commander.js, inquirer, chalk, ora, eventsource (SSE)
 **Integrations:** Namecheap Reseller API, GitHub REST API, Cloudflare API v4, Stripe Checkout, jose (JWT)
-**Build:** tsup (esbuild), TypeScript strict mode, Node.js 18+
+**Build:** tsup (esbuild), TypeScript strict mode, Node.js 18+. CLI build adds shebang (`#!/usr/bin/env node`).
 **Monitoring:** Sentry (`@sentry/node`) in API, Workers, and CLI (opt-in telemetry)
 
 ## Git Workflow
 
 All feature development uses **Graphite CLI (`gt`)** for stacked PRs. Each stack should be independently testable, 50-500 lines, with PR descriptions including Summary, Changes, Stack Context, Dependencies, and Testing sections.
+
+## Formatting
+
+- 2-space indentation, LF line endings, UTF-8 (enforced by `.editorconfig`)
+- Trailing whitespace trimmed (except `.md` files)
 
 ## References
 

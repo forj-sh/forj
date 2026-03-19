@@ -27,7 +27,13 @@ import type {
   DomainPaymentData,
   RegisterDomainJobData,
 } from '@forj/shared';
-import { DomainOperationType, DomainJobStatus, parseCheckoutMetadata } from '@forj/shared';
+import { DomainOperationType, DomainJobStatus, parseCheckoutMetadata, STRIPE_PAYMENT_STATUS } from '@forj/shared';
+import {
+  getProjectContactInfo,
+  getProjectByStripeSession,
+  updateProjectPaymentStatus,
+  updateProjectService,
+} from '../lib/database.js';
 
 /**
  * Stripe webhook routes
@@ -142,20 +148,18 @@ export async function stripeWebhookRoutes(
 /**
  * Handle checkout.session.completed event
  *
- * User completed payment - trigger domain registration job.
+ * User completed payment — fetch stored contact info and trigger domain registration.
  *
- * IMPORTANT:
- * - Uses session.id as BullMQ jobId for idempotency (prevents duplicate jobs on webhook retries)
- * - Metadata parsing handles Stripe's string-only values
- * - Missing required registration fields (registrant, tech, admin, auxBilling)
- *   must be fetched from database or collected during checkout
+ * Flow: CLI stores contact info → CLI creates checkout → user pays → this webhook fires
+ *       → fetch contact info from DB → queue domain registration job
+ *
+ * Idempotency: Uses session.id as BullMQ jobId to prevent duplicate jobs on retries.
  */
 async function handleCheckoutCompleted(
   payload: StripeWebhookPayload,
   domainQueue: Queue,
   server: FastifyInstance
 ) {
-  // Type guard for session object
   const session = payload.data.object as any;
 
   if (!session || !session.metadata) {
@@ -165,7 +169,6 @@ async function handleCheckoutCompleted(
 
   const rawMetadata = session.metadata as StripeCheckoutMetadata;
 
-  // Parse metadata with type conversion (Stripe metadata values are all strings)
   let parsed;
   try {
     parsed = parseCheckoutMetadata(rawMetadata);
@@ -174,27 +177,71 @@ async function handleCheckoutCompleted(
     return;
   }
 
-  // TODO (CRITICAL): Fetch contact information from database
-  // The RegisterDomainJobData requires:
-  // - registrant: ContactInfo (name, address, phone, email)
-  // - tech: ContactInfo
-  // - admin: ContactInfo
-  // - auxBilling: ContactInfo
-  // - addFreeWhoisguard: boolean
-  // - wgEnabled: boolean
-  // - isPremiumDomain: boolean
-  // - premiumPrice?: number
-  //
-  // Options:
-  // 1. Store contact info during checkout flow (preferred)
-  // 2. Use project/user default contact info from database
-  // 3. Collect contact info after payment (requires async flow)
-  //
-  // Without this data, the domain worker will fail when attempting registration.
+  // Verify this session matches the one stored on the project
+  // Prevents stale/duplicate sessions from triggering multiple registrations
+  const project = await getProjectByStripeSession(session.id);
+  if (!project) {
+    // This could indicate a stale session, a race condition, or a forged/manipulated webhook.
+    // Log at error level with full context for investigation.
+    server.log.error(
+      { sessionId: session.id, projectId: parsed.projectId, paymentIntent: session.payment_intent },
+      'Stripe session does not match any stored project — ignoring webhook. Investigate if recurring.'
+    );
+    return;
+  }
 
-  // Create minimal job data (INCOMPLETE - will fail at worker)
-  const jobData: Partial<RegisterDomainJobData> = {
-    projectId: parsed.projectId,
+  // Verify metadata projectId matches the project linked to this session
+  if (project.id !== parsed.projectId) {
+    server.log.error(
+      { sessionId: session.id, metadataProjectId: parsed.projectId, dbProjectId: project.id },
+      'Stripe session project mismatch between metadata and database — ignoring webhook'
+    );
+    return;
+  }
+
+  const projectId = project.id;
+
+  // Update payment status in database
+  await updateProjectPaymentStatus(projectId, STRIPE_PAYMENT_STATUS.PAID);
+
+  // Fetch contact info stored during the init flow (Phase 1)
+  const contactData = await getProjectContactInfo(projectId);
+  if (!contactData) {
+    server.log.error(
+      { projectId },
+      'Contact info not found for project — cannot register domain'
+    );
+    // Mark domain service as failed so the user sees the error via SSE
+    await updateProjectService(projectId, 'domain', {
+      status: 'failed',
+      error: 'Contact information missing. Please re-run init to provide contact details.',
+      updatedAt: new Date().toISOString(),
+    });
+    // TODO: Initiate Stripe refund for this session since domain cannot be registered
+    // without contact info. This should not happen in normal flow (CLI stores contact
+    // info before checkout), but handle defensively.
+    return;
+  }
+
+  const { contact, useWhoisPrivacy } = contactData;
+
+  // Map Forj contact format to Namecheap ContactInfo (email → emailAddress)
+  const namecheapContact = {
+    firstName: contact.firstName,
+    lastName: contact.lastName,
+    emailAddress: contact.email,
+    phone: contact.phone,
+    address1: contact.address1,
+    address2: contact.address2,
+    city: contact.city,
+    stateProvince: contact.stateProvince,
+    postalCode: contact.postalCode,
+    country: contact.country,
+    organizationName: contact.organizationName,
+  };
+
+  const jobData: RegisterDomainJobData = {
+    projectId,
     userId: parsed.userId,
     domainName: parsed.domainName,
     years: parsed.years,
@@ -205,14 +252,19 @@ async function handleCheckoutCompleted(
     updatedAt: Date.now(),
     attempts: 0,
     jobId: '', // Will be set by BullMQ
-    // MISSING: registrant, tech, admin, auxBilling, addFreeWhoisguard, wgEnabled, premiumPrice
+    // Use same contact for all roles (standard for small teams / individuals)
+    registrant: namecheapContact,
+    tech: namecheapContact,
+    admin: namecheapContact,
+    auxBilling: namecheapContact,
+    addFreeWhoisguard: useWhoisPrivacy,
+    wgEnabled: useWhoisPrivacy,
   };
 
   // Use session.id as BullMQ jobId for idempotency
-  // Prevents duplicate registration jobs if Stripe retries webhook delivery
   const job = await domainQueue.add('register', jobData, {
-    jobId: session.id, // Idempotency key
-    priority: 1, // CRITICAL - user has paid
+    jobId: session.id,
+    priority: 1, // CRITICAL — user has paid
     attempts: 3,
     backoff: {
       type: 'exponential',
@@ -220,13 +272,16 @@ async function handleCheckoutCompleted(
     },
   });
 
-  // Update job data with actual BullMQ job ID
   if (job.id) {
-    await job.updateData({
-      ...jobData,
-      jobId: job.id,
-    });
+    await job.updateData({ ...jobData, jobId: job.id });
   }
+
+  // Mark domain service as running
+  await updateProjectService(projectId, 'domain', {
+    status: 'running',
+    startedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
 
   server.log.info(
     {
@@ -237,24 +292,6 @@ async function handleCheckoutCompleted(
     },
     'Domain registration job created from Stripe checkout'
   );
-
-  // TODO: Store payment data in database
-  const paymentData: DomainPaymentData = {
-    sessionId: session.id,
-    paymentIntentId: session.payment_intent,
-    amountCharged: session.amount_total,
-    currency: session.currency,
-    projectId: parsed.projectId,
-    userId: parsed.userId,
-    domainName: parsed.domainName,
-    years: parsed.years,
-    status: 'succeeded',
-    timestamp: Date.now(),
-    jobId: job.id,
-  };
-
-  // TODO: Save to database
-  server.log.info({ paymentData }, 'Payment recorded');
 }
 
 /**

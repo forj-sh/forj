@@ -1,7 +1,8 @@
 import pg from 'pg';
 const { Pool } = pg;
 import { logger } from './logger.js';
-import type { Project, ServiceState, ServiceType } from '@forj/shared';
+import type { Project, ServiceState, ServiceType, RegistrantContact, ProjectPhase, StripePaymentStatus } from '@forj/shared';
+import { PROJECT_PHASE, STRIPE_PAYMENT_STATUS } from '@forj/shared';
 
 const DATABASE_URL = process.env.DATABASE_URL;
 
@@ -243,6 +244,191 @@ export async function isDomainTaken(domain: string): Promise<boolean> {
   );
 
   return result.rows[0].exists;
+}
+
+/**
+ * Create a project for Phase 1 (domain purchase only)
+ */
+export async function createDomainProject(params: {
+  id: string;
+  name: string;
+  domain: string;
+  userId: string;
+}): Promise<Project> {
+  const { id, name, domain, userId } = params;
+  const normalizedDomain = domain.toLowerCase();
+  const now = new Date().toISOString();
+
+  const serviceStates: Partial<Record<ServiceType, ServiceState>> = {
+    domain: { status: 'pending', startedAt: now, updatedAt: now },
+  };
+
+  const result = await db.query(
+    `INSERT INTO projects (id, name, domain, user_id, services, phase, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+     RETURNING id, name, domain, user_id as "userId", services, phase,
+               created_at as "createdAt", updated_at as "updatedAt"`,
+    [id, name, normalizedDomain, userId, JSON.stringify(serviceStates), PROJECT_PHASE.DOMAIN]
+  );
+
+  return result.rows[0];
+}
+
+/**
+ * Store contact info and WHOIS privacy preference on a project
+ */
+export async function updateProjectContactInfo(
+  projectId: string,
+  contact: RegistrantContact,
+  useWhoisPrivacy: boolean
+): Promise<void> {
+  await db.query(
+    `UPDATE projects
+     SET contact_info = $1::jsonb,
+         use_whois_privacy = $2,
+         updated_at = NOW()
+     WHERE id = $3`,
+    [JSON.stringify(contact), useWhoisPrivacy, projectId]
+  );
+}
+
+/**
+ * Get contact info for a project (used by webhook handler)
+ */
+export async function getProjectContactInfo(
+  projectId: string
+): Promise<{ contact: RegistrantContact; useWhoisPrivacy: boolean } | null> {
+  const result = await db.query(
+    `SELECT contact_info as "contactInfo", use_whois_privacy as "useWhoisPrivacy"
+     FROM projects
+     WHERE id = $1 AND contact_info IS NOT NULL`,
+    [projectId]
+  );
+
+  if (!result.rows[0]) return null;
+
+  return {
+    contact: result.rows[0].contactInfo,
+    useWhoisPrivacy: result.rows[0].useWhoisPrivacy,
+  };
+}
+
+/**
+ * Store Stripe session on a project and set payment status to pending
+ */
+export async function updateProjectStripeSession(
+  projectId: string,
+  sessionId: string
+): Promise<void> {
+  await db.query(
+    `UPDATE projects
+     SET stripe_session_id = $1,
+         stripe_payment_status = $2,
+         updated_at = NOW()
+     WHERE id = $3`,
+    [sessionId, STRIPE_PAYMENT_STATUS.PENDING, projectId]
+  );
+}
+
+/**
+ * Update Stripe payment status (called by webhook handler)
+ */
+export async function updateProjectPaymentStatus(
+  projectId: string,
+  status: StripePaymentStatus
+): Promise<void> {
+  await db.query(
+    `UPDATE projects
+     SET stripe_payment_status = $1,
+         updated_at = NOW()
+     WHERE id = $2`,
+    [status, projectId]
+  );
+}
+
+/**
+ * Get project by Stripe session ID (used by webhook handler)
+ */
+export async function getProjectByStripeSession(
+  sessionId: string
+): Promise<Project | null> {
+  const result = await db.query(
+    `SELECT id, name, domain, user_id as "userId", services, phase,
+            contact_info as "contactInfo", use_whois_privacy as "useWhoisPrivacy",
+            stripe_session_id as "stripeSessionId",
+            stripe_payment_status as "stripePaymentStatus",
+            created_at as "createdAt", updated_at as "updatedAt"
+     FROM projects
+     WHERE stripe_session_id = $1`,
+    [sessionId]
+  );
+
+  return result.rows[0] || null;
+}
+
+/**
+ * Update project phase
+ */
+export async function updateProjectPhase(
+  projectId: string,
+  phase: ProjectPhase
+): Promise<void> {
+  await db.query(
+    `UPDATE projects
+     SET phase = $1, updated_at = NOW()
+     WHERE id = $2`,
+    [phase, projectId]
+  );
+}
+
+/**
+ * Add services to an existing project (Phase 2)
+ * Uses a transaction to ensure all services are added atomically.
+ */
+export async function addProjectServices(
+  projectId: string,
+  services: ServiceType[]
+): Promise<void> {
+  const now = new Date().toISOString();
+  const client = await db.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    for (const service of services) {
+      const state: ServiceState = {
+        status: 'pending',
+        startedAt: now,
+        updatedAt: now,
+      };
+
+      await client.query(
+        `UPDATE projects
+         SET services = jsonb_set(
+           COALESCE(services, '{}'::jsonb),
+           $1,
+           $2::jsonb,
+           true
+         ),
+         updated_at = NOW()
+         WHERE id = $3`,
+        [`{${service}}`, JSON.stringify(state), projectId]
+      );
+    }
+
+    // Update phase in the same transaction
+    await client.query(
+      `UPDATE projects SET phase = $1, updated_at = NOW() WHERE id = $2`,
+      [PROJECT_PHASE.SERVICES, projectId]
+    );
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 /**

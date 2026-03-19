@@ -344,6 +344,6 @@ describe('Provisioning Pipeline Integration', () => {
     // This test just verifies the config is valid
     expect(config.userId).toBe('user-123');
     expect(config.cloudflareAccountId).toBe('cf_account_test');
-    expect(config.contactInfo.email).toBe('test@example.com');
+    expect(config.contactInfo?.email).toBe('test@example.com');
   });
 });
