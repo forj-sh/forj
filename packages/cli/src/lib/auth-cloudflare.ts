@@ -19,12 +19,10 @@ export async function guideCloudflareTokenCreation(): Promise<void> {
   logger.info('Cloudflare API Token Setup');
   logger.info('─────────────────────────');
   logger.info('');
-  logger.info('Forj needs a Cloudflare API token with the following permissions:');
-  logger.info('  • Account → Account → Read');
-  logger.info('  • Zone → Zone → Read');
-  logger.info('  • Zone → Zone Settings → Edit');
-  logger.info('  • Zone → DNS → Read');
-  logger.info('  • Zone → DNS → Edit');
+  logger.info('Forj needs a Cloudflare API token with these permissions:');
+  logger.info('');
+  logger.info('  Account:  Account Settings → Read');
+  logger.info('  Zone:     Zone → Read, Zone Settings → Edit, DNS → Edit');
   logger.info('');
   logger.info('We\'ll open Cloudflare\'s token creation page for you.');
   logger.info('');
@@ -56,17 +54,16 @@ export async function guideCloudflareTokenCreation(): Promise<void> {
   }
 
   logger.info('Steps to create the token:');
-  logger.info('  1. Click "Create Token"');
-  logger.info('  2. Use the "Edit zone DNS" template (or create custom)');
-  logger.info('  3. Set permissions:');
-  logger.info('     - Account → Account → Read');
+  logger.info('  1. Click "Create Token" → "Create Custom Token"');
+  logger.info('  2. Add permissions:');
+  logger.info('     - Account → Account Settings → Read');
   logger.info('     - Zone → Zone → Read');
   logger.info('     - Zone → Zone Settings → Edit');
   logger.info('     - Zone → DNS → Edit');
-  logger.info('  4. Under "Account Resources", select your account');
-  logger.info('  5. Under "Zone Resources", select "All zones" (or specific zones)');
-  logger.info('  6. Click "Continue to summary" → "Create Token"');
-  logger.info('  7. Copy the token (you won\'t be able to see it again!)');
+  logger.info('  3. Account Resources → Include → All accounts');
+  logger.info('  4. Zone Resources → Include → All zones');
+  logger.info('  5. Click "Continue to summary" → "Create Token"');
+  logger.info('  6. Copy the token (you won\'t be able to see it again!)');
   logger.info('');
 }
 

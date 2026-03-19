@@ -100,12 +100,12 @@ export async function cloudflareAuthRoutes(server: FastifyInstance) {
           });
         }
 
-        // Get account info
+        // Get account info — requires Account Settings:Read permission + Account Resources set
         const accounts = await client.listAccounts();
         if (accounts.length === 0) {
           return reply.status(400).send({
             success: false,
-            error: 'No Cloudflare accounts found for this token',
+            error: 'No Cloudflare accounts found. Token needs: Account → Account Settings → Read permission, and Account Resources → Include → All accounts.',
           });
         }
 
