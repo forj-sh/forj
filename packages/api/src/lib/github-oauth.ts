@@ -132,8 +132,10 @@ export class GitHubDeviceFlow {
           return { status: 'expired' };
         case 'access_denied':
           return { status: 'denied' };
+        case 'bad_verification_code':
+          throw new Error('Invalid or expired device code — please restart the login flow');
         default:
-          throw new Error(`Unknown GitHub OAuth error: ${data.error}`);
+          throw new Error(`Unknown GitHub OAuth error: ${data.error}${data.error_description ? ': ' + data.error_description : ''}`);
       }
     }
 

@@ -311,9 +311,10 @@ export async function githubAuthRoutes(server: FastifyInstance) {
 
         return reply.send({ success: true, data: response });
       } catch (error) {
-        request.log.error(error, 'Failed to poll for GitHub token');
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        request.log.error({ err: error, errorMessage }, 'Failed to poll for GitHub token');
 
-        if (error instanceof Error && error.message.includes('not configured')) {
+        if (errorMessage.includes('not configured')) {
           return reply.status(500).send({
             success: false,
             error: 'GitHub OAuth not configured on server',
@@ -322,7 +323,7 @@ export async function githubAuthRoutes(server: FastifyInstance) {
 
         return reply.status(500).send({
           success: false,
-          error: 'Failed to poll for GitHub token',
+          error: `Failed to poll for GitHub token: ${errorMessage}`,
         });
       }
     }
