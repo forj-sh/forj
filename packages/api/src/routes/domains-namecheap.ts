@@ -108,10 +108,11 @@ export async function domainNamecheapRoutes(
         },
       };
     } catch (error) {
-      request.log.error({ error, domains }, 'Domain check failed');
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      request.log.error({ err: error, errorMessage, domains }, 'Domain check failed');
       return reply.status(500).send({
         success: false,
-        error: 'Failed to check domain availability',
+        error: `Failed to check domain availability: ${errorMessage}`,
       });
     }
   }
