@@ -8,6 +8,17 @@ import type { FastifyInstance } from 'fastify';
 import { testConnection, closeDatabase } from './lib/database.js';
 import { testRedisConnection, closeRedis } from './lib/redis.js';
 import { closeQueues } from './lib/queues.js';
+import { webcrypto as nodeWebcrypto } from 'node:crypto';
+
+/**
+ * Node 18 does not populate globalThis.crypto by default, but libraries like
+ * `jose` rely on the Web Crypto API being available globally. Populate it once
+ * at startup to ensure JWT signing works everywhere.
+ */
+const globalWithCrypto = globalThis as typeof globalThis & { crypto?: typeof nodeWebcrypto };
+if (!globalWithCrypto.crypto) {
+  globalWithCrypto.crypto = nodeWebcrypto;
+}
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const HOST = process.env.HOST || '0.0.0.0';
