@@ -3,8 +3,14 @@
  * Entry point for the marketing site
  */
 
+import posthog from 'posthog-js';
 import './styles/main.css';
 import './styles/waitlist.css';
+
+posthog.init('phc_n1oCkFgHw9i3jKkFaQR3ijniSWGZvCqA5GJmMpt1hCT', {
+  api_host: 'https://t.forj.sh',
+  person_profiles: 'always',
+});
 import { Nav } from './components/Nav';
 import { Hero } from './components/Hero';
 import { Terminal } from './components/Terminal';
