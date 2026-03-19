@@ -10,7 +10,7 @@
  * to ensure proper rate limiting (20 req/min) and priority handling.
  */
 
-import { Worker, Job } from 'bullmq';
+import { Worker, Job, UnrecoverableError } from 'bullmq';
 import type { Redis } from 'ioredis';
 import {
   NamecheapClient,
@@ -43,6 +43,7 @@ import {
   parseBoolean,
   parseNumber,
   getAttribute,
+  NamecheapApiError,
 } from '@forj/shared';
 import { updateProjectService } from './database.js';
 
@@ -309,6 +310,10 @@ export class DomainWorker {
     } catch (error) {
       // Sanitize error before re-throwing
       const sanitizedMessage = sanitizeErrorMessage(error);
+      // Non-retryable errors (payment, validation, auth) should not be retried by BullMQ
+      if (error instanceof NamecheapApiError && !error.isRetryable()) {
+        throw new UnrecoverableError(sanitizedMessage);
+      }
       throw new Error(sanitizedMessage);
     }
   }
