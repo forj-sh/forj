@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
+import rawBody from 'fastify-raw-body';
 import { Sentry } from './instrument.js';
 import { NamecheapClient } from '@forj/shared';
 import { logger } from './lib/logger.js';
@@ -53,6 +54,14 @@ export async function createServer() {
       ? ['https://forj.sh', 'https://www.forj.sh']
       : true, // Allow all origins in development
     credentials: true,
+  });
+
+  // Raw body capture — required for Stripe webhook signature verification.
+  // Must be registered before routes so request.rawBody is available.
+  await server.register(rawBody, {
+    runFirst: true,
+    encoding: false, // Buffer, not string — Stripe SDK needs raw bytes
+    global: false,   // Only capture raw body on routes that opt in (config.rawBody = true)
   });
 
   // Error handler
