@@ -5,7 +5,7 @@
  * from background workers.
  */
 
-import pg from 'pg';
+import pg, { type Pool as PoolType } from 'pg';
 const { Pool } = pg;
 import type { ServiceType, ServiceState } from '@forj/shared';
 import { decrypt } from './encryption.js';
@@ -14,9 +14,9 @@ import { decrypt } from './encryption.js';
  * Lazy-initialized database pool
  * Created on first access to ensure DATABASE_URL is loaded from dotenv
  */
-let _db: Pool | null = null;
+let _db: PoolType | null = null;
 
-function getDb(): Pool {
+function getDb(): PoolType {
   if (!_db) {
     const DATABASE_URL = process.env.DATABASE_URL;
 

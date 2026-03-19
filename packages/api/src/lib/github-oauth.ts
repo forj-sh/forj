@@ -19,7 +19,7 @@ export interface GitHubAccessTokenResponse {
 }
 
 export interface GitHubAccessTokenError {
-  error: 'authorization_pending' | 'slow_down' | 'expired_token' | 'access_denied';
+  error: 'authorization_pending' | 'slow_down' | 'expired_token' | 'access_denied' | 'bad_verification_code' | 'incorrect_device_code' | string;
   error_description?: string;
   error_uri?: string;
 }
