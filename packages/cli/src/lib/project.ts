@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { ForjError } from '../utils/errors.js';
 
@@ -21,6 +21,28 @@ function isValidProjectConfig(obj: unknown): obj is ProjectConfig {
     typeof config.name === 'string' &&
     typeof config.domain === 'string'
   );
+}
+
+/**
+ * Write project config to .forj/config.json in the current directory
+ */
+export function writeProjectConfig(config: ProjectConfig): void {
+  const forjDir = join(process.cwd(), '.forj');
+  const configPath = join(forjDir, 'config.json');
+
+  try {
+    if (!existsSync(forjDir)) {
+      mkdirSync(forjDir, { recursive: true });
+    }
+
+    writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+  } catch (error) {
+    throw new ForjError(
+      'Failed to write project config',
+      'CONFIG_WRITE_ERROR',
+      error
+    );
+  }
 }
 
 /**
