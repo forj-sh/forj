@@ -13,7 +13,7 @@ import { splitDomain, dollarsToCents, centsToDollars } from '@forj/shared';
 import { createDomainCheckoutSession, getCheckoutSession } from '../lib/stripe-client.js';
 import { requireAuth } from '../middleware/auth.js';
 import { verifyProjectOwnership } from '../lib/authorization.js';
-import { updateProjectStripeSession } from '../lib/database.js';
+import { getProjectContactInfo, updateProjectStripeSession } from '../lib/database.js';
 import type { PricingCache } from '../lib/pricing-cache.js';
 
 /**
@@ -70,7 +70,6 @@ export async function stripeCheckoutRoutes(
     async (request, reply) => {
       const { projectId, pricing, years, isPremium, jobId } = request.body;
       const userId = request.user!.userId;
-      const userEmail = request.user!.email;
 
       // Validate input
       if (!projectId || !pricing || !pricing.domainName) {
@@ -106,6 +105,11 @@ export async function stripeCheckoutRoutes(
           code: 'FORBIDDEN',
         });
       }
+
+      // Use the contact email from ICANN registration info (collected during init)
+      // so the user receives Stripe receipts at their real email, not the GitHub noreply address
+      const contactInfo = await getProjectContactInfo(projectId);
+      const userEmail = contactInfo?.contact?.email || request.user!.email;
 
       // SERVER-SIDE PRICING VALIDATION (Stack 11 - CRITICAL security fix)
       // All pricing is calculated server-side to prevent price manipulation.
