@@ -119,7 +119,7 @@ Note: DNS record wiring (MX, SPF, DKIM, DMARC) deferred to future `forj dns setu
 
 **TypeScript:** Strict mode, discriminated unions for job types, `export type` for type exports.
 
-**Data model:** Projects table uses JSONB `services` column + `phase`, `contact_info`, `stripe_session_id` columns. Users table stores encrypted tokens (AES-256-GCM) + `contact_info` (reused across projects). 5 migrations in `packages/api/migrations/`.
+**Data model:** Projects table uses JSONB `services` column + `phase`, `contact_info`, `stripe_session_id` columns. Users table stores encrypted tokens (AES-256-GCM) + `contact_info` (reused across projects). 6 migrations in `packages/api/migrations/`.
 
 **Phone numbers:** Namecheap requires `+CC.NNNNNNNNNN` format (e.g., `+1.5551234567`). The domain worker normalizes plain international format (`+15551234567`) automatically.
 

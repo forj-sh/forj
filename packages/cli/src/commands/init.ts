@@ -15,6 +15,7 @@ import {
 import { api } from '../lib/api-client.js';
 import { ensureAuthenticated } from '../lib/auth.js';
 import { authenticateCloudflare } from '../lib/auth-cloudflare.js';
+import { writeProjectConfig } from '../lib/project.js';
 import { streamProvisioningProgress } from '../lib/sse-client.js';
 import { openCheckoutAndWaitForPayment } from '../lib/stripe-checkout.js';
 import { withErrorHandling, ForjError } from '../utils/errors.js';
@@ -198,6 +199,10 @@ async function interactiveInit(
     { name, domain: selectedDomain }
   );
 
+  // Persist project config so other commands (dns, status) can find it
+  ensureGitignore();
+  writeProjectConfig({ projectId, name, domain: selectedDomain });
+
   // Step 5: Contact info — check for saved profile first
   let contact;
   let useWhoisPrivacy = true; // Always on
@@ -332,7 +337,6 @@ async function interactiveInit(
 
     const durationMs = Date.now() - startTime;
     const credentialsPath = join(process.cwd(), '.forj', 'credentials.json');
-    ensureGitignore();
 
     logger.newline();
     logger.success(`Setup complete in ${formatDuration(durationMs)}`);
@@ -385,7 +389,6 @@ async function interactiveInit(
 
   // Save credentials
   const credentialsPath = join(process.cwd(), '.forj', 'credentials.json');
-  ensureGitignore();
 
   logger.newline();
   logger.success(`Credentials → ${credentialsPath} ${chalk.green('(gitignored ✓)')}`);
