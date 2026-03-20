@@ -72,14 +72,20 @@ export async function domainNamecheapRoutes(
       // Check domains via Namecheap
       const checkResults = await namecheapClient.checkDomains(domains);
 
-      // Enrich results with pricing from cache
-      const enrichedResults = await Promise.all(
+      // Enrich results with pricing from cache, filtering out domains without pricing
+      const enrichedResultsRaw = await Promise.all(
         checkResults.map(async (result) => {
           // Extract TLD (support multi-part TLDs like "co.uk")
           const { tld } = splitDomain(result.domain);
 
           // Get pricing from cache
           const pricing = await pricingCache.getTldPricing(tld, 'REGISTER');
+
+          // Skip domains without pricing (e.g., .ai not available from Namecheap API)
+          // unless they have premium pricing from the availability check
+          if (!pricing && !result.isPremium) {
+            return null;
+          }
 
           return {
             domain: result.domain,
@@ -93,6 +99,10 @@ export async function domainNamecheapRoutes(
             registrar: 'Namecheap',
           };
         })
+      );
+
+      const enrichedResults = enrichedResultsRaw.filter(
+        (result): result is NonNullable<typeof result> => result !== null
       );
 
       request.log.info({

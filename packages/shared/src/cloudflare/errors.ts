@@ -129,6 +129,11 @@ export function categorizeError(errorCode: number): CloudflareErrorCategory {
     return CloudflareErrorCategory.RATE_LIMIT;
   }
 
+  // Map HTTP status codes to categories (when Cloudflare doesn't return structured error codes)
+  if (errorCode === 401 || errorCode === 403) {
+    return CloudflareErrorCategory.AUTH;
+  }
+
   // Default to UNKNOWN for unrecognized codes
   return CloudflareErrorCategory.UNKNOWN;
 }

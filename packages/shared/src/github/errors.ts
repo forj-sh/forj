@@ -85,6 +85,10 @@ export class GitHubError extends Error {
   public getUserMessage(): string {
     switch (this.category) {
       case GitHubErrorCategory.AUTH:
+        // Detect OAuth App access restrictions on org (common for newly created orgs)
+        if (this.response?.message?.includes('OAuth App access restrictions')) {
+          return 'GitHub org has OAuth App access restrictions enabled. Go to https://github.com/organizations/YOUR_ORG/settings/oauth_application_policy and grant access to Forj, or disable the restriction.';
+        }
         return 'GitHub authentication failed. Please check your access token and permissions.';
       case GitHubErrorCategory.VALIDATION:
         return this.response?.message || 'Invalid request data. Please check your input.';

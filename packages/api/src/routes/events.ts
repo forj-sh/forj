@@ -5,6 +5,7 @@ import { redisPubSub } from '../lib/redis-pubsub.js';
 import { requireAuth } from '../middleware/auth.js';
 import { ipRateLimit } from '../middleware/ip-rate-limit.js';
 import { verifyProjectOwnership } from '../lib/authorization.js';
+import { getProjectByIdAndUserId } from '../lib/database.js';
 
 /**
  * Server-Sent Events (SSE) routes for real-time provisioning updates
@@ -134,6 +135,22 @@ export async function eventRoutes(server: FastifyInstance) {
 
       request.log.info({ projectId }, 'SSE stream opened');
 
+      // Determine expected services for this project to track multi-service completion
+      const expectedServices = new Set<string>();
+      const completedServices = new Set<string>();
+      try {
+        const project = await getProjectByIdAndUserId(projectId, userId);
+        if (project?.services) {
+          for (const [serviceName, serviceState] of Object.entries(project.services)) {
+            if (serviceState && serviceState.status !== 'complete') {
+              expectedServices.add(serviceName);
+            }
+          }
+        }
+      } catch (err) {
+        request.log.warn({ err, projectId }, 'Failed to load project services for SSE tracking');
+      }
+
       // Subscribe to worker events from Redis
       unsubscribe = await redisPubSub.subscribeWorkerEvents(
         projectId,
@@ -151,18 +168,32 @@ export async function eventRoutes(server: FastifyInstance) {
           const isFailed = eventType.includes('failed') || eventType === DomainWorkerEventType.JOB_FAILED;
 
           if (isCompleted || isFailed) {
-            // For single-service flows (domain only), close immediately
-            // For multi-service flows, the CLI will handle the completion
-            if (isCompleted) {
-              sendEvent({ type: 'complete', data: { projectId } });
+            const service = detectService(eventType, workerEvent);
+            if (service && service !== 'unknown') {
+              completedServices.add(service);
             }
-            request.log.info(
-              { projectId, eventType },
-              'SSE stream closing (job terminal state)'
-            );
-            cleanup().catch((err) => {
-              request.log.error({ err }, 'Error during SSE cleanup');
-            });
+
+            // Check if all expected services have reached terminal state
+            const allDone = expectedServices.size === 0 ||
+              [...expectedServices].every(s => completedServices.has(s));
+
+            if (allDone) {
+              // All services reached terminal state — send complete so CLI exits cleanly
+              // Individual service failures are already communicated via per-service status events
+              sendEvent({ type: 'complete', data: { projectId } });
+              request.log.info(
+                { projectId, eventType, completedServices: [...completedServices] },
+                'SSE stream closing (all services reached terminal state)'
+              );
+              cleanup().catch((err) => {
+                request.log.error({ err }, 'Error during SSE cleanup');
+              });
+            } else {
+              request.log.info(
+                { projectId, eventType, service, completedServices: [...completedServices], expectedServices: [...expectedServices] },
+                'Service reached terminal state, waiting for remaining services'
+              );
+            }
           }
         }
       );

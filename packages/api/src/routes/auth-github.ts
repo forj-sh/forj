@@ -376,6 +376,56 @@ export async function githubAuthRoutes(server: FastifyInstance) {
   );
 
   /**
+   * GET /github/verify-org/:org
+   * Verify the authenticated user can access the given GitHub org.
+   * Used by the CLI after the user grants Forj OAuth access to the org.
+   */
+  server.get<{ Params: { org: string } }>(
+    '/github/verify-org/:org',
+    {
+      preHandler: requireAuth,
+    },
+    async (request, reply) => {
+      const userId = request.user!.userId;
+      const { org } = request.params;
+
+      try {
+        const token = await getGitHubToken(userId);
+        if (!token) {
+          return reply.status(400).send({
+            success: false,
+            error: 'GitHub token not found — authenticate with GitHub first',
+          });
+        }
+
+        // Call GitHub API to verify org access
+        const response = await fetch(`https://api.github.com/orgs/${org}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/vnd.github+json',
+            'User-Agent': 'Forj/1.0',
+          },
+        });
+
+        if (!response.ok) {
+          return reply.status(response.status).send({
+            success: false,
+            error: `Cannot access org "${org}". Ensure the org exists and Forj has been granted access.`,
+          });
+        }
+
+        return reply.send({ success: true, data: { org } });
+      } catch (error) {
+        request.log.error(error, 'Failed to verify GitHub org');
+        return reply.status(500).send({
+          success: false,
+          error: 'Failed to verify GitHub org access',
+        });
+      }
+    }
+  );
+
+  /**
    * DELETE /auth/github
    * Remove stored GitHub token
    */

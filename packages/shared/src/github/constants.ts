@@ -19,6 +19,16 @@ export const GITHUB_OAUTH = {
 } as const;
 
 /**
+ * Forj GitHub OAuth App numeric ID (visible on the app's settings page).
+ * Used to build the per-org grant URL:
+ *   https://github.com/orgs/{org}/policies/applications/{FORJ_GITHUB_APP_ID}
+ *
+ * New GitHub orgs block third-party OAuth apps by default, so users must
+ * explicitly grant Forj access before we can create repos.
+ */
+export const FORJ_GITHUB_APP_ID = process.env.FORJ_GITHUB_APP_ID || '1234567';
+
+/**
  * GitHub API rate limits (authenticated requests)
  *
  * https://docs.github.com/en/rest/overview/resources-in-the-rest-api#rate-limiting
