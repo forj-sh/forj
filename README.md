@@ -2,7 +2,7 @@
 
 **One command. Production-ready infrastructure.**
 
-`npx forj-cli init my-startup` provisions a domain, GitHub repos, Cloudflare DNS zone, and wires all DNS records (MX, SPF, DKIM, DMARC) in under 2 minutes.
+`npx forj-cli init my-startup` registers a domain, creates a GitHub org + repo, and sets up Cloudflare as your DNS provider — in under 2 minutes.
 
 ---
 
@@ -32,9 +32,12 @@ npm run db:migrate -w packages/api
 npm run build
 
 # Start services (each in a separate terminal)
-npm run dev -w packages/api        # API server on :3000
-npm run dev -w packages/workers    # BullMQ workers
-npm run dev -w packages/cli        # CLI watch mode
+npm run dev -w packages/api                    # API server on :3000
+node packages/workers/dist/start-workers.js    # BullMQ workers
+npm run dev -w packages/cli                    # CLI watch mode
+
+# Local testing with --skip-payment (bypasses Stripe)
+FORJ_API_URL=http://localhost:3000 node packages/cli/dist/cli.js init --skip-payment
 
 # Run tests
 npm test -w packages/api

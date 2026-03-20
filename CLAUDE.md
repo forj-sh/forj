@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Development (npm workspaces — use -w flag for all package commands)
 npm run dev -w packages/api          # Start API server (localhost:3000)
 npm run dev -w packages/cli          # CLI watch mode
-npm run dev -w packages/workers      # Start BullMQ workers
+node packages/workers/dist/start-workers.js  # Start BullMQ workers (must build first)
 npm run dev -w packages/landing      # Landing page dev server
 
 # Testing
@@ -36,7 +36,7 @@ gt log short                          # View stack tree
 
 ## Project Overview
 
-**Forj** provisions production-ready project infrastructure with a single command: domain registration (Namecheap), GitHub repos, Cloudflare DNS zone, and DNS records (MX, SPF, DKIM, DMARC) in under 2 minutes. Full spec: `docs/spec.md`.
+**Forj** provisions production-ready project infrastructure with a single command: domain registration (Namecheap), GitHub org + repo, and Cloudflare DNS zone with nameserver configuration — in under 2 minutes. Full spec: `docs/spec.md`. **V1 shipped March 2026** (`forj-cli@1.0.0`).
 
 **Branding:** domain `forj.sh`, GitHub org `forj-sh`, npm package `forj-cli`, CLI invocation `npx forj-cli init acme`.
 
@@ -66,20 +66,24 @@ CLI → HTTPS + SSE → API Server (Fastify) → BullMQ + Redis → Worker Pool 
                                          → Stripe (payments)
 ```
 
-### Provisioning Order
+### Provisioning Order (V1 Two-Phase Flow)
 
 ```
-1. Domain registered (Namecheap)
-2. GitHub org verified + repos created     ← parallel with 3
-3. Cloudflare zone created                 ← returns nameserver pair
-4. Nameservers updated (Namecheap → Cloudflare NS)
-5. DNS records wired (MX, SPF, DKIM, DMARC, CNAME via Cloudflare API)
+Phase 1 — Domain purchase:
+  1. Domain registered (Namecheap) + Stripe payment
+
+Phase 2 — Services (after domain confirmed):
+  2. GitHub org verified + repo created    ← parallel with 3
+  3. Cloudflare zone created               ← returns nameserver pair
+  4. Nameservers updated (Namecheap → Cloudflare NS)
 ```
+
+Note: DNS record wiring (MX, SPF, DKIM, DMARC) deferred to future `forj dns setup-email` command.
 
 ### Auth Approaches
 
 - **GitHub**: OAuth Device Flow (RFC 8628) — one-time code at `github.com/login/device`, CLI polls until authorized.
-- **Cloudflare**: Guided API token creation — user creates token with `Zone:Edit` + `DNS:Edit` permissions, pastes into CLI. No standard OAuth2 available for third-party zone management.
+- **Cloudflare**: Guided API token creation — user creates custom token with `Account Settings:Read` + `Zone:Read` + `Zone Settings:Edit` + `DNS:Edit`, includes Account Resources + Zone Resources, pastes into CLI.
 
 ## Key Constraints
 
@@ -105,7 +109,7 @@ CLI → HTTPS + SSE → API Server (Fastify) → BullMQ + Redis → Worker Pool 
 
 **API responses:** `{ success: boolean, data?: any, error?: string }`
 
-**Worker errors:** Throw to trigger BullMQ retry. Error classes in `packages/shared/src/` use category enums (AUTH, VALIDATION, PAYMENT, AVAILABILITY, PROVIDER, NETWORK, UNKNOWN) with `isRetryable()` and `getUserMessage()` methods.
+**Worker errors:** Throw to trigger BullMQ retry. Non-retryable errors (PAYMENT, VALIDATION, AUTH) throw `UnrecoverableError` to stop BullMQ retries. Error classes in `packages/shared/src/` use category enums with `isRetryable()` and `getUserMessage()` methods.
 
 **State machines:**
 - Domain: PENDING → QUEUED → CHECKING → AVAILABLE → REGISTERING → CONFIGURING → COMPLETE/FAILED
@@ -115,11 +119,15 @@ CLI → HTTPS + SSE → API Server (Fastify) → BullMQ + Redis → Worker Pool 
 
 **TypeScript:** Strict mode, discriminated unions for job types, `export type` for type exports.
 
-**Data model:** Projects table uses JSONB `services` column. Users table stores encrypted tokens (AES-256-GCM). 4 migrations in `packages/api/migrations/`.
+**Data model:** Projects table uses JSONB `services` column + `phase`, `contact_info`, `stripe_session_id` columns. Users table stores encrypted tokens (AES-256-GCM) + `contact_info` (reused across projects). 5 migrations in `packages/api/migrations/`.
+
+**Phone numbers:** Namecheap requires `+CC.NNNNNNNNNN` format (e.g., `+1.5551234567`). The domain worker normalizes plain international format (`+15551234567`) automatically.
+
+**Pricing:** Domain prices shown to users include ICANN fee (wholesale + icannFee). `.ai` pricing not available from Namecheap API.
 
 ## Tech Stack
 
-**Backend:** Fastify 4, BullMQ + Redis, Neon Postgres (serverless), Pino logging
+**Backend:** Fastify 4, BullMQ + Redis, Railway Postgres (API/workers), Neon Postgres (landing page), Pino logging
 **CLI:** commander.js, inquirer, chalk, ora, eventsource (SSE)
 **Integrations:** Namecheap Reseller API, GitHub REST API, Cloudflare API v4, Stripe Checkout, jose (JWT)
 **Build:** tsup (esbuild), TypeScript strict mode, Node.js 18+. CLI build adds shebang (`#!/usr/bin/env node`).

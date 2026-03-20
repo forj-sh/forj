@@ -250,7 +250,7 @@ Last updated: 2026-03-19 (Phase 7 in progress — two-phase init flow shipped)
 - Lines changed: ~500 across 15 files
 - Review method: Automated AI code review (Gemini Code Assist + GitHub Copilot) + manual verification
 
-### Phase 7: Ship ⏳ IN PROGRESS
+### Phase 7: Ship ✅ COMPLETE (forj-cli@1.0.0 — March 19, 2026)
 
 **Two-Phase Init Flow** ✅ COMPLETE (March 19, 2026, PRs #104-#106)
 
@@ -265,9 +265,10 @@ Major restructure of `forj init` from a single-shot flow into two sequential pha
 6. Confirm: domain is registered
 
 **Phase 2 — Service provisioning (after domain confirmed):**
-7. "What else do you want to set up?" → GitHub, Cloudflare/DNS
-8. GitHub Device Flow / Cloudflare token guided creation
+7. "What else do you want to set up?" → GitHub, Cloudflare DNS
+8. GitHub Device Flow / Cloudflare token guided creation (Account Settings:Read + Zone:Read + Zone Settings:Edit + DNS:Edit)
 9. `POST /projects/:id/provision-services` → SSE stream
+10. V1 Cloudflare: zone creation + nameserver update only (no DNS record wiring)
 
 **Key changes:**
 - New shared types: `ProjectCreateRequest`, `RegistrantContact`, `ContactInfoRequest`, `ProjectPhase`, `AddServicesRequest`
@@ -296,21 +297,37 @@ Major restructure of `forj init` from a single-shot flow into two sequential pha
 - [ ] Uptime monitoring (BetterUptime, Checkly)
 - [ ] Log aggregation (Datadog, Logtail)
 
-**Pre-Launch Validation**
-- [ ] Run DB migration on production (`npm run db:migrate -w packages/api`)
-- [ ] Configure Stripe webhook in dashboard → `https://<api-host>/webhooks/stripe`
-- [ ] End-to-end testing: `forj init` → domain check → payment → domain registration → services
-- [ ] GitHub OAuth Device Flow test (real GitHub App)
-- [ ] Cloudflare zone creation + DNS wiring test
-- [ ] API key authentication and rate limiting stress test
-- [ ] Penetration testing (focus on credential handoff flow)
-- [ ] Publish `forj-cli` to npm
+**V1 Bug Fixes & Polish** (March 19, 2026)
 
-**Launch Preparation**
-- [ ] Landing page update + CLI demo GIF
-- [ ] `npm publish forj-cli` to registry
+- ✅ Fixed: Missing `phase` column migration not run on production DB
+- ✅ Fixed: Phone number format for Namecheap (`+19174779294` → `+1.9174779294`)
+- ✅ Fixed: Non-retryable errors (PAYMENT, VALIDATION) retrying endlessly — now throw `UnrecoverableError`
+- ✅ Fixed: SSE stream not sending explicit `complete` event → CLI `SSE_CONNECTION_ERROR` on success
+- ✅ Fixed: Spinner flickering (two ora spinners competing on terminal)
+- ✅ Fixed: Phase 2 SSE events not reaching CLI (GitHub/Cloudflare workers on wrong Redis channel)
+- ✅ Fixed: Domain prices missing ICANN fee ($1.58 shown vs $1.78 charged)
+- ✅ Fixed: Cloudflare token instructions missing Account Settings:Read permission
+- ✅ Fixed: False "missing permissions" warning (comparing friendly names vs Cloudflare UUIDs)
+- ✅ Added: `.xyz` promoted to tier-1 TLD (always shown in domain results)
+- ✅ Added: User contact info saved to profile, reused across projects
+- ✅ Added: WHOIS privacy always enabled (removed unnecessary choice)
+- ✅ Added: V1 service options: GitHub (org + repo) + Cloudflare DNS (zone + nameservers)
+- ✅ Removed: DNS record wiring from V1 (deferred to future `forj dns setup-email`)
+- ✅ Updated: Landing page terminal to match actual V1 flow
+- ✅ Published: `forj-cli@1.0.0` to npm
+- ✅ Workers dev command: `node packages/workers/dist/start-workers.js` (not `npm run dev`)
+- ✅ Database: Railway Postgres for API/workers, Neon Postgres for landing page
+
+**Pre-Launch Validation**
+- [x] Run DB migration on production
+- [x] Configure Stripe webhook in dashboard
+- [x] End-to-end testing: domain check → payment → domain registration
+- [x] Cloudflare zone creation + nameserver update test
+- [x] Publish `forj-cli@1.0.0` to npm
+- [x] Landing page updated
+- [ ] GitHub OAuth Device Flow test (real GitHub App)
+- [ ] Penetration testing (focus on credential handoff flow)
 - [ ] Show HN post + dev Twitter launch
-- [ ] 50 projects provisioned target
 
 ---
 
