@@ -26,7 +26,7 @@ export const GITHUB_OAUTH = {
  * New GitHub orgs block third-party OAuth apps by default, so users must
  * explicitly grant Forj access before we can create repos.
  */
-export const FORJ_GITHUB_APP_ID = process.env.FORJ_GITHUB_APP_ID || '1234567';
+export const FORJ_GITHUB_APP_ID = '3452586';
 
 /**
  * GitHub API rate limits (authenticated requests)
