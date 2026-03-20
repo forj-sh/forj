@@ -307,7 +307,13 @@ async function interactiveInit(
   // Step 8: Wait for domain registration via SSE
   logger.log(chalk.bold('Registering domain...'));
 
-  await streamProvisioningProgress(`/events/stream/${projectId}`);
+  const domainResult = await streamProvisioningProgress(`/events/stream/${projectId}`);
+
+  if (domainResult.failedServices.length > 0) {
+    logger.newline();
+    logger.error('Unable to provision domain at this time. Contact support@forj.sh');
+    return null;
+  }
 
   logger.newline();
   logger.success(`${chalk.bold(selectedDomain)} is yours!`);
@@ -391,7 +397,14 @@ async function interactiveInit(
   const credentialsPath = join(process.cwd(), '.forj', 'credentials.json');
 
   logger.newline();
-  logger.success(`Credentials → ${credentialsPath} ${chalk.green('(gitignored ✓)')}`);
+
+  if (provisioningResult.failedServices.length > 0) {
+    logger.warn(`Some services failed: ${provisioningResult.failedServices.join(', ')}`);
+    logger.dim(`Run ${chalk.cyan('forj status')} to check details.`);
+  } else {
+    logger.success(`Credentials → ${credentialsPath} ${chalk.green('(gitignored ✓)')}`);
+  }
+
   logger.newline();
   logger.success(`Setup complete in ${formatDuration(durationMs)}`);
   logger.dim(`Run ${chalk.cyan('forj status')} to see your stack.`);
@@ -399,7 +412,7 @@ async function interactiveInit(
   return {
     project: name,
     domain: selectedDomain,
-    services: (provisioningResult as { services: InitResult['services'] }).services || {},
+    services: (provisioningResult.data as { services: InitResult['services'] })?.services || {},
     credentialsPath,
     durationMs,
   };
