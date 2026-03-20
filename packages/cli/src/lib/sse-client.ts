@@ -174,6 +174,11 @@ export function createSSEClient(options: SSEClientOptions): {
 // Default timeout: 10 minutes
 const DEFAULT_PROVISIONING_TIMEOUT_MS = 10 * 60 * 1000;
 
+export interface ProvisioningResult {
+  data: unknown;
+  failedServices: string[];
+}
+
 /**
  * Stream provisioning progress with visual feedback
  */
@@ -181,10 +186,11 @@ export async function streamProvisioningProgress(
   endpoint: string,
   spinnerText: string = 'Provisioning...',
   timeoutMs: number = DEFAULT_PROVISIONING_TIMEOUT_MS
-): Promise<unknown> {
+): Promise<ProvisioningResult> {
   return new Promise((resolve, reject) => {
     const spinner = logger.spinner(spinnerText);
     const serviceSpinners = new Map<string, Ora>();
+    const failedServices: string[] = [];
 
     spinner.start();
 
@@ -232,13 +238,18 @@ export async function streamProvisioningProgress(
 
           case 'failed':
             serviceSpinner.fail(`${service}: ${error || 'Failed'}`);
+            failedServices.push(service);
             break;
         }
       },
 
       onComplete: (data) => {
-        spinner.succeed('Provisioning complete');
-        resolve(data);
+        if (failedServices.length > 0) {
+          spinner.stop();
+        } else {
+          spinner.succeed('Provisioning complete');
+        }
+        resolve({ data, failedServices });
       },
 
       onError: (error) => {
