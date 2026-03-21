@@ -11,20 +11,23 @@ npm run dev -w packages/cli          # CLI watch mode
 node packages/workers/dist/start-workers.js  # Start BullMQ workers (must build first)
 npm run dev -w packages/landing      # Landing page dev server
 
-# Testing
+# Testing (API + Workers use Jest, CLI uses tsx --test)
 npm test -w packages/api                              # Run all API tests
 npm test -w packages/api -- sse-streaming.test.ts     # Run specific test
 npm run test:watch -w packages/api                    # Watch mode
 npm run test:coverage -w packages/api                 # Coverage report
+npm test -w packages/workers                          # Run worker tests
+npm test -w packages/cli                              # Run CLI tests (tsx --test)
 
 # Database
 npm run db:migrate -w packages/api                    # Run pending migrations
 npm run db:migrate:create -w packages/api -- <name>   # Create new migration
 
-# Type checking & build
-npm run type-check -w packages/api    # Check API types
-npm run type-check -w packages/cli    # Check CLI types
-npm run build                         # Build all packages
+# Type checking & build (no linter configured)
+npm run type-check -w packages/api      # Check API types
+npm run type-check -w packages/cli      # Check CLI types
+npm run type-check -w packages/workers  # Check workers types
+npm run build                           # Build all packages
 
 # Graphite (REQUIRED for all branch management — never use raw git for branches)
 gt create -m "Stack N: Description"   # Create new stack
