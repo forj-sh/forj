@@ -18,7 +18,7 @@ export function APISection(): HTMLElement {
             Every forj command returns clean JSON when called with --json. No parsing terminal output. No scraping logs. Agents get a complete provisioning manifest they can act on immediately.
           </p>
           <p style="margin-bottom: 0; color: var(--text3);">
-            API key access, webhook callbacks, and priority provisioning available on the Agent tier.
+            Same access for humans and agents. No separate tier required.
           </p>
         </div>
         <div class="api-json reveal">
