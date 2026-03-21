@@ -144,7 +144,7 @@ export async function createDomainCheckoutSession(
             currency: params.pricing.currency.toLowerCase(),
             product_data: {
               name: `Domain Registration: ${params.pricing.domainName}`,
-              description: `${params.years} year${params.years > 1 ? 's' : ''} registration`,
+              description: `${params.years} year${params.years > 1 ? 's' : ''} registration + Forj provisioning service`,
               metadata: {
                 domainName: params.pricing.domainName,
                 years: params.years.toString(),
