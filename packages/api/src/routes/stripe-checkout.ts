@@ -9,7 +9,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import type { DomainCheckoutPricing } from '@forj/shared';
-import { splitDomain, dollarsToCents, centsToDollars } from '@forj/shared';
+import { splitDomain, dollarsToCents, centsToDollars, DEFAULT_SERVICE_FEE_DOLLARS } from '@forj/shared';
 import { createDomainCheckoutSession, getCheckoutSession } from '../lib/stripe-client.js';
 import { requireAuth } from '../middleware/auth.js';
 import { verifyProjectOwnership } from '../lib/authorization.js';
@@ -28,7 +28,7 @@ function getServiceFeeCents(): number {
       return parsed;
     }
   }
-  return 0; // Default: no service fee
+  return dollarsToCents(DEFAULT_SERVICE_FEE_DOLLARS);
 }
 
 /**

@@ -166,18 +166,21 @@ export interface DomainCheckoutPricing {
   currency: string;
 }
 
+/** Default Forj service fee in dollars, bundled with every domain purchase */
+export const DEFAULT_SERVICE_FEE_DOLLARS = 2.0;
+
 /**
  * Calculate total price for domain purchase
  *
  * @param domainPrice - Wholesale domain price
  * @param icannFee - ICANN fee
- * @param serviceFee - Forj service fee (default $5)
+ * @param serviceFee - Forj service fee (default $2)
  * @returns Total price calculation
  */
 export function calculateDomainPricing(
   domainPrice: number,
   icannFee: number,
-  serviceFee = 5.0
+  serviceFee = DEFAULT_SERVICE_FEE_DOLLARS
 ): { subtotal: number; total: number } {
   const subtotal = domainPrice + icannFee;
   const total = subtotal + serviceFee;

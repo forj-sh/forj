@@ -232,6 +232,7 @@ export {
   StripeWebhookEvent,
   parseCheckoutMetadata,
   calculateDomainPricing,
+  DEFAULT_SERVICE_FEE_DOLLARS,
   dollarsToCents,
   centsToDollars,
 } from './stripe.js';
