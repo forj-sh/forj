@@ -586,10 +586,15 @@ body::before {
 }
 
 .pricing-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  display: flex;
+  justify-content: center;
   border: 1px solid var(--border);
   margin-top: 60px;
+}
+
+.pricing-grid .price-card {
+  max-width: 480px;
+  width: 100%;
 }
 
 .price-card {

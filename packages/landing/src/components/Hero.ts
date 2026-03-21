@@ -3,9 +3,10 @@
  */
 
 import { html } from '@/utils/dom';
+import { bindCopyButton } from '@/utils/copy-command';
 
 export function Hero(): HTMLElement {
-  return html`
+  const el = html`
     <section class="hero reveal">
       <div class="hero-label">[ INFRA PROVISIONING CLI ]</div>
       <h1>Project infra.<br><span>One command.</span></h1>
@@ -15,9 +16,12 @@ export function Hero(): HTMLElement {
         Built for developers and the agents they work with.
       </p>
       <div class="hero-actions">
-        <a href="#waitlist" class="btn-primary">try for free →</a>
-        <span class="hero-note">no credit card · MIT CLI</span>
+        <button class="btn-primary copy-cmd">npx forj-cli init</button>
+        <span class="hero-note">pay per domain · no subscription</span>
       </div>
     </section>
   `;
+
+  bindCopyButton(el.querySelector('.copy-cmd')!);
+  return el;
 }
