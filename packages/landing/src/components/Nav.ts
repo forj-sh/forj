@@ -14,6 +14,7 @@ export function Nav(): HTMLElement {
       <ul class="nav-links">
         <li><a href="#features">features</a></li>
         <li><a href="#pricing">pricing</a></li>
+        <li><a href="/docs">docs</a></li>
       </ul>
       <button class="nav-cta copy-cmd">npx forj-cli init</button>
     </nav>

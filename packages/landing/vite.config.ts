@@ -14,6 +14,7 @@ export default defineConfig({
         main: resolve(__dirname, 'index.html'),
         success: resolve(__dirname, 'success.html'),
         cancel: resolve(__dirname, 'cancel.html'),
+        docs: resolve(__dirname, 'docs.html'),
       },
     },
   },

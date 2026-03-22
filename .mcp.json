@@ -15,93 +15,17 @@
     "forj": {
       "type": "http",
       "url": "http://localhost:3000",
-      "description": "Forj Infrastructure Provisioning API - automate domain registration, GitHub repos, Cloudflare DNS, and email configuration",
+      "description": "Forj Infrastructure Provisioning API — domain registration, GitHub repos, Cloudflare DNS. Production: https://api.forj.sh — Docs: https://forj.sh/docs",
       "headers": {
         "Authorization": "Bearer YOUR_JWT_TOKEN_OR_API_KEY_HERE",
         "Content-Type": "application/json"
       },
       "tools": [
         {
-          "name": "provision_infrastructure",
-          "description": "Provision complete infrastructure (domain, GitHub repo, Cloudflare DNS, email) for a new project",
-          "endpoint": "/provision",
-          "method": "POST",
-          "requiredScopes": ["agent:provision"],
-          "parameters": {
-            "projectId": {
-              "type": "string",
-              "description": "Unique project identifier",
-              "required": true
-            },
-            "domain": {
-              "type": "string",
-              "description": "Domain name to register (e.g., 'example.com')",
-              "required": true
-            },
-            "githubOrg": {
-              "type": "string",
-              "description": "GitHub organization name",
-              "required": true
-            },
-            "years": {
-              "type": "number",
-              "description": "Number of years to register domain (1-10)",
-              "required": true
-            },
-            "namecheapApiUser": {
-              "type": "string",
-              "description": "Namecheap API username",
-              "required": true
-            },
-            "namecheapApiKey": {
-              "type": "string",
-              "description": "Namecheap API key",
-              "required": true
-            },
-            "namecheapUsername": {
-              "type": "string",
-              "description": "Namecheap account username",
-              "required": true
-            },
-            "githubToken": {
-              "type": "string",
-              "description": "GitHub personal access token",
-              "required": true
-            },
-            "cloudflareApiToken": {
-              "type": "string",
-              "description": "Cloudflare API token",
-              "required": true
-            },
-            "cloudflareAccountId": {
-              "type": "string",
-              "description": "Cloudflare account ID",
-              "required": true
-            },
-            "contactInfo": {
-              "type": "object",
-              "description": "Domain registration contact information",
-              "required": true,
-              "properties": {
-                "firstName": { "type": "string" },
-                "lastName": { "type": "string" },
-                "email": { "type": "string", "format": "email" },
-                "phone": { "type": "string" },
-                "address1": { "type": "string" },
-                "city": { "type": "string" },
-                "stateProvince": { "type": "string" },
-                "postalCode": { "type": "string" },
-                "country": { "type": "string" }
-              }
-            }
-          }
-        },
-        {
           "name": "check_domain_availability",
-          "description": "Check if domains are available for registration",
+          "description": "Check if domains are available for registration. Returns availability, pricing (wholesale + ICANN fee), and premium status.",
           "endpoint": "/domains/check",
           "method": "POST",
-          "requiredScopes": ["agent:read"],
           "parameters": {
             "domains": {
               "type": "array",
@@ -114,84 +38,9 @@
           }
         },
         {
-          "name": "create_api_key",
-          "description": "Create a new API key with specific scopes",
-          "endpoint": "/api-keys",
-          "method": "POST",
-          "parameters": {
-            "name": {
-              "type": "string",
-              "description": "Friendly name for the API key",
-              "required": false
-            },
-            "scopes": {
-              "type": "array",
-              "description": "Scopes for the API key (agent:provision, agent:read)",
-              "required": true,
-              "items": {
-                "type": "string",
-                "enum": ["agent:provision", "agent:read"]
-              }
-            },
-            "environment": {
-              "type": "string",
-              "description": "Environment for the key (live or test)",
-              "required": false,
-              "enum": ["live", "test"],
-              "default": "live"
-            },
-            "expiresAt": {
-              "type": "string",
-              "description": "ISO 8601 expiration date",
-              "required": false
-            }
-          }
-        },
-        {
-          "name": "list_api_keys",
-          "description": "List all API keys for the authenticated user",
-          "endpoint": "/api-keys",
-          "method": "GET",
-          "parameters": {
-            "includeRevoked": {
-              "type": "boolean",
-              "description": "Include revoked keys in response",
-              "required": false,
-              "default": false
-            }
-          }
-        },
-        {
-          "name": "rotate_api_key",
-          "description": "Rotate an API key (revoke old, create new with same scopes)",
-          "endpoint": "/api-keys/{id}/rotate",
-          "method": "POST",
-          "requiredScopes": ["agent:provision"],
-          "parameters": {
-            "id": {
-              "type": "string",
-              "description": "API key ID to rotate",
-              "required": true
-            }
-          }
-        },
-        {
-          "name": "revoke_api_key",
-          "description": "Revoke an API key permanently",
-          "endpoint": "/api-keys/{id}",
-          "method": "DELETE",
-          "parameters": {
-            "id": {
-              "type": "string",
-              "description": "API key ID to revoke",
-              "required": true
-            }
-          }
-        },
-        {
           "name": "initialize_project",
-          "description": "Initialize a new project configuration",
-          "endpoint": "/projects/init",
+          "description": "Create a new project for domain purchase",
+          "endpoint": "/projects/create",
           "method": "POST",
           "parameters": {
             "name": {
@@ -203,20 +52,6 @@
               "type": "string",
               "description": "Domain for the project",
               "required": true
-            },
-            "services": {
-              "type": "array",
-              "description": "Services to provision (domain, github, cloudflare, dns)",
-              "required": true,
-              "items": {
-                "type": "string",
-                "enum": ["domain", "github", "cloudflare", "dns"]
-              }
-            },
-            "githubOrg": {
-              "type": "string",
-              "description": "GitHub organization name",
-              "required": false
             }
           }
         },
@@ -264,6 +99,80 @@
               "items": {
                 "type": "string"
               }
+            }
+          }
+        },
+        {
+          "name": "create_api_key",
+          "description": "Create a new API key with specific scopes",
+          "endpoint": "/api-keys",
+          "method": "POST",
+          "parameters": {
+            "name": {
+              "type": "string",
+              "description": "Friendly name for the API key",
+              "required": false
+            },
+            "scopes": {
+              "type": "array",
+              "description": "Scopes: agent:provision (full access), agent:read (read-only)",
+              "required": true,
+              "items": {
+                "type": "string",
+                "enum": ["agent:provision", "agent:read"]
+              }
+            },
+            "environment": {
+              "type": "string",
+              "description": "Environment for the key (live or test)",
+              "required": false,
+              "enum": ["live", "test"],
+              "default": "live"
+            },
+            "expiresAt": {
+              "type": "string",
+              "description": "ISO 8601 expiration date",
+              "required": false
+            }
+          }
+        },
+        {
+          "name": "list_api_keys",
+          "description": "List all API keys for the authenticated user",
+          "endpoint": "/api-keys",
+          "method": "GET",
+          "parameters": {
+            "includeRevoked": {
+              "type": "boolean",
+              "description": "Include revoked keys in response",
+              "required": false,
+              "default": false
+            }
+          }
+        },
+        {
+          "name": "rotate_api_key",
+          "description": "Rotate an API key (revoke old, create new with same scopes)",
+          "endpoint": "/api-keys/{id}/rotate",
+          "method": "POST",
+          "parameters": {
+            "id": {
+              "type": "string",
+              "description": "API key ID to rotate",
+              "required": true
+            }
+          }
+        },
+        {
+          "name": "revoke_api_key",
+          "description": "Revoke an API key permanently",
+          "endpoint": "/api-keys/{id}",
+          "method": "DELETE",
+          "parameters": {
+            "id": {
+              "type": "string",
+              "description": "API key ID to revoke",
+              "required": true
             }
           }
         }
