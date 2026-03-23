@@ -133,8 +133,7 @@ console.log(`✅ Domain worker started (concurrency: ${concurrency})`);
 const cloudflareWorkerConfig: CloudflareWorkerConfig = {
   redis: redisConfig,
   concurrency: parseInt(process.env.CLOUDFLARE_WORKER_CONCURRENCY || '3', 10),
-  // Note: CloudflareWorker publishes events to Redis internally via its publishEvent() method
-  // No need to provide an external eventPublisher (would cause duplicate events)
+  eventPublisher: createProjectEventPublisher('Cloudflare'),
 };
 
 const cloudflareWorker = new CloudflareWorker(cloudflareWorkerConfig);

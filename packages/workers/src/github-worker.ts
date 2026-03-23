@@ -516,7 +516,7 @@ export class GitHubWorker {
 
     // Also publish to Redis pub/sub for SSE streaming
     await this.redis.publish(
-      `project:${event.projectId}:events`,
+      `worker:events:${event.projectId}`,
       JSON.stringify(event)
     );
   }

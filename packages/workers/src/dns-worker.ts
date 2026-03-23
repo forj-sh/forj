@@ -568,7 +568,7 @@ export class DNSWorker {
     }
 
     // Also publish to Redis pub/sub for SSE streaming
-    await this.redis.publish(`project:${event.projectId}:events`, JSON.stringify(event));
+    await this.redis.publish(`worker:events:${event.projectId}`, JSON.stringify(event));
   }
 
   /**
