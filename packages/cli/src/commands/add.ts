@@ -96,8 +96,9 @@ async function checkServiceStatus(
 
     // failed or not_provisioned — proceed
     return true;
-  } catch {
+  } catch (error) {
     // Status check failed — proceed anyway (API will validate)
+    logger.warn(`Could not check service status, proceeding. Error: ${error instanceof Error ? error.message : String(error)}`);
     return true;
   }
 }
@@ -179,7 +180,7 @@ async function addService(
   // Start provisioning
   const startTime = Date.now();
 
-  if (service === 'github' || service === 'cloudflare') {
+  if (serviceInfo.requiresAuth) {
     // Core services use provision-services endpoint
     await api.post(`/projects/${encodeURIComponent(config.projectId)}/provision-services`, {
       services: [service],
@@ -194,7 +195,7 @@ async function addService(
 
   logger.log(chalk.bold('Provisioning...'));
 
-  const sseEndpoint = service === 'github' || service === 'cloudflare'
+  const sseEndpoint = serviceInfo.requiresAuth
     ? `/events/stream/${encodeURIComponent(config.projectId)}`
     : `/projects/${encodeURIComponent(config.projectId)}/stream?service=${service}`;
 
