@@ -4,6 +4,9 @@ import { api } from '../lib/api-client.js';
 import { promptConfirm } from '../lib/prompts.js';
 import { streamProvisioningProgress } from '../lib/sse-client.js';
 import { readProjectConfig } from '../lib/project.js';
+import { ensureAuthenticated } from '../lib/auth.js';
+import { authenticateCloudflare, getCloudflareToken } from '../lib/auth-cloudflare.js';
+import { promptGitHubOrgSetup } from '../lib/github-org.js';
 import { withErrorHandling, ForjError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 import { formatDuration } from '../utils/formatters.js';
@@ -11,24 +14,116 @@ import { formatDuration } from '../utils/formatters.js';
 interface AddOptions {
   yes?: boolean;
   json?: boolean;
+  force?: boolean;
 }
 
 const AVAILABLE_SERVICES = {
+  github: {
+    name: 'GitHub',
+    description: 'GitHub org + repo for your project',
+    requiresAuth: true,
+  },
+  cloudflare: {
+    name: 'Cloudflare',
+    description: 'Cloudflare DNS zone for your domain',
+    requiresAuth: true,
+  },
   vercel: {
     name: 'Vercel',
     description: 'Vercel project linked to GitHub',
+    requiresAuth: false,
   },
   railway: {
     name: 'Railway',
     description: 'Railway project with optional Postgres',
+    requiresAuth: false,
   },
   'google-workspace': {
     name: 'Google Workspace',
     description: 'Email and productivity suite',
+    requiresAuth: false,
   },
 };
 
 type ServiceName = keyof typeof AVAILABLE_SERVICES;
+
+interface ServiceStatus {
+  status: 'active' | 'pending' | 'failed' | 'not_provisioned';
+  value?: string;
+  detail?: string;
+}
+
+interface ProjectStatus {
+  project: string;
+  domain: string;
+  services: Record<string, ServiceStatus>;
+}
+
+/**
+ * Check current service status and decide whether to proceed
+ */
+async function checkServiceStatus(
+  projectId: string,
+  service: ServiceName,
+  force: boolean
+): Promise<boolean> {
+  try {
+    const status = await api.get<ProjectStatus>(
+      `/projects/${encodeURIComponent(projectId)}/status`
+    );
+
+    const serviceStatus = status.services[service];
+
+    if (serviceStatus?.status === 'active') {
+      if (force) {
+        logger.warn(`${AVAILABLE_SERVICES[service].name} is already active — re-provisioning with --force`);
+        return true;
+      }
+
+      logger.success(`${AVAILABLE_SERVICES[service].name} is already active.`);
+      if (serviceStatus.value) {
+        logger.dim(`  ${serviceStatus.value}`);
+      }
+      logger.dim(`Use ${chalk.cyan('--force')} to re-provision.`);
+      return false;
+    }
+
+    if (serviceStatus?.status === 'pending') {
+      logger.warn(`${AVAILABLE_SERVICES[service].name} is currently being provisioned.`);
+      logger.dim(`Run ${chalk.cyan('forj status')} to check progress.`);
+      return false;
+    }
+
+    // failed or not_provisioned — proceed
+    return true;
+  } catch {
+    // Status check failed — proceed anyway (API will validate)
+    return true;
+  }
+}
+
+/**
+ * Run auth flow for github service
+ */
+async function runGitHubAuth(projectName: string): Promise<string> {
+  const githubOrg = await promptGitHubOrgSetup(projectName);
+  logger.newline();
+  return githubOrg;
+}
+
+/**
+ * Run auth flow for cloudflare service
+ */
+async function runCloudflareAuth(): Promise<void> {
+  await authenticateCloudflare();
+
+  // Store token server-side
+  const cfToken = getCloudflareToken();
+  if (cfToken) {
+    await api.post('/auth/cloudflare', { token: cfToken });
+  }
+  logger.newline();
+}
 
 /**
  * Add a service to existing project
@@ -44,6 +139,20 @@ async function addService(
   logger.dim(serviceInfo.description);
   logger.newline();
 
+  // Ensure authenticated
+  await ensureAuthenticated();
+
+  // Check current status
+  const shouldProceed = await checkServiceStatus(
+    config.projectId,
+    service,
+    !!options.force
+  );
+
+  if (!shouldProceed) {
+    return;
+  }
+
   // Confirm unless --yes
   if (!options.yes) {
     const confirmed = await promptConfirm(
@@ -58,18 +167,38 @@ async function addService(
     logger.newline();
   }
 
+  // Service-specific auth flows
+  let githubOrg: string | undefined;
+
+  if (service === 'github') {
+    githubOrg = await runGitHubAuth(config.name);
+  } else if (service === 'cloudflare') {
+    await runCloudflareAuth();
+  }
+
   // Start provisioning
   const startTime = Date.now();
 
-  await api.post(`/projects/${encodeURIComponent(config.projectId)}/services`, {
-    service,
-  });
+  if (service === 'github' || service === 'cloudflare') {
+    // Core services use provision-services endpoint
+    await api.post(`/projects/${encodeURIComponent(config.projectId)}/provision-services`, {
+      services: [service],
+      githubOrg,
+    });
+  } else {
+    // Add-on services use services endpoint
+    await api.post(`/projects/${encodeURIComponent(config.projectId)}/services`, {
+      service,
+    });
+  }
 
   logger.log(chalk.bold('Provisioning...'));
 
-  const result = await streamProvisioningProgress(
-    `/projects/${encodeURIComponent(config.projectId)}/stream?service=${service}`
-  );
+  const sseEndpoint = service === 'github' || service === 'cloudflare'
+    ? `/events/stream/${encodeURIComponent(config.projectId)}`
+    : `/projects/${encodeURIComponent(config.projectId)}/stream?service=${service}`;
+
+  const result = await streamProvisioningProgress(sseEndpoint);
 
   const durationMs = Date.now() - startTime;
 
@@ -102,6 +231,7 @@ export function createAddCommand(): Command {
     .description('Add a service to your project')
     .argument('<service>', `Service to add (${Object.keys(AVAILABLE_SERVICES).join(', ')})`)
     .option('-y, --yes', 'Skip confirmation prompts')
+    .option('--force', 'Re-provision even if service is already active')
     .option('--json', 'Output JSON format')
     .action(
       withErrorHandling(async (service: string, options: AddOptions) => {
