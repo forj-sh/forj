@@ -45,7 +45,7 @@ export async function eventRoutes(server: FastifyInstance) {
    * - ipRateLimit: Max 10 concurrent streams per IP per minute
    * - 404 response for unauthorized access (prevents project ID enumeration)
    */
-  server.get<{ Params: { projectId: string } }>(
+  server.get<{ Params: { projectId: string }; Querystring: { services?: string } }>(
     '/events/stream/:projectId',
     {
       preHandler: [
@@ -55,8 +55,9 @@ export async function eventRoutes(server: FastifyInstance) {
         ipRateLimit('sse-stream', { maxRequests: 10, windowMs: 60000 })
       ]
     },
-    async (request: FastifyRequest<{ Params: { projectId: string } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Params: { projectId: string }; Querystring: { services?: string } }>, reply: FastifyReply) => {
       const { projectId } = request.params;
+      const requestedServices = request.query.services?.split(',').filter(Boolean);
       const userId = request.user!.userId; // Guaranteed by requireAuth
 
       // AUTHORIZATION CHECK: Verify user owns this project
@@ -136,19 +137,26 @@ export async function eventRoutes(server: FastifyInstance) {
       request.log.info({ projectId }, 'SSE stream opened');
 
       // Determine expected services for this project to track multi-service completion
+      // If ?services= query param is provided, only wait for those specific services
       const expectedServices = new Set<string>();
       const completedServices = new Set<string>();
-      try {
-        const project = await getProjectByIdAndUserId(projectId, userId);
-        if (project?.services) {
-          for (const [serviceName, serviceState] of Object.entries(project.services)) {
-            if (serviceState && serviceState.status !== 'complete') {
-              expectedServices.add(serviceName);
+      if (requestedServices && requestedServices.length > 0) {
+        for (const s of requestedServices) {
+          expectedServices.add(s);
+        }
+      } else {
+        try {
+          const project = await getProjectByIdAndUserId(projectId, userId);
+          if (project?.services) {
+            for (const [serviceName, serviceState] of Object.entries(project.services)) {
+              if (serviceState && serviceState.status !== 'complete') {
+                expectedServices.add(serviceName);
+              }
             }
           }
+        } catch (err) {
+          request.log.warn({ err, projectId }, 'Failed to load project services for SSE tracking');
         }
-      } catch (err) {
-        request.log.warn({ err, projectId }, 'Failed to load project services for SSE tracking');
       }
 
       // Subscribe to worker events from Redis

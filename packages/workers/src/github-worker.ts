@@ -512,13 +512,13 @@ export class GitHubWorker {
   private async publishEvent(event: GitHubWorkerEvent): Promise<void> {
     if (this.eventPublisher) {
       await this.eventPublisher.publishEvent(event);
+    } else {
+      // Fallback: publish directly if no eventPublisher configured
+      await this.redis.publish(
+        `worker:events:${event.projectId}`,
+        JSON.stringify(event)
+      );
     }
-
-    // Also publish to Redis pub/sub for SSE streaming
-    await this.redis.publish(
-      `worker:events:${event.projectId}`,
-      JSON.stringify(event)
-    );
   }
 
   /**

@@ -196,7 +196,7 @@ async function addService(
   logger.log(chalk.bold('Provisioning...'));
 
   const sseEndpoint = serviceInfo.requiresAuth
-    ? `/events/stream/${encodeURIComponent(config.projectId)}`
+    ? `/events/stream/${encodeURIComponent(config.projectId)}?services=${service}`
     : `/projects/${encodeURIComponent(config.projectId)}/stream?service=${service}`;
 
   const result = await streamProvisioningProgress(sseEndpoint);
