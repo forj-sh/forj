@@ -45,7 +45,7 @@ gt log short                          # View stack tree
 
 ## Architecture
 
-**Monorepo** with 5 npm workspace packages:
+**Monorepo** with 5 npm workspace packages + root serverless functions:
 
 - **`packages/api`** — Fastify server (routes, auth middleware, Stripe, JWT). Depends on `shared`.
 - **`packages/workers`** — BullMQ workers (domain, GitHub, Cloudflare, DNS). Depends on `shared`.
@@ -150,7 +150,10 @@ All feature development uses **Graphite CLI (`gt`)** for stacked PRs. Each stack
 - Product spec: `docs/spec.md`
 - Build plan & phase details: `docs/build-plan.md`
 - Testing guide: `docs/testing-guide.md`
+- E2E testing: `docs/e2e-testing-guide.md`, `docs/e2e-testing.md`
 - Security review: `docs/security-review.md`
+- Security audit: `docs/security-audit-2026-03-13.md`
+- Namecheap integration: `docs/namecheap-integration.md`
 - Production deployment: `docs/deployment.md`
 - Railway deployment: `docs/railway-deployment.md`
 - MCP integration: `docs/mcp-integration.md`
