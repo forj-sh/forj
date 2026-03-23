@@ -6,7 +6,6 @@ import inquirer from 'inquirer';
 import {
   promptProjectName,
   promptDomainSelection,
-  promptGitHubOrgConfirmation,
   promptConfirm,
   promptContactInfo,
   promptPostDomainServices,
@@ -15,6 +14,7 @@ import {
 import { api } from '../lib/api-client.js';
 import { ensureAuthenticated } from '../lib/auth.js';
 import { authenticateCloudflare } from '../lib/auth-cloudflare.js';
+import { promptGitHubOrgSetup } from '../lib/github-org.js';
 import { writeProjectConfig } from '../lib/project.js';
 import { streamProvisioningProgress } from '../lib/sse-client.js';
 import { openCheckoutAndWaitForPayment } from '../lib/stripe-checkout.js';
@@ -29,9 +29,6 @@ import {
   sanitizeName,
   type DomainResult,
 } from '../lib/domain-suggestions.js';
-import { FORJ_GITHUB_APP_ID } from '@forj/shared';
-import open from 'open';
-
 interface InitOptions {
   domain?: string;
   services?: string;
@@ -348,6 +345,8 @@ async function interactiveInit(
     logger.newline();
     logger.success(`Setup complete in ${formatDuration(durationMs)}`);
     logger.dim(`Run ${chalk.cyan('forj status')} to see your stack.`);
+    logger.dim(`Tip: ${chalk.cyan('npm install -g forj-cli')} to use ${chalk.cyan('forj')} directly.`);
+    logger.dim(`Add services later with ${chalk.cyan('forj add github')} or ${chalk.cyan('forj add cloudflare')}.`);
 
     return {
       project: name,
@@ -409,6 +408,7 @@ async function interactiveInit(
   logger.newline();
   logger.success(`Setup complete in ${formatDuration(durationMs)}`);
   logger.dim(`Run ${chalk.cyan('forj status')} to see your stack.`);
+  logger.dim(`Tip: ${chalk.cyan('npm install -g forj-cli')} to use ${chalk.cyan('forj')} directly.`);
 
   return {
     project: name,
@@ -417,57 +417,6 @@ async function interactiveInit(
     credentialsPath,
     durationMs,
   };
-}
-
-/**
- * Guide the user through GitHub org creation + OAuth app authorization.
- *
- * New GitHub orgs block third-party OAuth apps by default, so we must
- * explicitly grant Forj access before we can create repos in the org.
- */
-async function promptGitHubOrgSetup(suggestedOrg?: string): Promise<string> {
-  const createOrgUrl = 'https://github.com/organizations/new';
-
-  logger.warn('GitHub org must be created manually — takes 15 seconds.');
-  logger.dim(`Create the organization at: ${createOrgUrl}`);
-  logger.newline();
-
-  const orgName = await promptGitHubOrgConfirmation(suggestedOrg);
-
-  // Build the per-org OAuth app grant URL
-  const grantUrl = `https://github.com/orgs/${orgName}/policies/applications/${FORJ_GITHUB_APP_ID}`;
-
-  logger.newline();
-  logger.warn('Grant Forj access to your new org (required for repo creation).');
-  logger.dim(`Approve at: ${grantUrl}`);
-  logger.newline();
-
-  try {
-    await open(grantUrl);
-  } catch {
-    // Browser open is best-effort; URL is printed above
-  }
-
-  await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'confirm',
-      message: 'Press Enter after granting access...',
-    },
-  ]);
-
-  // Verify access by calling the API to check org membership
-  const spinner = logger.spinner('Verifying org access...');
-  spinner.start();
-
-  try {
-    await api.get(`/github/verify-org/${orgName}`);
-    spinner.succeed('GitHub org access verified');
-  } catch {
-    spinner.warn('Could not verify org access — provisioning will attempt anyway');
-  }
-
-  return orgName;
 }
 
 /**
