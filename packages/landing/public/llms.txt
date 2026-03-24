@@ -1,0 +1,53 @@
+# forj
+
+> forj provisions production-ready project infrastructure with a single command.
+
+## What is forj?
+
+forj (forj-cli) is a CLI tool that sets up complete project infrastructure in under 2 minutes. One command handles domain registration, GitHub organization and repository creation, and Cloudflare DNS configuration — all wired together automatically.
+
+## Install
+
+```
+npx forj-cli init <project-name>
+```
+
+The CLI is available on npm as `forj-cli`. No global install required.
+
+## What forj provisions
+
+1. **Domain registration** — Registers your domain via Namecheap. Pricing shown upfront (wholesale + ICANN fee). Payment via Stripe Checkout.
+2. **GitHub organization and repository** — Creates a verified GitHub org and initializes a repository. Authenticated via GitHub OAuth Device Flow.
+3. **Cloudflare DNS zone** — Creates a Cloudflare zone for your domain and configures nameservers automatically (Namecheap NS records pointed to Cloudflare).
+
+All three services are provisioned in parallel where possible, with real-time progress streamed to the CLI via SSE.
+
+## How it works
+
+1. Run `npx forj-cli init <project-name>`
+2. Authenticate with GitHub (device flow) and Cloudflare (API token)
+3. Search and select a domain
+4. Pay for the domain via Stripe Checkout
+5. forj provisions everything: domain, GitHub org + repo, Cloudflare DNS zone, nameserver wiring
+6. Receive credentials and URLs — ready to build
+
+## Architecture
+
+- **CLI** (`forj-cli` on npm) — thin client using commander.js, inquirer, and SSE streaming
+- **API** — Fastify server handling auth, payments, and orchestration
+- **Workers** — BullMQ workers for domain, GitHub, and Cloudflare provisioning
+- **State machine** — each service tracks independent state, all workers are idempotent and resumable
+
+## Key properties
+
+- **Idempotent** — workers can be re-run safely; partial failures never corrupt state
+- **Resumable** — if provisioning is interrupted, it picks up where it left off
+- **Secure** — credentials are encrypted, delivered once to CLI, then purged from the server
+- **Fast** — full infrastructure provisioned in under 2 minutes
+
+## Links
+
+- Website: https://forj.sh
+- npm: https://www.npmjs.com/package/forj-cli
+- GitHub: https://github.com/forj-sh
+- Documentation: https://forj.sh/docs
