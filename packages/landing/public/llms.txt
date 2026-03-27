@@ -1,10 +1,10 @@
 # forj
 
-> forj provisions production-ready project infrastructure with a single command.
+> forj lets you or your agent register a domain, configure GitHub, wire DNS, and spin up your deployment platform correctly from a single command.
 
 ## What is forj?
 
-forj (forj-cli) is a CLI tool that sets up complete project infrastructure in under 2 minutes. One command handles domain registration, GitHub organization and repository creation, and Cloudflare DNS configuration — all wired together automatically.
+forj (forj-cli) lets you or your agent register a domain, configure GitHub, wire DNS, and spin up your deployment platform correctly from a single command.
 
 ## Install
 
