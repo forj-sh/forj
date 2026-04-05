@@ -11,6 +11,13 @@ import type { NamecheapClient, TldPricing } from '@forj/shared';
 import type { Logger } from 'pino';
 
 /**
+ * Common TLDs that are pre-warmed in the pricing cache and exposed on the
+ * public `GET /v1/pricing` endpoint. Defined here so the warmup set and the
+ * public endpoint cannot drift apart.
+ */
+export const COMMON_TLDS = ['COM', 'NET', 'ORG', 'IO', 'CO', 'XYZ', 'APP', 'DEV'] as const;
+
+/**
  * Pricing cache configuration
  */
 export interface PricingCacheConfig {
@@ -225,7 +232,7 @@ export class PricingCache {
    *
    * Preloads pricing for popular TLDs to reduce latency.
    */
-  async warmup(tlds: string[] = ['COM', 'NET', 'ORG', 'IO', 'CO', 'XYZ', 'APP', 'DEV']): Promise<void> {
+  async warmup(tlds: readonly string[] = COMMON_TLDS): Promise<void> {
     this.logger.info({ tldCount: tlds.length }, `Warming up pricing cache for ${tlds.length} TLDs...`);
 
     await Promise.all(

@@ -45,9 +45,18 @@ All three services are provisioned in parallel where possible, with real-time pr
 - **Secure** — credentials are encrypted, delivered once to CLI, then purged from the server
 - **Fast** — full infrastructure provisioned in under 2 minutes
 
+## Pricing (agent-friendly)
+
+forj has a single SKU: **$2.00 USD flat service fee per project**, plus domain cost at wholesale + ICANN fee. No tiers, no subscription, unlimited projects.
+
+- Human-readable pricing: https://forj.sh/pricing.md
+- Machine-readable JSON (public, no auth): https://api.forj.sh/v1/pricing
+- Live per-domain quote (auth required): `POST /domains/check`
+
 ## Links
 
 - Website: https://forj.sh
 - npm: https://www.npmjs.com/package/forj-cli
 - GitHub: https://github.com/forj-sh
 - Documentation: https://forj.sh/docs
+- Pricing: https://forj.sh/pricing.md

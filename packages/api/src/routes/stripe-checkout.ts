@@ -9,27 +9,13 @@
 
 import type { FastifyInstance } from 'fastify';
 import type { DomainCheckoutPricing } from '@forj/shared';
-import { splitDomain, dollarsToCents, centsToDollars, DEFAULT_SERVICE_FEE_DOLLARS } from '@forj/shared';
+import { splitDomain, dollarsToCents, centsToDollars } from '@forj/shared';
+import { getServiceFeeCents } from '../lib/service-fee.js';
 import { createDomainCheckoutSession, getCheckoutSession } from '../lib/stripe-client.js';
 import { requireAuth } from '../middleware/auth.js';
 import { verifyProjectOwnership } from '../lib/authorization.js';
 import { getProjectContactInfo, updateProjectStripeSession } from '../lib/database.js';
 import type { PricingCache } from '../lib/pricing-cache.js';
-
-/**
- * Get Forj service fee from environment (in cents)
- * Stack 11: Made configurable via FORJ_SERVICE_FEE_CENTS
- */
-function getServiceFeeCents(): number {
-  const fee = process.env.FORJ_SERVICE_FEE_CENTS;
-  if (fee) {
-    const parsed = parseInt(fee, 10);
-    if (!isNaN(parsed) && parsed >= 0) {
-      return parsed;
-    }
-  }
-  return dollarsToCents(DEFAULT_SERVICE_FEE_DOLLARS);
-}
 
 /**
  * Stripe checkout routes

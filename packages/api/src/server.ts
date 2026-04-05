@@ -23,6 +23,7 @@ import { stripeCheckoutRoutes } from './routes/stripe-checkout.js';
 import { getStripeClient, getStripeWebhookSecret } from './lib/stripe-client.js';
 import { provisionRoutes } from './routes/provision.js';
 import { apiKeyRoutes } from './routes/api-keys.js';
+import { pricingRoutes } from './routes/pricing.js';
 import { debugSentryRoutes } from './routes/debug-sentry.js';
 
 /**
@@ -199,6 +200,15 @@ export async function createServer() {
   await server.register(provisionRoutes);
   await server.register(apiKeyRoutes);
   logger.info('Provisioning and API key routes registered');
+
+  // Public pricing endpoint — only available when Namecheap pricing cache is
+  // initialized. Unauthenticated: exposes the same data as forj.sh/pricing.md.
+  if (pricingCache) {
+    await server.register(async (instance) => {
+      await pricingRoutes(instance, pricingCache!);
+    });
+    logger.info('Public pricing route registered at GET /v1/pricing');
+  }
 
   // Debug routes (development only)
   await debugSentryRoutes(server);
