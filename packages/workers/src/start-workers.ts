@@ -27,8 +27,9 @@ import { DomainWorker } from './domain-worker.js';
 import { CloudflareWorker } from './cloudflare-worker.js';
 import { DNSWorker } from './dns-worker.js';
 import { GitHubWorker } from './github-worker.js';
+import { VercelWorker } from './vercel-worker.js';
 import { closeDatabase } from './database.js';
-import type { DomainWorkerConfig, CloudflareWorkerConfig, DNSWorkerConfig, DNSWorkerEvent, GitHubWorkerConfig, GitHubWorkerEvent } from '@forj/shared';
+import type { DomainWorkerConfig, CloudflareWorkerConfig, DNSWorkerConfig, DNSWorkerEvent, GitHubWorkerConfig, GitHubWorkerEvent, VercelWorkerConfig } from '@forj/shared';
 
 console.log(`📁 Loaded environment from: ${envPath}\n`);
 
@@ -159,8 +160,18 @@ const githubWorkerConfig: GitHubWorkerConfig = {
 const githubWorker = new GitHubWorker(githubWorkerConfig);
 console.log(`✅ GitHub worker started (concurrency: ${githubWorkerConfig.concurrency})`);
 
+// Vercel worker configuration
+const vercelWorkerConfig: VercelWorkerConfig = {
+  redis: redisConfig,
+  concurrency: parseInt(process.env.VERCEL_WORKER_CONCURRENCY || '3', 10),
+  eventPublisher: createProjectEventPublisher('Vercel'),
+};
+
+const vercelWorker = new VercelWorker(vercelWorkerConfig);
+console.log(`✅ Vercel worker started (concurrency: ${vercelWorkerConfig.concurrency})`);
+
 console.log('\n✨ Workers ready. Listening for jobs...\n');
-console.log('ℹ️  Active: Domain, Cloudflare, DNS, GitHub');
+console.log('ℹ️  Active: Domain, Cloudflare, DNS, GitHub, Vercel');
 
 // Graceful shutdown
 const shutdown = async () => {
@@ -172,6 +183,7 @@ const shutdown = async () => {
     cloudflareWorker.close(),
     dnsWorker.close(),
     githubWorker.close(),
+    vercelWorker.close(),
     redis.disconnect(),
     closeDatabase(),
   ]);
@@ -179,7 +191,7 @@ const shutdown = async () => {
   // Log any shutdown failures
   results.forEach((result, index) => {
     if (result.status === 'rejected') {
-      const workerNames = ['Domain worker', 'Cloudflare worker', 'DNS worker', 'GitHub worker', 'Redis connection', 'Database connection'];
+      const workerNames = ['Domain worker', 'Cloudflare worker', 'DNS worker', 'GitHub worker', 'Vercel worker', 'Redis connection', 'Database connection'];
       console.error(`❌ Failed to close ${workerNames[index]}:`, result.reason);
     }
   });
