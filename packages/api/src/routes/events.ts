@@ -1,11 +1,33 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { ServiceEvent, CompleteEvent, ErrorEvent, DomainWorkerEvent, ProvisioningEvent } from '@forj/shared';
-import { DomainWorkerEventType } from '@forj/shared';
+import { DomainWorkerEventType, GitHubWorkerEventType, CloudflareWorkerEventType } from '@forj/shared';
 import { redisPubSub } from '../lib/redis-pubsub.js';
 import { requireAuth } from '../middleware/auth.js';
 import { ipRateLimit } from '../middleware/ip-rate-limit.js';
 import { verifyProjectOwnership } from '../lib/authorization.js';
 import { getProjectByIdAndUserId } from '../lib/database.js';
+
+/**
+ * Terminal events that indicate a service workflow has finished.
+ * Only the FINAL step of each multi-step workflow counts as complete.
+ * All failure events are terminal (any step failing stops the workflow).
+ */
+const TERMINAL_COMPLETE_EVENTS = new Set<string>([
+  DomainWorkerEventType.JOB_COMPLETED,
+  GitHubWorkerEventType.REPO_CONFIGURATION_COMPLETE,
+  CloudflareWorkerEventType.NAMESERVER_VERIFICATION_COMPLETE,
+  CloudflareWorkerEventType.NAMESERVER_UPDATE_COMPLETE,
+]);
+
+const TERMINAL_FAILED_EVENTS = new Set<string>([
+  DomainWorkerEventType.JOB_FAILED,
+  GitHubWorkerEventType.ORG_VERIFICATION_FAILED,
+  GitHubWorkerEventType.REPO_CREATION_FAILED,
+  GitHubWorkerEventType.REPO_CONFIGURATION_FAILED,
+  CloudflareWorkerEventType.ZONE_CREATION_FAILED,
+  CloudflareWorkerEventType.NAMESERVER_UPDATE_FAILED,
+  CloudflareWorkerEventType.NAMESERVER_VERIFICATION_FAILED,
+]);
 
 /**
  * Server-Sent Events (SSE) routes for real-time provisioning updates
@@ -172,8 +194,8 @@ export async function eventRoutes(server: FastifyInstance) {
 
           // Track terminal states per service to know when all are done
           const eventType = workerEvent.type as string;
-          const isCompleted = eventType.includes('completed') || eventType === DomainWorkerEventType.JOB_COMPLETED;
-          const isFailed = eventType.includes('failed') || eventType === DomainWorkerEventType.JOB_FAILED;
+          const isCompleted = TERMINAL_COMPLETE_EVENTS.has(eventType);
+          const isFailed = TERMINAL_FAILED_EVENTS.has(eventType);
 
           if (isCompleted || isFailed) {
             const service = detectService(eventType, workerEvent);
@@ -313,11 +335,13 @@ function detectService(eventType: string, event: any): any {
   if (event.service) return event.service;
 
   // Infer from event type naming convention
+  // Order matters: check specific prefixes first to avoid ambiguity
+  // (e.g., 'cloudflare.nameserver.*' must match 'cloudflare', not 'domain' via 'nameserver')
   const lower = eventType.toLowerCase();
-  if (lower.includes('domain') || lower.includes('register') || lower.includes('nameserver')) return 'domain';
-  if (lower.includes('github') || lower.includes('repo') || lower.includes('org')) return 'github';
   if (lower.includes('cloudflare') || lower.includes('zone')) return 'cloudflare';
+  if (lower.includes('github') || lower.includes('repo') || lower.includes('org')) return 'github';
   if (lower.includes('dns') || lower.includes('mx') || lower.includes('spf') || lower.includes('dkim')) return 'dns';
+  if (lower.includes('domain') || lower.includes('register') || lower.includes('nameserver')) return 'domain';
 
   // Check for domain worker specific types
   if (Object.values(DomainWorkerEventType).includes(eventType as any)) return 'domain';

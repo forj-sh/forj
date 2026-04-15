@@ -388,7 +388,10 @@ async function interactiveInit(
   logger.log(chalk.bold('Provisioning services...'));
 
   const provisioningResult = await streamProvisioningProgress(
-    `/events/stream/${projectId}`
+    `/events/stream/${projectId}`,
+    'Provisioning services...',
+    undefined,
+    10_000 // patience: exit after 10s with partial results (DNS propagation can take hours)
   );
 
   const durationMs = Date.now() - startTime;
@@ -397,6 +400,24 @@ async function interactiveInit(
   const credentialsPath = join(process.cwd(), '.forj', 'credentials.json');
 
   logger.newline();
+
+  if (provisioningResult.partial) {
+    // Some services still in progress (e.g., DNS propagation)
+    logger.success(`Setup started in ${formatDuration(durationMs)}`);
+    logger.newline();
+    logger.dim('DNS propagation may take a few minutes.');
+    logger.dim(`Run ${chalk.cyan('forj status')} to check progress.`);
+
+    return {
+      project: name,
+      domain: selectedDomain,
+      services: Object.fromEntries(
+        [...provisioningResult.serviceStatuses].map(([s, info]) => [s, { status: info.status }])
+      ) as InitResult['services'],
+      credentialsPath,
+      durationMs,
+    };
+  }
 
   if (provisioningResult.failedServices.length > 0) {
     logger.warn(`Some services failed: ${provisioningResult.failedServices.join(', ')}`);

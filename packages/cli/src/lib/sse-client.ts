@@ -174,23 +174,38 @@ export function createSSEClient(options: SSEClientOptions): {
 // Default timeout: 10 minutes
 const DEFAULT_PROVISIONING_TIMEOUT_MS = 10 * 60 * 1000;
 
+export interface ServiceStatus {
+  status: string;
+  message?: string;
+}
+
 export interface ProvisioningResult {
   data: unknown;
   failedServices: string[];
+  partial: boolean;
+  serviceStatuses: Map<string, ServiceStatus>;
 }
 
 /**
  * Stream provisioning progress with visual feedback
+ *
+ * @param patienceMs - If set, resolve with partial results after this many ms
+ *   of streaming (timer starts on first service event). Useful for long-running
+ *   operations like DNS propagation where the CLI shouldn't block indefinitely.
  */
 export async function streamProvisioningProgress(
   endpoint: string,
   spinnerText: string = 'Provisioning...',
-  timeoutMs: number = DEFAULT_PROVISIONING_TIMEOUT_MS
+  timeoutMs: number = DEFAULT_PROVISIONING_TIMEOUT_MS,
+  patienceMs?: number
 ): Promise<ProvisioningResult> {
   return new Promise((resolve, reject) => {
     const spinner = logger.spinner(spinnerText);
     const serviceSpinners = new Map<string, Ora>();
     const failedServices: string[] = [];
+    const serviceStatuses = new Map<string, ServiceStatus>();
+    let patienceTimerId: NodeJS.Timeout | null = null;
+    let resolved = false;
 
     spinner.start();
 
@@ -203,6 +218,29 @@ export async function streamProvisioningProgress(
         // Skip events without a service (e.g., general status events)
         if (!service) {
           return;
+        }
+
+        // Track latest status per service
+        serviceStatuses.set(service, { status, message: message || error });
+
+        // Start patience timer on first service event
+        if (patienceMs && !patienceTimerId && !resolved) {
+          patienceTimerId = setTimeout(() => {
+            if (resolved) return;
+            resolved = true;
+
+            // Stop spinning spinners with info state (not failure)
+            if (spinner.isSpinning) spinner.stop();
+            serviceSpinners.forEach((s, svc) => {
+              if (s.isSpinning) {
+                const info = serviceStatuses.get(svc);
+                s.info(`${svc}: ${info?.message || 'In progress...'}`);
+              }
+            });
+
+            client.close();
+            resolve({ data: null, failedServices, partial: true, serviceStatuses });
+          }, patienceMs);
         }
 
         // Stop the main spinner once we have service-level updates
@@ -244,15 +282,25 @@ export async function streamProvisioningProgress(
       },
 
       onComplete: (data) => {
+        if (resolved) return;
+        resolved = true;
+
+        if (patienceTimerId) clearTimeout(patienceTimerId);
+
         if (failedServices.length > 0) {
           spinner.stop();
         } else {
           spinner.succeed('Provisioning complete');
         }
-        resolve({ data, failedServices });
+        resolve({ data, failedServices, partial: false, serviceStatuses });
       },
 
       onError: (error) => {
+        if (resolved) return;
+        resolved = true;
+
+        if (patienceTimerId) clearTimeout(patienceTimerId);
+
         spinner.fail('Provisioning failed');
 
         // Only fail spinners that are still running
