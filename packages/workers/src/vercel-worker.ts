@@ -34,6 +34,7 @@ import {
   VercelWorkerEventType,
   isValidVercelStateTransition,
   VERCEL_CNAME_TARGET,
+  VERCEL_A_RECORDS,
   WORKER_LOCK_DURATION,
   WORKER_LOCK_RENEW_TIME,
 } from '@forj/shared';
@@ -246,8 +247,9 @@ export class VercelWorker {
         teamId: credentials.vercelTeamId || teamId,
       });
 
-      // Project name derived from domain (e.g., "newco1" from "newco1.xyz")
-      const projectName = domain.split('.')[0];
+      // Project name derived from domain — use full domain with dots replaced by hyphens
+      // to avoid collisions (e.g., app.example.com and app.test.com)
+      const projectName = domain.replace(/\./g, '-');
 
       let vercelProject;
       try {
@@ -381,10 +383,12 @@ export class VercelWorker {
         });
 
         // Determine zone ID — use provided or look up by domain
+        // Look up Cloudflare zone by apex domain (subdomain lookups would fail)
         let zoneId = cloudflareZoneId;
         if (!zoneId) {
-          const zones = await cfClient.listZones(credentials.cloudflareAccountId, domain);
-          const zone = zones.find(z => z.name === domain);
+          const apexName = domainResult.apexName;
+          const zones = await cfClient.listZones(credentials.cloudflareAccountId, apexName);
+          const zone = zones.find(z => z.name === apexName);
           if (zone) {
             zoneId = zone.id;
           }
@@ -393,14 +397,26 @@ export class VercelWorker {
         if (zoneId) {
           // Create CNAME record pointing to Vercel
           try {
-            await cfClient.createDNSRecord(zoneId, {
-              type: 'CNAME',
-              name: domain,
-              content: VERCEL_CNAME_TARGET,
-              proxied: false, // Vercel requires unproxied CNAME for SSL
-              comment: 'Created by Forj - Vercel deployment',
-            });
-            console.log(`✅ CNAME record created in Cloudflare: ${domain} → ${VERCEL_CNAME_TARGET}`);
+            // Apex domains use A record; subdomains use CNAME (standard DNS best practice)
+            const isApex = domainResult.name === domainResult.apexName;
+            if (isApex) {
+              await cfClient.createDNSRecord(zoneId, {
+                type: 'A',
+                name: domain,
+                content: VERCEL_A_RECORDS[0],
+                proxied: false,
+                comment: 'Created by Forj - Vercel apex deployment',
+              });
+            } else {
+              await cfClient.createDNSRecord(zoneId, {
+                type: 'CNAME',
+                name: domain,
+                content: VERCEL_CNAME_TARGET,
+                proxied: false,
+                comment: 'Created by Forj - Vercel subdomain deployment',
+              });
+            }
+            console.log(`✅ DNS record created in Cloudflare for ${domain}`);
           } catch (dnsError) {
             // Only ignore "record already exists" (Cloudflare error code 81057)
             if (dnsError instanceof CloudflareApiError && dnsError.errors.some((e: { code: number }) => e.code === 81057)) {

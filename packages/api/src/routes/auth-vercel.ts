@@ -72,7 +72,7 @@ export async function vercelAuthRoutes(server: FastifyInstance) {
           const teams = await client.listTeams();
           if (teams.length > 0) {
             // Use default team if set, otherwise first team
-            teamId = user.defaultTeamId || teams[0].id;
+            teamId = user.defaultTeamId;
             if (teams.length > 1) {
               request.log.warn(
                 { userId, teamCount: teams.length },
