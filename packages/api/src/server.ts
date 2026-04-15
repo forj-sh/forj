@@ -14,6 +14,7 @@ import { queueRoutes } from './routes/queues.js';
 import { authRoutes } from './routes/auth.js';
 import { cloudflareAuthRoutes } from './routes/auth-cloudflare.js';
 import { githubAuthRoutes } from './routes/auth-github.js';
+import { vercelAuthRoutes } from './routes/auth-vercel.js';
 import { domainRoutes } from './routes/domains.js';
 import { domainNamecheapRoutes } from './routes/domains-namecheap.js';
 import { projectRoutes } from './routes/projects.js';
@@ -195,6 +196,7 @@ export async function createServer() {
   await server.register(authRoutes);
   await server.register(cloudflareAuthRoutes);
   await server.register(githubAuthRoutes);
+  await server.register(vercelAuthRoutes);
   await server.register(projectRoutes);
   await server.register(eventRoutes);
   await server.register(provisionRoutes);

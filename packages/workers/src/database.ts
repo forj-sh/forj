@@ -73,6 +73,8 @@ export interface UserCredentials {
   githubAccessToken?: string;
   cloudflareApiToken?: string;
   cloudflareAccountId?: string;
+  vercelApiToken?: string;
+  vercelTeamId?: string;
 }
 
 /**
@@ -104,7 +106,9 @@ export async function fetchUserCredentials(userId: string): Promise<UserCredenti
       `SELECT
         github_token_encrypted,
         cloudflare_token_encrypted,
-        cloudflare_account_id
+        cloudflare_account_id,
+        vercel_token_encrypted,
+        vercel_team_id
        FROM users
        WHERE id = $1`,
       [userId]
@@ -147,6 +151,29 @@ export async function fetchUserCredentials(userId: string): Promise<UserCredenti
     // Cloudflare account ID is not encrypted
     if (row.cloudflare_account_id) {
       credentials.cloudflareAccountId = row.cloudflare_account_id;
+    }
+
+    // Decrypt Vercel API token if present
+    if (row.vercel_token_encrypted) {
+      const vercelEncryptionKey = process.env.VERCEL_ENCRYPTION_KEY;
+      if (!vercelEncryptionKey) {
+        console.error('[Database] VERCEL_ENCRYPTION_KEY environment variable is not set');
+        throw new Error('VERCEL_ENCRYPTION_KEY environment variable is required');
+      }
+      try {
+        credentials.vercelApiToken = await decrypt(
+          row.vercel_token_encrypted,
+          vercelEncryptionKey
+        );
+      } catch (error) {
+        console.error(`[Database] Failed to decrypt Vercel token for user ${userId}:`, error);
+        throw new Error('Failed to decrypt Vercel credentials');
+      }
+    }
+
+    // Vercel team ID is not encrypted
+    if (row.vercel_team_id) {
+      credentials.vercelTeamId = row.vercel_team_id;
     }
 
     return credentials;
