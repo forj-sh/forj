@@ -29,6 +29,9 @@ export enum VercelErrorCategory {
   /** Network/connection errors */
   NETWORK = 'NETWORK',
 
+  /** Server-side errors (5xx) */
+  SERVER = 'SERVER',
+
   /** Unknown errors */
   UNKNOWN = 'UNKNOWN',
 }
@@ -63,16 +66,15 @@ export class VercelApiError extends Error {
   isRetryable(): boolean {
     switch (this.category) {
       case VercelErrorCategory.NETWORK:
-        return true;
+      case VercelErrorCategory.SERVER:
       case VercelErrorCategory.RATE_LIMIT:
         return true;
       case VercelErrorCategory.AUTH:
       case VercelErrorCategory.VALIDATION:
       case VercelErrorCategory.CONFLICT:
       case VercelErrorCategory.NOT_FOUND:
-        return false;
       case VercelErrorCategory.UNKNOWN:
-        return true;
+        return false;
       default:
         return false;
     }
@@ -90,11 +92,13 @@ export class VercelApiError extends Error {
       case VercelErrorCategory.CONFLICT:
         return 'Resource already exists in Vercel.';
       case VercelErrorCategory.RATE_LIMIT:
-        return 'Rate limit exceeded — retrying automatically.';
+        return 'Rate limit exceeded — please try again shortly.';
       case VercelErrorCategory.NOT_FOUND:
         return 'Resource not found in Vercel.';
       case VercelErrorCategory.NETWORK:
-        return 'Network error — retrying automatically.';
+        return 'Network error — please check connectivity and try again.';
+      case VercelErrorCategory.SERVER:
+        return 'Vercel server error — please try again shortly.';
       case VercelErrorCategory.UNKNOWN:
         return 'Unexpected Vercel error — our team has been notified.';
       default:
@@ -121,7 +125,7 @@ export function categorizeByStatus(statusCode: number): VercelErrorCategory {
     case 429:
       return VercelErrorCategory.RATE_LIMIT;
     default:
-      if (statusCode >= 500) return VercelErrorCategory.NETWORK;
+      if (statusCode >= 500) return VercelErrorCategory.SERVER;
       return VercelErrorCategory.UNKNOWN;
   }
 }

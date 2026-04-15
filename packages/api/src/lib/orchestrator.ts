@@ -173,10 +173,12 @@ export class ProvisioningOrchestrator {
     }
 
     // Queue Vercel (if requested) — depends on GitHub repo existing.
-    // The Vercel worker will chain: verify team → create project (with GitHub link) → configure domain.
-    // Since GitHub jobs run async, the Vercel worker handles the dependency by being queued
-    // after GitHub jobs. BullMQ processes jobs in order, and the Vercel worker fetches
-    // project state from DB to verify GitHub repo exists before proceeding.
+    // Two Vercel jobs are enqueued: VERIFY_TEAM (fast-fail credential precheck)
+    // and CREATE_PROJECT. The CREATE_PROJECT handler in the worker explicitly
+    // checks the project's github service state in the database and throws a
+    // retryable error if not yet `complete`, so BullMQ backoff waits for the
+    // GitHub worker to finish. This is a DB-polling dependency gate rather
+    // than a FlowProducer parent/child relationship.
     if (services.includes('vercel') && this.vercelQueue) {
       console.log('[Orchestrator] Queueing Vercel setup');
       const vercelJobs = await this.setupVercel(config);
@@ -327,8 +329,15 @@ export class ProvisioningOrchestrator {
   /**
    * Setup Vercel project with GitHub repo link and custom domain
    *
-   * Queues two jobs: team verification and project creation.
-   * The worker chains project creation → domain configuration automatically.
+   * Queues two jobs:
+   *   1. verify-team — fast-fail credential precheck (independent of GitHub state)
+   *   2. create-project — waits for GitHub repo to exist via a DB check in the
+   *      worker (retryable error + BullMQ backoff). Once the repo is ready, the
+   *      worker links Vercel to it and chains to configure-domain internally.
+   *
+   * Note: verify-team and create-project are intentionally independent jobs.
+   * create-project does its own credential fetch so verify-team is redundant
+   * for correctness but provides earlier user-facing feedback on bad tokens.
    */
   private async setupVercel(config: ProvisioningConfig): Promise<{
     teamVerify: string;
@@ -360,8 +369,12 @@ export class ProvisioningOrchestrator {
       repoName: config.repoName || config.domain.split('.')[0],
     };
 
+    // create-project depends on the GitHub repo existing. The worker uses a
+    // DB check + retryable error as a dependency gate, so budget generous
+    // retries to cover typical GitHub provisioning time (~30–120s).
+    // 10 attempts × exponential backoff (2s, 4s, 8s, ... capped) ≈ 17 min total.
     const projectJob = await this.vercelQueue!.add('create-project', projectJobData, {
-      attempts: 3,
+      attempts: 10,
       backoff: {
         type: 'exponential',
         delay: 2000,

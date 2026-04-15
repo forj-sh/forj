@@ -90,12 +90,12 @@ describe('VercelClient', () => {
         json: async () => ({ error: { code: 'forbidden', message: 'Invalid token' } }),
       });
 
-      await expect(client.getUser()).rejects.toThrow(VercelApiError);
-      try {
-        await client.getUser();
-      } catch (err) {
-        // Reset mock first since getUser was already called
-      }
+      const error = await client.getUser().catch((err) => err);
+
+      expect(error).toBeInstanceOf(VercelApiError);
+      expect((error as VercelApiError).category).toBe(VercelErrorCategory.AUTH);
+      expect((error as VercelApiError).statusCode).toBe(401);
+      expect((error as Error).message).toContain('Invalid token');
     });
   });
 
@@ -153,26 +153,38 @@ describe('VercelClient', () => {
 
   describe('retry on 429', () => {
     it('retries on rate limit with backoff', async () => {
-      const mockUser = createMockUser();
+      jest.useFakeTimers();
 
-      // First call returns 429, second succeeds
-      (global.fetch as any)
-        .mockResolvedValueOnce({
-          ok: false,
-          status: 429,
-          statusText: 'Too Many Requests',
-          headers: new Headers({ 'Retry-After': '1' }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          json: async () => ({ user: mockUser }),
-        });
+      try {
+        const mockUser = createMockUser();
 
-      const user = await client.getUser();
-      expect(user.username).toBe('testuser');
-      expect(global.fetch).toHaveBeenCalledTimes(2);
-    }, 10000);
+        // First call returns 429, second succeeds
+        (global.fetch as any)
+          .mockResolvedValueOnce({
+            ok: false,
+            status: 429,
+            statusText: 'Too Many Requests',
+            headers: new Headers({ 'Retry-After': '1' }),
+          })
+          .mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({ user: mockUser }),
+          });
+
+        const userPromise = client.getUser();
+
+        // Advance past the 1s Retry-After delay so the retry fires without
+        // waiting in real time.
+        await jest.advanceTimersByTimeAsync(1000);
+
+        const user = await userPromise;
+        expect(user.username).toBe('testuser');
+        expect(global.fetch).toHaveBeenCalledTimes(2);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
   });
 
   describe('error handling', () => {
@@ -185,14 +197,26 @@ describe('VercelClient', () => {
         json: async () => ({ error: { code: 'conflict', message: 'Project already exists' } }),
       });
 
-      try {
-        await client.createProject({ name: 'existing' });
-        expect(true).toBe(false); // Should not reach here
-      } catch (err) {
-        expect(err).toBeInstanceOf(VercelApiError);
-        expect((err as VercelApiError).category).toBe(VercelErrorCategory.CONFLICT);
-        expect((err as VercelApiError).isRetryable()).toBe(false);
-      }
+      await expect(client.createProject({ name: 'existing' })).rejects.toBeInstanceOf(
+        VercelApiError,
+      );
+
+      // Re-mock and call again to assert category/retryable without relying on
+      // a double-call of the same rejected promise.
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        statusText: 'Conflict',
+        headers: new Headers(),
+        json: async () => ({ error: { code: 'conflict', message: 'Project already exists' } }),
+      });
+
+      const err = (await client
+        .createProject({ name: 'existing' })
+        .catch((e) => e)) as VercelApiError;
+
+      expect(err.category).toBe(VercelErrorCategory.CONFLICT);
+      expect(err.isRetryable()).toBe(false);
     });
   });
 });

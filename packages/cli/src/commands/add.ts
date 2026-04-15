@@ -187,7 +187,10 @@ async function addService(
   } else if (service === 'cloudflare') {
     await runCloudflareAuth();
   } else if (service === 'vercel') {
-    // Vercel requires GitHub — check it's active
+    // Vercel requires GitHub — fetch current project status and verify it's active.
+    const status = await api.get<ProjectStatus>(
+      `/projects/${encodeURIComponent(config.projectId)}/status`
+    );
     if (!status.services.github || status.services.github.status !== 'active') {
       throw new ForjError(
         'Vercel requires GitHub. Run `forj add github` first.',

@@ -147,7 +147,7 @@ export async function vercelAuthRoutes(server: FastifyInstance) {
 
       try {
         const result = await db.query(
-          'SELECT vercel_team_id FROM users WHERE id = $1',
+          'SELECT vercel_token_encrypted, vercel_team_id FROM users WHERE id = $1',
           [userId]
         );
 
@@ -158,8 +158,9 @@ export async function vercelAuthRoutes(server: FastifyInstance) {
           });
         }
 
-        // Check if token column has a value (team_id can be null for personal accounts)
-        const hasToken = result.rows[0] !== undefined;
+        // hasToken is true only when an encrypted token is actually stored.
+        // team_id can legitimately be null for personal accounts.
+        const hasToken = !!result.rows[0].vercel_token_encrypted;
         return reply.send({
           success: true,
           hasToken,

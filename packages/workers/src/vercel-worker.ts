@@ -7,7 +7,10 @@
  * - Custom domain configuration (with Cloudflare DNS record creation)
  *
  * Dependencies:
- * - GitHub repo must exist before project creation (enforced by FlowProducer in orchestrator)
+ * - GitHub repo must exist before project creation. This worker enforces the
+ *   dependency by checking the project's `github` service state in the database
+ *   at the start of CREATE_PROJECT and throwing a retryable Error if it is not
+ *   yet `complete`. BullMQ backoff then waits for the GitHub worker to finish.
  * - Cloudflare zone must exist before domain configuration (for DNS record creation)
  */
 
@@ -33,7 +36,7 @@ import {
   WORKER_LOCK_DURATION,
   WORKER_LOCK_RENEW_TIME,
 } from '@forj/shared';
-import { updateProjectService, fetchUserCredentials } from './database.js';
+import { updateProjectService, fetchUserCredentials, fetchProjectServiceState } from './database.js';
 
 /**
  * Vercel worker class
@@ -201,6 +204,18 @@ export class VercelWorker {
    */
   private async handleCreateProject(job: Job<CreateProjectJobData>): Promise<void> {
     const { userId, projectId, domain, githubOrg, repoName, teamId } = job.data;
+
+    // Dependency gate: GitHub repo must exist before we can link Vercel to it.
+    // Throw a retryable Error (not UnrecoverableError) so BullMQ backoff waits
+    // for the GitHub worker to finish. Attempts + exponential backoff on the
+    // create-project job are sized to cover typical GitHub provisioning time.
+    const githubState = await fetchProjectServiceState(projectId, 'github');
+    if (!githubState || githubState.status !== 'complete') {
+      const actual = githubState?.status ?? 'not_provisioned';
+      throw new Error(
+        `Vercel create-project waiting for GitHub repo (current status: ${actual})`
+      );
+    }
 
     let currentState = VercelJobStatus.TEAM_VERIFIED;
 

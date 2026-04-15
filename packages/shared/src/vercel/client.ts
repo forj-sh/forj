@@ -42,7 +42,7 @@ export class VercelClient {
     // Append teamId to URL if set
     const separator = url.includes('?') ? '&' : '?';
     const fullUrl = this.config.teamId
-      ? `${url}${separator}teamId=${this.config.teamId}`
+      ? `${url}${separator}teamId=${encodeURIComponent(this.config.teamId)}`
       : url;
 
     const controller = new AbortController();
@@ -65,8 +65,8 @@ export class VercelClient {
 
       // Retry on 429
       if (response.status === 429 && retries > 0) {
-        const retryAfter = parseInt(response.headers.get('Retry-After') || '5', 10);
-        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+        const retryAfterMs = parseRetryAfter(response.headers.get('Retry-After'));
+        await new Promise(resolve => setTimeout(resolve, retryAfterMs));
         return this.executeRequest<T>(endpoint, options, retries - 1);
       }
 
@@ -138,7 +138,7 @@ export class VercelClient {
    * Endpoint: GET /v2/teams/:teamId
    */
   async getTeam(teamId: string): Promise<VercelTeam> {
-    return this.executeRequest<VercelTeam>(`/v2/teams/${teamId}`);
+    return this.executeRequest<VercelTeam>(`/v2/teams/${encodeURIComponent(teamId)}`);
   }
 
   /**
@@ -173,7 +173,7 @@ export class VercelClient {
    * Returns the domain config including DNS records that need to be created.
    */
   async addDomain(projectId: string, domain: string): Promise<VercelDomain> {
-    return this.executeRequest<VercelDomain>(`/v10/projects/${projectId}/domains`, {
+    return this.executeRequest<VercelDomain>(`/v10/projects/${encodeURIComponent(projectId)}/domains`, {
       method: 'POST',
       body: JSON.stringify({ name: domain }),
     });
@@ -186,7 +186,7 @@ export class VercelClient {
    */
   async getDomains(projectId: string): Promise<VercelDomain[]> {
     const response = await this.executeRequest<{ domains: VercelDomain[] }>(
-      `/v10/projects/${projectId}/domains`,
+      `/v10/projects/${encodeURIComponent(projectId)}/domains`,
     );
     return response.domains;
   }
@@ -209,8 +209,38 @@ export class VercelClient {
    */
   async verifyDomain(projectId: string, domain: string): Promise<VercelDomain> {
     return this.executeRequest<VercelDomain>(
-      `/v10/projects/${projectId}/domains/${encodeURIComponent(domain)}/verify`,
+      `/v10/projects/${encodeURIComponent(projectId)}/domains/${encodeURIComponent(domain)}/verify`,
       { method: 'POST' },
     );
   }
+}
+
+/**
+ * Parse a Retry-After header value into milliseconds.
+ *
+ * Per RFC 7231, the header may be either a number of seconds (delta-seconds)
+ * or an HTTP-date. Returns a bounded delay in ms; falls back to 5000ms on
+ * unparseable or obviously-bogus values.
+ */
+function parseRetryAfter(header: string | null): number {
+  const DEFAULT_MS = 5000;
+  const MAX_MS = 60_000;
+
+  if (!header) return DEFAULT_MS;
+
+  // Try delta-seconds (integer)
+  const seconds = Number(header);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.min(seconds * 1000, MAX_MS);
+  }
+
+  // Try HTTP-date
+  const dateMs = Date.parse(header);
+  if (Number.isFinite(dateMs)) {
+    const delta = dateMs - Date.now();
+    if (delta > 0) return Math.min(delta, MAX_MS);
+    return 0;
+  }
+
+  return DEFAULT_MS;
 }

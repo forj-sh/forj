@@ -67,6 +67,31 @@ export async function updateProjectService(
 }
 
 /**
+ * Fetch the state of a single service for a project.
+ *
+ * Used by cross-service workers (e.g., the Vercel worker checking that GitHub
+ * has completed before linking a Vercel project to the repo).
+ */
+export async function fetchProjectServiceState(
+  projectId: string,
+  serviceType: ServiceType
+): Promise<Partial<ServiceState> | null> {
+  try {
+    const db = getDb();
+    const result = await db.query(
+      `SELECT services #> $1 AS state FROM projects WHERE id = $2`,
+      [`{${serviceType}}`, projectId]
+    );
+    if (result.rows.length === 0) return null;
+    const state = result.rows[0].state;
+    return (state ?? null) as Partial<ServiceState> | null;
+  } catch (error) {
+    console.error(`[Database] Failed to fetch project service state:`, error);
+    throw error;
+  }
+}
+
+/**
  * User credentials interface
  */
 export interface UserCredentials {
