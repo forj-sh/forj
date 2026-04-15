@@ -442,6 +442,8 @@ export interface User {
   cloudflareAccountId: string | null;
   githubTokenEncrypted: string | null;
   githubUsername: string | null;
+  vercelTokenEncrypted: string | null;
+  vercelTeamId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -456,6 +458,8 @@ export async function getUser(userId: string): Promise<User | null> {
             cloudflare_account_id as "cloudflareAccountId",
             github_token_encrypted as "githubTokenEncrypted",
             github_username as "githubUsername",
+            vercel_token_encrypted as "vercelTokenEncrypted",
+            vercel_team_id as "vercelTeamId",
             created_at as "createdAt",
             updated_at as "updatedAt"
      FROM users
