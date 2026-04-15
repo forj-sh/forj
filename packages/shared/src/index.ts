@@ -304,5 +304,55 @@ export {
   FORJ_USER_AGENT as GITHUB_USER_AGENT,
 } from './github/index.js';
 
+// Vercel worker types
+export type {
+  BaseVercelJobData,
+  VerifyTeamJobData,
+  CreateProjectJobData,
+  ConfigureDomainJobData,
+  VercelJobData,
+  VercelWorkerConfig,
+  VercelWorkerEvent,
+  IVercelWorkerEventPublisher,
+} from './vercel-worker.js';
+
+export {
+  VercelOperationType,
+  VercelJobStatus,
+  VercelWorkerEventType,
+  VERCEL_STATE_TRANSITIONS,
+  isValidVercelStateTransition,
+  isVercelTerminalState,
+  isVercelRetryableState,
+} from './vercel-worker.js';
+
+// Vercel API types and utilities
+export type {
+  VercelConfig,
+  VercelApiErrorDetail,
+  VercelUser,
+  VercelTeam,
+  VercelProject,
+  VercelGitRepository,
+  VercelGitLink,
+  VercelDeployment,
+  VercelDomain,
+  VercelDomainVerification,
+  VercelDomainConfig,
+  ProjectCreateParams as VercelProjectCreateParams,
+} from './vercel/index.js';
+
+export {
+  VercelApiError,
+  VercelErrorCategory,
+  categorizeByStatus as categorizeVercelError,
+  VercelClient,
+  VERCEL_API_URL,
+  REQUEST_TIMEOUT_MS as VERCEL_REQUEST_TIMEOUT_MS,
+  USER_AGENT as VERCEL_USER_AGENT,
+  VERCEL_CNAME_TARGET,
+  VERCEL_A_RECORDS,
+} from './vercel/index.js';
+
 // BullMQ Worker Configuration
 export { WORKER_LOCK_DURATION, WORKER_LOCK_RENEW_TIME } from './worker-config.js';
