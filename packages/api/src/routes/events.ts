@@ -16,7 +16,6 @@ const TERMINAL_COMPLETE_EVENTS = new Set<string>([
   DomainWorkerEventType.JOB_COMPLETED,
   GitHubWorkerEventType.REPO_CONFIGURATION_COMPLETE,
   CloudflareWorkerEventType.NAMESERVER_VERIFICATION_COMPLETE,
-  CloudflareWorkerEventType.NAMESERVER_UPDATE_COMPLETE,
 ]);
 
 const TERMINAL_FAILED_EVENTS = new Set<string>([
