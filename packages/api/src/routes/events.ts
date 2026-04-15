@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { ServiceEvent, CompleteEvent, ErrorEvent, DomainWorkerEvent, ProvisioningEvent } from '@forj/shared';
-import { DomainWorkerEventType, GitHubWorkerEventType, CloudflareWorkerEventType } from '@forj/shared';
+import { DomainWorkerEventType, GitHubWorkerEventType, CloudflareWorkerEventType, VercelWorkerEventType } from '@forj/shared';
 import { redisPubSub } from '../lib/redis-pubsub.js';
 import { requireAuth } from '../middleware/auth.js';
 import { ipRateLimit } from '../middleware/ip-rate-limit.js';
@@ -18,6 +18,7 @@ const TERMINAL_COMPLETE_EVENTS = new Set<string>([
   GitHubWorkerEventType.REPO_CONFIGURATION_COMPLETE,
   CloudflareWorkerEventType.NAMESERVER_UPDATE_COMPLETE,
   CloudflareWorkerEventType.NAMESERVER_VERIFICATION_COMPLETE,
+  VercelWorkerEventType.DOMAIN_CONFIGURATION_COMPLETE,
 ]);
 
 const TERMINAL_FAILED_EVENTS = new Set<string>([
@@ -28,6 +29,9 @@ const TERMINAL_FAILED_EVENTS = new Set<string>([
   CloudflareWorkerEventType.ZONE_CREATION_FAILED,
   CloudflareWorkerEventType.NAMESERVER_UPDATE_FAILED,
   CloudflareWorkerEventType.NAMESERVER_VERIFICATION_FAILED,
+  VercelWorkerEventType.TEAM_VERIFICATION_FAILED,
+  VercelWorkerEventType.PROJECT_CREATION_FAILED,
+  VercelWorkerEventType.DOMAIN_CONFIGURATION_FAILED,
 ]);
 
 /**
@@ -339,6 +343,7 @@ function detectService(eventType: string, event: any): any {
   // Order matters: check specific prefixes first to avoid ambiguity
   // (e.g., 'cloudflare.nameserver.*' must match 'cloudflare', not 'domain' via 'nameserver')
   const lower = eventType.toLowerCase();
+  if (lower.includes('vercel')) return 'vercel';
   if (lower.includes('cloudflare') || lower.includes('zone')) return 'cloudflare';
   if (lower.includes('github') || lower.includes('repo') || lower.includes('org')) return 'github';
   if (lower.includes('dns') || lower.includes('mx') || lower.includes('spf') || lower.includes('dkim')) return 'dns';
