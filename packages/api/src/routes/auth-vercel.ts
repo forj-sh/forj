@@ -80,9 +80,9 @@ export async function vercelAuthRoutes(server: FastifyInstance) {
               );
             }
           }
-        } catch {
+        } catch (teamsError) {
           // Personal account with no teams — teamId stays null
-          request.log.info({ userId }, 'No Vercel teams found - using personal account');
+          request.log.warn({ userId, error: teamsError }, 'Failed to list Vercel teams; proceeding as personal account');
         }
 
         // Encrypt the token
@@ -95,6 +95,7 @@ export async function vercelAuthRoutes(server: FastifyInstance) {
           VALUES ($1, $2, $3, $4)
           ON CONFLICT (id)
           DO UPDATE SET
+            email = $2,
             vercel_token_encrypted = $3,
             vercel_team_id = $4,
             updated_at = now()

@@ -21,6 +21,7 @@ import {
   VercelApiError,
   VercelErrorCategory,
   CloudflareClient,
+  CloudflareApiError,
   type VercelJobData,
   type VercelWorkerConfig,
   type VercelWorkerEvent,
@@ -155,16 +156,16 @@ export class VercelWorker {
       data: { teamId, status: VercelJobStatus.VERIFYING_TEAM },
     });
 
-    const credentials = await fetchUserCredentials(userId);
-    if (!credentials?.vercelApiToken) {
-      throw new VercelApiError(
-        401,
-        { code: 'missing_credentials', message: `Vercel credentials not found for user ${userId}` },
-        VercelErrorCategory.AUTH,
-      );
-    }
-
     try {
+      const credentials = await fetchUserCredentials(userId);
+      if (!credentials?.vercelApiToken) {
+        throw new VercelApiError(
+          401,
+          { code: 'missing_credentials', message: `Vercel credentials not found for user ${userId}` },
+          VercelErrorCategory.AUTH,
+        );
+      }
+
       const client = new VercelClient({
         token: credentials.vercelApiToken,
         teamId: credentials.vercelTeamId || teamId,
@@ -230,54 +231,50 @@ export class VercelWorker {
       data: { domain, githubOrg, repoName, status: VercelJobStatus.CREATING_PROJECT },
     });
 
-    const credentials = await fetchUserCredentials(userId);
-    if (!credentials?.vercelApiToken) {
-      throw new VercelApiError(
-        401,
-        { code: 'missing_credentials', message: `Vercel credentials not found for user ${userId}` },
-        VercelErrorCategory.AUTH,
-      );
-    }
-
-    const client = new VercelClient({
-      token: credentials.vercelApiToken,
-      teamId: credentials.vercelTeamId || teamId,
-    });
-
     try {
+      const credentials = await fetchUserCredentials(userId);
+      if (!credentials?.vercelApiToken) {
+        throw new VercelApiError(
+          401,
+          { code: 'missing_credentials', message: `Vercel credentials not found for user ${userId}` },
+          VercelErrorCategory.AUTH,
+        );
+      }
+
+      const client = new VercelClient({
+        token: credentials.vercelApiToken,
+        teamId: credentials.vercelTeamId || teamId,
+      });
+
       // Project name derived from domain (e.g., "newco1" from "newco1.xyz")
       const projectName = domain.split('.')[0];
 
-      const vercelProject = await client.createProject({
-        name: projectName,
-        gitRepository: {
-          type: 'github',
-          repo: `${githubOrg}/${repoName}`,
-        },
-      });
+      let vercelProject;
+      try {
+        vercelProject = await client.createProject({
+          name: projectName,
+          gitRepository: {
+            type: 'github',
+            repo: `${githubOrg}/${repoName}`,
+          },
+        });
+      } catch (createError) {
+        // If project already exists (409), consider it idempotent
+        if (createError instanceof VercelApiError && createError.category === VercelErrorCategory.CONFLICT) {
+          console.log(`Vercel project already exists for ${domain}, fetching existing...`);
+          const existing = await client.getProject(projectName);
+          await this.handleProjectCreationSuccess(job, currentState, existing.id, true);
+          return;
+        }
+        throw createError;
+      }
 
       await this.handleProjectCreationSuccess(job, currentState, vercelProject.id, false);
     } catch (error) {
-      // If project already exists (409), consider it idempotent
-      if (error instanceof VercelApiError && error.category === VercelErrorCategory.CONFLICT) {
-        console.log(`Vercel project already exists for ${domain}, fetching existing...`);
-
-        const projectName = domain.split('.')[0];
-        try {
-          const existing = await client.getProject(projectName);
-          await this.handleProjectCreationSuccess(job, currentState, existing.id, true);
-        } catch (lookupError) {
-          const apiError = lookupError instanceof VercelApiError
-            ? lookupError
-            : new VercelApiError(0, { code: 'UNKNOWN', message: (lookupError as Error).message }, VercelErrorCategory.UNKNOWN);
-          await this.handleJobError(job, currentState, apiError, VercelWorkerEventType.PROJECT_CREATION_FAILED);
-        }
-      } else {
-        const apiError = error instanceof VercelApiError
-          ? error
-          : new VercelApiError(0, { code: 'UNKNOWN', message: (error as Error).message }, VercelErrorCategory.UNKNOWN);
-        await this.handleJobError(job, currentState, apiError, VercelWorkerEventType.PROJECT_CREATION_FAILED);
-      }
+      const apiError = error instanceof VercelApiError
+        ? error
+        : new VercelApiError(0, { code: 'UNKNOWN', message: (error as Error).message }, VercelErrorCategory.UNKNOWN);
+      await this.handleJobError(job, currentState, apiError, VercelWorkerEventType.PROJECT_CREATION_FAILED);
     }
   }
 
@@ -341,16 +338,16 @@ export class VercelWorker {
       data: { domain, vercelProjectId, status: VercelJobStatus.CONFIGURING_DOMAIN },
     });
 
-    const credentials = await fetchUserCredentials(userId);
-    if (!credentials?.vercelApiToken) {
-      throw new VercelApiError(
-        401,
-        { code: 'missing_credentials', message: `Vercel credentials not found for user ${userId}` },
-        VercelErrorCategory.AUTH,
-      );
-    }
-
     try {
+      const credentials = await fetchUserCredentials(userId);
+      if (!credentials?.vercelApiToken) {
+        throw new VercelApiError(
+          401,
+          { code: 'missing_credentials', message: `Vercel credentials not found for user ${userId}` },
+          VercelErrorCategory.AUTH,
+        );
+      }
+
       const vercelClient = new VercelClient({
         token: credentials.vercelApiToken,
         teamId: credentials.vercelTeamId || teamId,
@@ -405,8 +402,12 @@ export class VercelWorker {
             });
             console.log(`✅ CNAME record created in Cloudflare: ${domain} → ${VERCEL_CNAME_TARGET}`);
           } catch (dnsError) {
-            // Record may already exist — log but don't fail
-            console.warn(`DNS record creation warning for ${domain}:`, (dnsError as Error).message);
+            // Only ignore "record already exists" (Cloudflare error code 81057)
+            if (dnsError instanceof CloudflareApiError && dnsError.errors.some((e: { code: number }) => e.code === 81057)) {
+              console.warn(`DNS record for ${domain} already exists, continuing.`);
+            } else {
+              throw dnsError;
+            }
           }
         } else {
           console.warn(`No Cloudflare zone found for ${domain} — DNS records must be added manually`);
