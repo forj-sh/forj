@@ -65,11 +65,11 @@ export class GitHubWorker {
     this.worker.on('completed', (job) => {
       console.log(`GitHub job ${job.id} completed`);
 
-      // Only mark service as 'complete' in DB if it's the terminal operation.
-      // GitHub jobs are multi-step (VERIFY_ORG → CREATE_REPO → CONFIGURE_REPO),
-      // and the 'completed' event fires for each operation. We only want to mark
-      // the service complete when repository configuration finishes successfully.
-      if (job.data.operation === GitHubOperationType.CONFIGURE_REPO) {
+      // Mark service as 'complete' in DB when the terminal operation finishes.
+      // The orchestrator queues VERIFY_ORG + CREATE_REPO (CONFIGURE_REPO is optional).
+      // So CREATE_REPO or CONFIGURE_REPO completing means the workflow is done.
+      if (job.data.operation === GitHubOperationType.CREATE_REPO ||
+          job.data.operation === GitHubOperationType.CONFIGURE_REPO) {
         const value = ('repoUrl' in job.data ? job.data.repoUrl : job.data.orgName) as string | undefined;
         const now = new Date().toISOString();
 

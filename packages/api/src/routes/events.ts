@@ -14,7 +14,9 @@ import { getProjectByIdAndUserId } from '../lib/database.js';
  */
 const TERMINAL_COMPLETE_EVENTS = new Set<string>([
   DomainWorkerEventType.JOB_COMPLETED,
+  GitHubWorkerEventType.REPO_CREATION_COMPLETE,
   GitHubWorkerEventType.REPO_CONFIGURATION_COMPLETE,
+  CloudflareWorkerEventType.NAMESERVER_UPDATE_COMPLETE,
   CloudflareWorkerEventType.NAMESERVER_VERIFICATION_COMPLETE,
 ]);
 

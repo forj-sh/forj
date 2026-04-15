@@ -126,13 +126,14 @@ export class CloudflareWorker {
     this.worker.on('completed', (job) => {
       console.log(`Cloudflare job ${job.id} completed`);
 
-      // Only mark service as 'complete' in DB if it's the final step of the workflow.
-      // Cloudflare jobs are multi-step (CREATE_ZONE → UPDATE_NAMESERVERS → VERIFY_NAMESERVERS),
-      // and the 'completed' event fires for each step. We only want to mark the service
-      // complete when nameserver verification finishes successfully.
+      // Mark service as 'complete' in DB when a terminal step finishes.
+      // The workflow is CREATE_ZONE → UPDATE_NAMESERVERS → (optional) VERIFY_NAMESERVERS.
+      // NS verification is not currently queued (DNS propagation can take hours),
+      // so we also accept NAMESERVERS_UPDATED as a terminal state.
       const progress = job.progress as { status?: CloudflareJobStatus };
 
-      if (progress?.status === CloudflareJobStatus.COMPLETE) {
+      if (progress?.status === CloudflareJobStatus.COMPLETE ||
+          progress?.status === CloudflareJobStatus.NAMESERVERS_UPDATED) {
         const zoneId = 'zoneId' in job.data ? job.data.zoneId : undefined;
         const now = new Date().toISOString();
 
