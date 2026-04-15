@@ -325,6 +325,11 @@ export async function promptPostDomainServices(
       value: 'cloudflare',
       checked: true,
     },
+    {
+      name: `Vercel  ${chalk.dim('Deploy frontend with custom domain')}`,
+      value: 'vercel',
+      checked: false,
+    },
   ];
 
   const { selected } = await inquirer.prompt([

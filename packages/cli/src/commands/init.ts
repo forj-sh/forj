@@ -336,6 +336,18 @@ async function interactiveInit(
     selectedServices = await promptPostDomainServices(selectedDomain, name);
   }
 
+  // Vercel requires GitHub and Cloudflare — auto-include if missing
+  if (selectedServices.includes('vercel')) {
+    if (!selectedServices.includes('github')) {
+      selectedServices.push('github');
+      logger.dim('Auto-including GitHub (required by Vercel)');
+    }
+    if (!selectedServices.includes('cloudflare')) {
+      selectedServices.push('cloudflare');
+      logger.dim('Auto-including Cloudflare DNS (required by Vercel)');
+    }
+  }
+
   if (selectedServices.length === 0) {
     logger.dim('No additional services selected.');
 
@@ -375,6 +387,18 @@ async function interactiveInit(
     const cfToken = getCloudflareToken();
     if (cfToken) {
       await api.post('/auth/cloudflare', { token: cfToken });
+    }
+    logger.newline();
+  }
+
+  // Vercel token (if selected)
+  if (selectedServices.includes('vercel')) {
+    const { authenticateVercel, getVercelToken } = await import('../lib/auth-vercel.js');
+    await authenticateVercel();
+
+    const vercelToken = getVercelToken();
+    if (vercelToken) {
+      await api.post('/auth/vercel', { token: vercelToken });
     }
     logger.newline();
   }
