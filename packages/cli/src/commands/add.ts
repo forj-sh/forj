@@ -31,7 +31,7 @@ const AVAILABLE_SERVICES = {
   vercel: {
     name: 'Vercel',
     description: 'Vercel project linked to GitHub',
-    requiresAuth: false,
+    requiresAuth: true,
   },
   railway: {
     name: 'Railway',
@@ -126,6 +126,17 @@ async function runCloudflareAuth(): Promise<void> {
   logger.newline();
 }
 
+async function runVercelAuth(): Promise<void> {
+  const { authenticateVercel, getVercelToken } = await import('../lib/auth-vercel.js');
+  await authenticateVercel();
+
+  const vercelToken = getVercelToken();
+  if (vercelToken) {
+    await api.post('/auth/vercel', { token: vercelToken });
+  }
+  logger.newline();
+}
+
 /**
  * Add a service to existing project
  */
@@ -175,6 +186,18 @@ async function addService(
     githubOrg = await runGitHubAuth(config.name);
   } else if (service === 'cloudflare') {
     await runCloudflareAuth();
+  } else if (service === 'vercel') {
+    // Vercel requires GitHub — fetch current project status and verify it's active.
+    const status = await api.get<ProjectStatus>(
+      `/projects/${encodeURIComponent(config.projectId)}/status`
+    );
+    if (!status.services.github || status.services.github.status !== 'active') {
+      throw new ForjError(
+        'Vercel requires GitHub. Run `forj add github` first.',
+        'VERCEL_REQUIRES_GITHUB'
+      );
+    }
+    await runVercelAuth();
   }
 
   // Start provisioning

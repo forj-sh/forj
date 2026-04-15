@@ -51,6 +51,7 @@ import {
   getGitHubQueue,
   getCloudflareQueue,
   getDNSQueue,
+  getVercelQueue,
 } from '../lib/queues.js';
 
 /**
@@ -248,6 +249,16 @@ export async function projectRoutes(server: FastifyInstance) {
         services.push('cloudflare' as ServiceType);
       }
 
+      // Vercel requires GitHub (for repo link) and Cloudflare (for DNS records)
+      if (services.includes('vercel')) {
+        if (!services.includes('github')) {
+          services.push('github' as ServiceType);
+        }
+        if (!services.includes('cloudflare')) {
+          services.push('cloudflare' as ServiceType);
+        }
+      }
+
       if (services.includes('github') && !githubOrg) {
         return reply.status(400).send({
           success: false,
@@ -323,6 +334,17 @@ export async function projectRoutes(server: FastifyInstance) {
         }
       }
 
+      // Vercel credentials are fetched by the worker from DB (no need to decrypt here),
+      // but verify the token exists before queueing jobs
+      if (services.includes('vercel')) {
+        if (!user.vercelTokenEncrypted) {
+          return reply.status(400).send({
+            success: false,
+            error: 'Vercel token not found — connect Vercel first',
+          });
+        }
+      }
+
       try {
         // Add services to project in database
         await addProjectServices(id, services);
@@ -348,12 +370,17 @@ export async function projectRoutes(server: FastifyInstance) {
           provisioningConfig.cloudflareAccountId = user.cloudflareAccountId ?? undefined;
         }
 
+        if (services.includes('vercel')) {
+          provisioningConfig.vercelTeamId = user.vercelTeamId ?? undefined;
+        }
+
         // Start provisioning in background
         const orchestrator = new ProvisioningOrchestrator(
           getDomainQueue(),
           getGitHubQueue(),
           getCloudflareQueue(),
-          getDNSQueue()
+          getDNSQueue(),
+          services.includes('vercel') ? getVercelQueue() : undefined,
         );
 
         orchestrator.provision(provisioningConfig)

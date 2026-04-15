@@ -15,6 +15,7 @@ export const QUEUE_NAMES = {
   GITHUB: 'github', // GitHub worker queue
   CLOUDFLARE: 'cloudflare', // Cloudflare worker queue
   DNS: 'dns', // DNS wiring worker queue
+  VERCEL: 'vercel', // Vercel worker queue
 } as const;
 
 /**
@@ -63,6 +64,7 @@ function createQueues(): Record<string, Queue> | Record<string, never> {
     github: new Queue(QUEUE_NAMES.GITHUB, { connection, defaultJobOptions }),
     cloudflare: new Queue(QUEUE_NAMES.CLOUDFLARE, { connection, defaultJobOptions }),
     dns: new Queue(QUEUE_NAMES.DNS, { connection, defaultJobOptions }),
+    vercel: new Queue(QUEUE_NAMES.VERCEL, { connection, defaultJobOptions }),
   };
 }
 
@@ -149,4 +151,11 @@ export function getDNSQueue(): Queue {
     throw new Error('DNS queue not initialized');
   }
   return queues.dns;
+}
+
+export function getVercelQueue(): Queue {
+  if (!queues.vercel) {
+    throw new Error('Vercel queue not initialized');
+  }
+  return queues.vercel;
 }

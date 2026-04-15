@@ -15,6 +15,7 @@ export interface ForjConfig {
   currentProject?: string;
   githubToken?: string;
   cloudflareToken?: string;
+  vercelToken?: string;
 }
 
 /**
@@ -40,6 +41,7 @@ function isValidConfig(obj: unknown): obj is ForjConfig {
   if (!isStringOrEmpty(config.currentProject)) return false;
   if (!isStringOrEmpty(config.githubToken)) return false;
   if (!isStringOrEmpty(config.cloudflareToken)) return false;
+  if (!isStringOrEmpty(config.vercelToken)) return false;
 
   return true;
 }
@@ -172,4 +174,26 @@ export function setCloudflareToken(token: string): void {
  */
 export function clearCloudflareToken(): void {
   updateConfig({ cloudflareToken: undefined });
+}
+
+/**
+ * Get Vercel token from config
+ */
+export function getVercelToken(): string | undefined {
+  const config = readConfig();
+  return config.vercelToken;
+}
+
+/**
+ * Set Vercel token in config
+ */
+export function setVercelToken(token: string): void {
+  updateConfig({ vercelToken: token });
+}
+
+/**
+ * Clear Vercel token from config
+ */
+export function clearVercelToken(): void {
+  updateConfig({ vercelToken: undefined });
 }
