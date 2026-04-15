@@ -265,7 +265,7 @@ async function interactiveInit(
 
   // Step 6: Show price and confirm
   logger.log(chalk.bold('Summary:'));
-  logger.log(`  Domain: ${selectedDomain}  ${chalk.dim(`$${selectedDomainPrice}/yr + $2 service fee`)}`);
+  logger.log(`  Domain: ${selectedDomain}  ${chalk.dim(`$${selectedDomainPrice}/yr + $1 service fee`)}`);
   logger.log(`  Includes: GitHub org + repo, Cloudflare DNS zone`);
   logger.log(`  WHOIS privacy: ${useWhoisPrivacy ? chalk.green('enabled') : 'disabled'}`);
   logger.newline();

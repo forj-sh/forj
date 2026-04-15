@@ -14,11 +14,11 @@ export function Pricing(): HTMLElement {
         <div class="price-card featured reveal">
           <div class="price-tag-label">[ PAY PER PROJECT ]</div>
           <div class="price-name">Domain + Infrastructure</div>
-          <div class="price-amount">domain cost<span> + $2</span></div>
+          <div class="price-amount">domain cost<span> + $1</span></div>
           <div class="price-period">no subscription · no tiers · humans and agents alike</div>
           <div class="price-divider"></div>
           <ul class="price-features">
-            <li>Domain registration (at-cost + $2 service fee)</li>
+            <li>Domain registration (at-cost + $1 service fee)</li>
             <li>GitHub org + repos</li>
             <li>Cloudflare zone + DNS wiring</li>
             <li>Non-interactive + JSON mode for agents</li>

@@ -53,7 +53,7 @@ This handles the full two-phase flow: domain payment via Stripe, then service pr
 ## Pricing
 
 Pay per project, no subscription:
-- Domain registration: wholesale cost + $2 Forj service fee
+- Domain registration: wholesale cost + $1 Forj service fee
 - GitHub + Cloudflare: free (included)
 
 ## Key Changes from Earlier Drafts

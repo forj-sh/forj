@@ -4,7 +4,7 @@
 
 ## Summary
 
-forj charges a flat **$2.00 USD service fee per project**, plus the wholesale cost of the domain you register (passed through at cost, including ICANN fee). There are no tiers, no seats, no usage limits, and no recurring charges.
+forj charges a flat **$1.00 USD service fee per project**, plus the wholesale cost of the domain you register (passed through at cost, including ICANN fee). There are no tiers, no seats, no usage limits, and no recurring charges.
 
 One command, one charge, unlimited projects.
 
@@ -12,13 +12,13 @@ One command, one charge, unlimited projects.
 
 | Item | Amount | Notes |
 |---|---|---|
-| forj service fee | **$2.00 USD** | Flat, per project. Never changes with volume or tier. |
+| forj service fee | **$1.00 USD** | Flat, per project. Never changes with volume or tier. |
 | Domain registration | wholesale + ICANN fee | Pass-through from Namecheap. Varies by TLD. |
 | GitHub org + repo | $0.00 | Included |
 | Cloudflare zone + DNS | $0.00 | Included |
 | Nameserver wiring | $0.00 | Included |
 
-**Total per project = `$2.00 + domain_wholesale + icann_fee`**
+**Total per project = `$1.00 + domain_wholesale + icann_fee`**
 
 ## Machine-readable pricing
 
@@ -36,7 +36,7 @@ Example response shape:
   "data": {
     "currency": "USD",
     "serviceFee": {
-      "amount": 2.00,
+      "amount": 1.00,
       "per": "project",
       "description": "Flat forj fee per project. No tiers, no subscription, unlimited projects."
     },
@@ -47,9 +47,9 @@ Example response shape:
       "Nameserver wiring (Namecheap → Cloudflare)"
     ],
     "domains": {
-      "com": { "wholesale": 10.28, "icannFee": 0.18, "total": 12.46, "currency": "USD" },
-      "io":  { "wholesale": 39.50, "icannFee": 0.18, "total": 41.68, "currency": "USD" },
-      "dev": { "wholesale": 14.00, "icannFee": 0.18, "total": 16.18, "currency": "USD" }
+      "com": { "wholesale": 10.28, "icannFee": 0.18, "total": 11.46, "currency": "USD" },
+      "io":  { "wholesale": 39.50, "icannFee": 0.18, "total": 40.68, "currency": "USD" },
+      "dev": { "wholesale": 14.00, "icannFee": 0.18, "total": 15.18, "currency": "USD" }
     },
     "notes": {
       "premiumDomains": "Premium domains are priced by the registry. Call POST /domains/check for a live quote.",

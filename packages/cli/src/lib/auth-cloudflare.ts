@@ -22,7 +22,7 @@ export async function guideCloudflareTokenCreation(): Promise<void> {
   logger.info('Forj needs a Cloudflare API token with these permissions:');
   logger.info('');
   logger.info('  Account:  Account Settings → Read');
-  logger.info('  Zone:     Zone → Read, Zone Settings → Edit, DNS → Edit');
+  logger.info('  Zone:     Zone → Edit, Zone Settings → Edit, DNS → Edit');
   logger.info('');
   logger.info('We\'ll open Cloudflare\'s token creation page for you.');
   logger.info('');
@@ -57,7 +57,7 @@ export async function guideCloudflareTokenCreation(): Promise<void> {
   logger.info('  1. Click "Create Token" → "Create Custom Token"');
   logger.info('  2. Add permissions:');
   logger.info('     - Account → Account Settings → Read');
-  logger.info('     - Zone → Zone → Read');
+  logger.info('     - Zone → Zone → Edit');
   logger.info('     - Zone → Zone Settings → Edit');
   logger.info('     - Zone → DNS → Edit');
   logger.info('  3. Account Resources → Include → All accounts');

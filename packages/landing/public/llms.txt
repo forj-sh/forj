@@ -47,7 +47,7 @@ All three services are provisioned in parallel where possible, with real-time pr
 
 ## Pricing (agent-friendly)
 
-forj has a single SKU: **$2.00 USD flat service fee per project**, plus domain cost at wholesale + ICANN fee. No tiers, no subscription, unlimited projects.
+forj has a single SKU: **$1.00 USD flat service fee per project**, plus domain cost at wholesale + ICANN fee. No tiers, no subscription, unlimited projects.
 
 - Human-readable pricing: https://forj.sh/pricing.md
 - Machine-readable JSON (public, no auth): https://api.forj.sh/v1/pricing

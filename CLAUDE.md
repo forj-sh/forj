@@ -52,7 +52,7 @@ gt log short                          # View stack tree
 - **`packages/cli`** — Thin CLI client (commander + inquirer + SSE). Independent, no internal deps.
 - **`packages/shared`** — Shared types + API clients (Namecheap, Cloudflare, GitHub).
 - **`packages/landing`** — Landing page (Vite + TypeScript, deployed to Vercel).
-- **`api/`** (root) — Vercel serverless functions (waitlist form).
+- **`api/`** (root) — Vercel serverless functions (waitlist form, public pricing endpoint).
 
 ### System Design
 
@@ -86,7 +86,7 @@ Note: DNS record wiring (MX, SPF, DKIM, DMARC) deferred to future `forj dns setu
 ### Auth Approaches
 
 - **GitHub**: OAuth Device Flow (RFC 8628) — one-time code at `github.com/login/device`, CLI polls until authorized.
-- **Cloudflare**: Guided API token creation — user creates custom token with `Account Settings:Read` + `Zone:Read` + `Zone Settings:Edit` + `DNS:Edit`, includes Account Resources + Zone Resources, pastes into CLI.
+- **Cloudflare**: Guided API token creation — user creates custom token with `Account Settings:Read` + `Zone:Edit` + `Zone Settings:Edit` + `DNS:Edit`, includes Account Resources + Zone Resources, pastes into CLI.
 
 ## Key Constraints
 
@@ -97,7 +97,7 @@ Note: DNS record wiring (MX, SPF, DKIM, DMARC) deferred to future `forj dns setu
 - **`TRUST_PROXY=false`** for local dev, `true` for production behind Cloudflare (gates proxy header trust).
 - **Sentry must be imported FIRST** in `packages/api/src/index.ts` (before Fastify server creation). Custom `errorHandler` must register before `Sentry.setupFastifyErrorHandler`.
 - **Environment variables:** See `packages/api/.env.example` for full reference. Notable: separate encryption keys for Cloudflare and GitHub tokens (security isolation), `REQUIRE_PAYMENT` enforced in production.
-- **Migrations use numeric timestamps** (e.g., `1741570800000`) not sequential numbers.
+- **Migrations use numeric timestamps** (e.g., `1741570800000`) not sequential numbers, with `.cjs` extension.
 
 ## Testing
 
@@ -158,3 +158,4 @@ All feature development uses **Graphite CLI (`gt`)** for stacked PRs. Each stack
 - Railway deployment: `docs/railway-deployment.md`
 - MCP integration: `docs/mcp-integration.md`
 - Troubleshooting: `docs/troubleshooting.md`
+- LLM/agent discovery: `packages/landing/public/llms.txt`, `packages/landing/public/pricing.md`

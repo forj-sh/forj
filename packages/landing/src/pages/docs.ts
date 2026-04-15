@@ -76,7 +76,7 @@ docs.innerHTML = `
   <table>
     <thead><tr><th>Service</th><th>What happens</th><th>Cost</th></tr></thead>
     <tbody>
-      <tr><td>Domain</td><td>Registered via Namecheap (WHOIS privacy included)</td><td>At-cost + $2 service fee</td></tr>
+      <tr><td>Domain</td><td>Registered via Namecheap (WHOIS privacy included)</td><td>At-cost + $1 service fee</td></tr>
       <tr><td>GitHub</td><td>Org verified + repo created</td><td>Free</td></tr>
       <tr><td>Cloudflare</td><td>DNS zone created, nameservers configured</td><td>Free</td></tr>
     </tbody>
@@ -246,12 +246,12 @@ docs.innerHTML = `
   <table>
     <thead><tr><th>Item</th><th>Cost</th></tr></thead>
     <tbody>
-      <tr><td>Domain registration</td><td>Wholesale cost + $2 Forj service fee</td></tr>
+      <tr><td>Domain registration</td><td>Wholesale cost + $1 Forj service fee</td></tr>
       <tr><td>GitHub org + repo</td><td>Free (included)</td></tr>
       <tr><td>Cloudflare DNS zone</td><td>Free (included)</td></tr>
     </tbody>
   </table>
-  <p>Domain prices are fetched live from Namecheap. A typical <code>.com</code> costs ~$11-14/yr total. The $2 service fee covers the bundled provisioning service.</p>
+  <p>Domain prices are fetched live from Namecheap. A typical <code>.com</code> costs ~$11-14/yr total. The $1 service fee covers the bundled provisioning service.</p>
   <p>Agents and humans pay the same price. No separate API tier.</p>
 </section>
 

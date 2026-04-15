@@ -65,7 +65,7 @@ describe('GET /v1/pricing', () => {
     expect(body.success).toBe(true);
     expect(body.data.currency).toBe('USD');
     expect(body.data.serviceFee).toEqual({
-      amount: 2.0,
+      amount: 1.0,
       per: 'project',
       description: expect.stringContaining('Flat forj fee'),
     });
@@ -74,11 +74,11 @@ describe('GET /v1/pricing', () => {
     expect(body.data.domains.com).toEqual({
       wholesale: 10.28,
       icannFee: 0.18,
-      total: 12.46,
+      total: 11.46,
       currency: 'USD',
     });
-    expect(body.data.domains.io.total).toBe(41.68);
-    expect(body.data.domains.dev.total).toBe(16.18);
+    expect(body.data.domains.io.total).toBe(40.68);
+    expect(body.data.domains.dev.total).toBe(15.18);
 
     // Cache miss should be filtered out, not returned as null
     expect(body.data.domains.net).toBeUndefined();
@@ -98,7 +98,7 @@ describe('GET /v1/pricing', () => {
 
   it('honors the FORJ_SERVICE_FEE_CENTS env override', async () => {
     const original = process.env.FORJ_SERVICE_FEE_CENTS;
-    process.env.FORJ_SERVICE_FEE_CENTS = '350'; // $3.50 instead of $2.00
+    process.env.FORJ_SERVICE_FEE_CENTS = '350'; // $3.50 instead of $1.00
     try {
       mockPricingCache.getMultipleTldPricing.mockResolvedValue(
         new Map([['COM', mockTld('COM', 10.28)]])
@@ -126,7 +126,7 @@ describe('GET /v1/pricing', () => {
     const response = await server.inject({ method: 'GET', url: '/v1/pricing' });
     const body = JSON.parse(response.body);
 
-    expect(body.data.domains.com.total).toBe(2.3); // 0.10 + 0.20 + 2.00
+    expect(body.data.domains.com.total).toBe(1.3); // 0.10 + 0.20 + 1.00
   });
 
   it('requests REGISTER pricing for all public TLDs', async () => {
@@ -160,7 +160,7 @@ describe('GET /v1/pricing', () => {
     expect(body.success).toBe(true);
     expect(body.data.domains).toEqual({});
     // Service fee is still advertised even when upstream pricing is unavailable
-    expect(body.data.serviceFee.amount).toBe(2.0);
+    expect(body.data.serviceFee.amount).toBe(1.0);
   });
 
   it('skips TLDs priced in a non-USD currency', async () => {
@@ -197,7 +197,7 @@ describe('GET /v1/pricing', () => {
     expect(body.data.domains.com).toEqual({
       wholesale: 10.28,
       icannFee: 0,
-      total: 12.28, // 10.28 + 0 + 2.00
+      total: 11.28, // 10.28 + 0 + 1.00
       currency: 'USD',
     });
     expect(Number.isNaN(body.data.domains.com.total)).toBe(false);
