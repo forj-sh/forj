@@ -8,6 +8,9 @@ import { bindCopyButton } from '@/utils/copy-command';
 export function Hero(): HTMLElement {
   const el = html`
     <section class="hero reveal">
+      <a href="https://www.producthunt.com/products/forj-2?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-forj-2" target="_blank" rel="noopener noreferrer" class="ph-badge">
+        <img alt="forj 鍛冶場 - Provision project infrastructure with a single command | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1124677&theme=dark&t=1776284180338" />
+      </a>
       <div class="hero-label">[ INFRA PROVISIONING CLI ]</div>
       <h1>Project infra.<br><span>One command.</span></h1>
       <p class="hero-sub">
