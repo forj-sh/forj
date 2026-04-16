@@ -84,6 +84,11 @@ export class VercelApiError extends Error {
    * Get user-facing error message
    */
   getUserMessage(): string {
+    // Surface specific actionable messages before falling back to category defaults
+    if (this.message.includes('GitHub integration')) {
+      return 'Vercel needs access to your GitHub account. Install the Vercel GitHub integration at https://vercel.com/integrations/github and grant access to the repo.';
+    }
+
     switch (this.category) {
       case VercelErrorCategory.AUTH:
         return 'Vercel authentication failed — please verify your API token.';

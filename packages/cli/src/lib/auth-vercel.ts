@@ -57,6 +57,10 @@ export async function guideVercelTokenCreation(): Promise<void> {
   logger.info('  5. Click "Create Token"');
   logger.info('  6. Copy the token (you won\'t be able to see it again!)');
   logger.info('');
+  logger.warn('Important: Vercel needs GitHub integration installed on your account.');
+  logger.info('If you haven\'t already, install it at: https://vercel.com/integrations/github');
+  logger.info('Grant access to the organization/repo Forj created for your project.');
+  logger.info('');
 }
 
 /**
