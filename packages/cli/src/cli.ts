@@ -3,6 +3,7 @@ import chalk from 'chalk';
 import packageJson from '../package.json' with { type: 'json' };
 import { initSentry } from './lib/sentry.js';
 import { createAddCommand } from './commands/add.js';
+import { createAuthCommand } from './commands/auth.js';
 import { createDNSCommand } from './commands/dns.js';
 import { createInitCommand } from './commands/init.js';
 import { createLoginCommand } from './commands/login.js';
@@ -26,6 +27,7 @@ program
 program.addCommand(createInitCommand());
 program.addCommand(createStatusCommand());
 program.addCommand(createAddCommand());
+program.addCommand(createAuthCommand());
 program.addCommand(createDNSCommand());
 program.addCommand(createLoginCommand());
 program.addCommand(createLogoutCommand());

@@ -68,6 +68,9 @@ Thumbs.db
 .forj/
 credentials.json
 
+# Claude Code worktrees
+.claude/
+
 # TypeScript
 *.tsbuildinfo
 
