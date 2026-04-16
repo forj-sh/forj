@@ -100,6 +100,17 @@ export class VercelWorker {
     });
 
     this.worker.on('failed', (job, err) => {
+      // Waiting-for-dependency errors shouldn't flap the service status to 'failed'.
+      // BullMQ will retry; the DB stays 'pending' until either terminal success
+      // or final attempt failure.
+      const isWaitingError = err.message.startsWith('WAITING_FOR_DEPENDENCY:');
+      const hasRetriesRemaining = job ? (job.attemptsMade < (job.opts.attempts ?? 1)) : false;
+
+      if (isWaitingError && hasRetriesRemaining) {
+        console.log(`Vercel job ${job?.id} waiting (attempt ${job?.attemptsMade}/${job?.opts.attempts}):`, err.message);
+        return;
+      }
+
       console.error(`Vercel job ${job?.id} failed:`, err.message);
 
       if (job) {
@@ -211,11 +222,15 @@ export class VercelWorker {
     // Throw a retryable Error (not UnrecoverableError) so BullMQ backoff waits
     // for the GitHub worker to finish. Attempts + exponential backoff on the
     // create-project job are sized to cover typical GitHub provisioning time.
+    //
+    // The error message is prefixed with WAITING_FOR_DEPENDENCY: so the failed
+    // handler can recognize it and skip marking the service as 'failed' in the
+    // DB while retries are still available.
     const githubState = await fetchProjectServiceState(projectId, 'github');
     if (!githubState || githubState.status !== 'complete') {
       const actual = githubState?.status ?? 'not_provisioned';
       throw new Error(
-        `Vercel create-project waiting for GitHub repo (current status: ${actual})`
+        `WAITING_FOR_DEPENDENCY: Vercel create-project waiting for GitHub repo (current status: ${actual})`
       );
     }
 
