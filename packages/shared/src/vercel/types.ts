@@ -135,6 +135,20 @@ export interface VercelDomainConfig {
 }
 
 /**
+ * Git namespace (GitHub org/user accessible to the Vercel account)
+ *
+ * Returned by GET /v1/integrations/git-namespaces
+ */
+export interface VercelGitNamespace {
+  id: number | string;
+  slug: string;              // GitHub org/user slug (e.g., "forj-sh")
+  name: string;
+  ownerType: 'user' | 'team' | 'organization';
+  provider: 'github' | 'gitlab' | 'bitbucket';
+  installationId?: number;
+}
+
+/**
  * Project creation parameters
  */
 export interface ProjectCreateParams {

@@ -127,11 +127,13 @@ async function runCloudflareAuth(): Promise<void> {
   logger.newline();
 }
 
-async function runVercelAuth(): Promise<void> {
-  const { authenticateVercel, getVercelToken } = await import('../lib/auth-vercel.js');
-  await authenticateVercel();
+async function runVercelAuth(githubOrg: string): Promise<void> {
+  const { authenticateVercel, getVercelToken, ensureVercelGitHubAccess } = await import('../lib/auth-vercel.js');
+  const vercelToken = await authenticateVercel();
 
-  const vercelToken = getVercelToken();
+  // Verify Vercel has GitHub access to the org before proceeding
+  await ensureVercelGitHubAccess(vercelToken, githubOrg);
+
   if (vercelToken) {
     await api.post('/auth/vercel', { token: vercelToken });
   }
@@ -218,7 +220,7 @@ async function addService(
       githubOrg = org.trim();
     }
 
-    await runVercelAuth();
+    await runVercelAuth(githubOrg!);
   }
 
   // Start provisioning

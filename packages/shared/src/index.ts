@@ -339,6 +339,7 @@ export type {
   VercelDomain,
   VercelDomainVerification,
   VercelDomainConfig,
+  VercelGitNamespace,
   ProjectCreateParams as VercelProjectCreateParams,
 } from './vercel/index.js';
 

@@ -393,10 +393,14 @@ async function interactiveInit(
 
   // Vercel token (if selected)
   if (selectedServices.includes('vercel')) {
-    const { authenticateVercel, getVercelToken } = await import('../lib/auth-vercel.js');
-    await authenticateVercel();
+    const { authenticateVercel, ensureVercelGitHubAccess } = await import('../lib/auth-vercel.js');
+    const vercelToken = await authenticateVercel();
 
-    const vercelToken = getVercelToken();
+    // Verify Vercel has GitHub access to the org before provisioning
+    if (githubOrg) {
+      await ensureVercelGitHubAccess(vercelToken, githubOrg);
+    }
+
     if (vercelToken) {
       await api.post('/auth/vercel', { token: vercelToken });
     }

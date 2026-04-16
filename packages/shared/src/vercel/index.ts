@@ -18,6 +18,7 @@ export type {
   VercelDomain,
   VercelDomainVerification,
   VercelDomainConfig,
+  VercelGitNamespace,
   ProjectCreateParams,
 } from './types.js';
 

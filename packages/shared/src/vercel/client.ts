@@ -14,6 +14,7 @@ import type {
   VercelProject,
   VercelDomain,
   VercelDomainConfig,
+  VercelGitNamespace,
   ProjectCreateParams,
 } from './types.js';
 
@@ -212,6 +213,35 @@ export class VercelClient {
       `/v10/projects/${encodeURIComponent(projectId)}/domains/${encodeURIComponent(domain)}/verify`,
       { method: 'POST' },
     );
+  }
+
+  /**
+   * List git namespaces (GitHub orgs/accounts) accessible to the Vercel account.
+   *
+   * Returns empty array if the Vercel GitHub integration is not installed
+   * or has no accessible orgs/accounts.
+   *
+   * Endpoint: GET /v1/integrations/git-namespaces
+   */
+  async listGitNamespaces(provider: 'github' | 'gitlab' | 'bitbucket' = 'github'): Promise<VercelGitNamespace[]> {
+    return this.executeRequest<VercelGitNamespace[]>(
+      `/v1/integrations/git-namespaces?provider=${provider}`,
+    );
+  }
+
+  /**
+   * Check if the Vercel GitHub integration has access to a specific org.
+   *
+   * Returns true if the org is accessible (integration installed + granted access),
+   * false otherwise.
+   */
+  async hasGitHubAccess(orgName: string): Promise<boolean> {
+    try {
+      const namespaces = await this.listGitNamespaces('github');
+      return namespaces.some((ns) => ns.slug?.toLowerCase() === orgName.toLowerCase());
+    } catch {
+      return false;
+    }
   }
 }
 
