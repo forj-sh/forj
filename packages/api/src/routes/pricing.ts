@@ -111,6 +111,7 @@ export async function pricingRoutes(
           'GitHub organization and repository',
           'Cloudflare DNS zone',
           'Nameserver wiring (Namecheap → Cloudflare)',
+          'Vercel deployment with custom domain (optional, uses your Vercel account)',
         ],
         domains,
         notes: {

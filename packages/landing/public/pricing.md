@@ -17,6 +17,7 @@ One command, one charge, unlimited projects.
 | GitHub org + repo | $0.00 | Included |
 | Cloudflare zone + DNS | $0.00 | Included |
 | Nameserver wiring | $0.00 | Included |
+| Vercel deployment (optional) | $0.00 | Uses your Vercel account (Hobby tier free). Included. |
 
 **Total per project = `$1.00 + domain_wholesale + icann_fee`**
 
