@@ -19,8 +19,9 @@ The CLI is available on npm as `forj-cli`. No global install required.
 1. **Domain registration** — Registers your domain via Namecheap. Pricing shown upfront (wholesale + ICANN fee). Payment via Stripe Checkout.
 2. **GitHub organization and repository** — Creates a verified GitHub org and initializes a repository. Authenticated via GitHub OAuth Device Flow.
 3. **Cloudflare DNS zone** — Creates a Cloudflare zone for your domain and configures nameservers automatically (Namecheap NS records pointed to Cloudflare).
+4. **Vercel deployment (optional)** — Creates a Vercel project linked to the GitHub repo, adds your custom domain, and wires DNS records in Cloudflare. Requires GitHub to be provisioned (hard dependency).
 
-All three services are provisioned in parallel where possible, with real-time progress streamed to the CLI via SSE.
+All services are provisioned in parallel where possible, with real-time progress streamed to the CLI via SSE.
 
 ## How it works
 
@@ -35,7 +36,7 @@ All three services are provisioned in parallel where possible, with real-time pr
 
 - **CLI** (`forj-cli` on npm) — thin client using commander.js, inquirer, and SSE streaming
 - **API** — Fastify server handling auth, payments, and orchestration
-- **Workers** — BullMQ workers for domain, GitHub, and Cloudflare provisioning
+- **Workers** — BullMQ workers for domain, GitHub, Cloudflare, and Vercel provisioning
 - **State machine** — each service tracks independent state, all workers are idempotent and resumable
 
 ## Key properties

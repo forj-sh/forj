@@ -39,7 +39,7 @@ gt log short                          # View stack tree
 
 ## Project Overview
 
-**Forj** provisions production-ready project infrastructure with a single command: domain registration (Namecheap), GitHub org + repo, and Cloudflare DNS zone with nameserver configuration — in under 2 minutes. Full spec: `docs/spec.md`. **V1 shipped March 2026** (`forj-cli@1.0.0`).
+**Forj** provisions production-ready project infrastructure with a single command: domain registration (Namecheap), GitHub org + repo, Cloudflare DNS zone, and optional Vercel deployment — in under 2 minutes. Full spec: `docs/spec.md`. **V1 shipped March 2026** (`forj-cli@1.0.0`).
 
 **Branding:** domain `forj.sh`, GitHub org `forj-sh`, npm package `forj-cli`, CLI invocation `npx forj-cli init acme`.
 
@@ -48,9 +48,9 @@ gt log short                          # View stack tree
 **Monorepo** with 5 npm workspace packages + root serverless functions:
 
 - **`packages/api`** — Fastify server (routes, auth middleware, Stripe, JWT). Depends on `shared`.
-- **`packages/workers`** — BullMQ workers (domain, GitHub, Cloudflare, DNS). Depends on `shared`.
+- **`packages/workers`** — BullMQ workers (domain, GitHub, Cloudflare, DNS, Vercel). Depends on `shared`.
 - **`packages/cli`** — Thin CLI client (commander + inquirer + SSE). Independent, no internal deps.
-- **`packages/shared`** — Shared types + API clients (Namecheap, Cloudflare, GitHub).
+- **`packages/shared`** — Shared types + API clients (Namecheap, Cloudflare, GitHub, Vercel).
 - **`packages/landing`** — Landing page (Vite + TypeScript, deployed to Vercel).
 - **`api/`** (root) — Vercel serverless functions (waitlist form, public pricing endpoint).
 
@@ -79,6 +79,7 @@ Phase 2 — Services (after domain confirmed):
   2. GitHub org verified + repo created    ← parallel with 3
   3. Cloudflare zone created               ← returns nameserver pair
   4. Nameservers updated (Namecheap → Cloudflare NS)
+  5. Vercel project + domain (optional)    ← depends on 2 and 3
 ```
 
 Note: DNS record wiring (MX, SPF, DKIM, DMARC) deferred to future `forj dns setup-email` command.
@@ -87,6 +88,8 @@ Note: DNS record wiring (MX, SPF, DKIM, DMARC) deferred to future `forj dns setu
 
 - **GitHub**: OAuth Device Flow (RFC 8628) — one-time code at `github.com/login/device`, CLI polls until authorized.
 - **Cloudflare**: Guided API token creation — user creates custom token with `Account Settings:Read` + `Zone:Edit` + `Zone Settings:Edit` + `DNS:Edit`, includes Account Resources + Zone Resources, pastes into CLI.
+- **Vercel**: Guided API token creation — user creates token at `vercel.com/account/tokens` with Full Account scope. Also requires Vercel GitHub App installed (CLI opens `github.com/apps/vercel/installations/new` and polls for access).
+- **Re-auth**: Use `forj auth <service>` (cloudflare, vercel) to update a stored token without re-running provisioning.
 
 ## Key Constraints
 
@@ -96,7 +99,7 @@ Note: DNS record wiring (MX, SPF, DKIM, DMARC) deferred to future `forj dns setu
 - **`ENABLE_MOCK_AUTH`** defaults to `false` — mock auth endpoint only enabled when `!isProduction && mockAuthEnabled`.
 - **`TRUST_PROXY=false`** for local dev, `true` for production behind Cloudflare (gates proxy header trust).
 - **Sentry must be imported FIRST** in `packages/api/src/index.ts` (before Fastify server creation). Custom `errorHandler` must register before `Sentry.setupFastifyErrorHandler`.
-- **Environment variables:** See `packages/api/.env.example` for full reference. Notable: separate encryption keys for Cloudflare and GitHub tokens (security isolation), `REQUIRE_PAYMENT` enforced in production.
+- **Environment variables:** See `packages/api/.env.example` for full reference. Notable: separate encryption keys per service (`CLOUDFLARE_ENCRYPTION_KEY`, `GITHUB_ENCRYPTION_KEY`, `VERCEL_ENCRYPTION_KEY`) for security isolation. `REQUIRE_PAYMENT` enforced in production.
 - **Migrations use numeric timestamps** (e.g., `1741570800000`) not sequential numbers, with `.cjs` extension.
 
 ## Testing
@@ -119,10 +122,13 @@ Note: DNS record wiring (MX, SPF, DKIM, DMARC) deferred to future `forj dns setu
 - Cloudflare: PENDING → CREATING_ZONE → ZONE_CREATED → UPDATING_NS → VERIFYING → COMPLETE/FAILED
 - GitHub: PENDING → VERIFYING_ORG → CREATING_REPO → CONFIGURING → COMPLETE/FAILED
 - DNS: PENDING → WIRING_MX → WIRING_SPF → WIRING_DKIM → WIRING_DMARC → WIRING_CNAME → VERIFYING → COMPLETE/FAILED
+- Vercel: PENDING → VERIFYING_TEAM → TEAM_VERIFIED → CREATING_PROJECT → PROJECT_CREATED → CONFIGURING_DOMAIN → COMPLETE/FAILED
+
+**Vercel dependencies:** Vercel worker requires GitHub repo to exist before `CREATE_PROJECT` runs. Enforced via DB-polling dependency gate in worker (throws `WAITING_FOR_DEPENDENCY:` error → BullMQ backoff retry). Domain configuration step also writes CNAME/A records directly to Cloudflare zone.
 
 **TypeScript:** Strict mode, discriminated unions for job types, `export type` for type exports.
 
-**Data model:** Projects table uses JSONB `services` column + `phase`, `contact_info`, `stripe_session_id` columns. Users table stores encrypted tokens (AES-256-GCM) + `contact_info` (reused across projects). 6 migrations in `packages/api/migrations/`.
+**Data model:** Projects table uses JSONB `services` column + `phase`, `contact_info`, `stripe_session_id` columns. Users table stores encrypted tokens (AES-256-GCM, one column per service) + `contact_info` (reused across projects). Migrations in `packages/api/migrations/` use numeric timestamps.
 
 **Phone numbers:** Namecheap requires `+CC.NNNNNNNNNN` format (e.g., `+1.5551234567`). The domain worker normalizes plain international format (`+15551234567`) automatically.
 
