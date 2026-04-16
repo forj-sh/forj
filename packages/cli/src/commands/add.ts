@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
+import inquirer from 'inquirer';
 import { api } from '../lib/api-client.js';
 import { promptConfirm } from '../lib/prompts.js';
 import { streamProvisioningProgress } from '../lib/sse-client.js';
@@ -197,6 +198,26 @@ async function addService(
         'VERCEL_REQUIRES_GITHUB'
       );
     }
+    // Extract github org from the github service value (repo URL or org name)
+    const githubValue = status.services.github.value;
+    if (githubValue) {
+      // Value is either "https://github.com/ORG/REPO" or just "ORG"
+      const repoMatch = githubValue.match(/github\.com\/([^/]+)/);
+      githubOrg = repoMatch ? repoMatch[1] : githubValue;
+    }
+
+    // Fall back to prompting if we couldn't derive the org
+    if (!githubOrg) {
+      const { org } = await inquirer.prompt([{
+        type: 'input',
+        name: 'org',
+        message: 'GitHub org name (for Vercel repo link):',
+        default: config.name,
+        validate: (input: string) => input.trim().length > 0 || 'Org name required',
+      }]);
+      githubOrg = org.trim();
+    }
+
     await runVercelAuth();
   }
 

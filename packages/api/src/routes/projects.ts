@@ -244,28 +244,6 @@ export async function projectRoutes(server: FastifyInstance) {
         });
       }
 
-      // DNS requires a Cloudflare zone — auto-include cloudflare if dns is requested
-      if (services.includes('dns') && !services.includes('cloudflare')) {
-        services.push('cloudflare' as ServiceType);
-      }
-
-      // Vercel requires GitHub (for repo link) and Cloudflare (for DNS records)
-      if (services.includes('vercel')) {
-        if (!services.includes('github')) {
-          services.push('github' as ServiceType);
-        }
-        if (!services.includes('cloudflare')) {
-          services.push('cloudflare' as ServiceType);
-        }
-      }
-
-      if (services.includes('github') && !githubOrg) {
-        return reply.status(400).send({
-          success: false,
-          error: 'githubOrg is required when github service is selected',
-        });
-      }
-
       // Ownership check
       const project = await getProjectByIdAndUserId(id, userId);
       if (!project) {
@@ -281,6 +259,41 @@ export async function projectRoutes(server: FastifyInstance) {
         return reply.status(400).send({
           success: false,
           error: 'Domain must be registered before provisioning other services',
+        });
+      }
+
+      // Helper: check if a service is already complete on this project
+      const isComplete = (svc: ServiceType) =>
+        project.services?.[svc]?.status === 'complete';
+
+      // DNS requires a Cloudflare zone — auto-include cloudflare only if not already complete
+      if (services.includes('dns') && !services.includes('cloudflare') && !isComplete('cloudflare')) {
+        services.push('cloudflare' as ServiceType);
+      }
+
+      // Vercel requires GitHub (for repo link) and Cloudflare (for DNS records)
+      // Only auto-include if they aren't already provisioned
+      if (services.includes('vercel')) {
+        if (!services.includes('github') && !isComplete('github')) {
+          services.push('github' as ServiceType);
+        }
+        if (!services.includes('cloudflare') && !isComplete('cloudflare')) {
+          services.push('cloudflare' as ServiceType);
+        }
+
+        // If Vercel depends on GitHub and GitHub isn't complete, reject
+        if (!isComplete('github') && !services.includes('github')) {
+          return reply.status(400).send({
+            success: false,
+            error: 'Vercel requires GitHub. Run `forj add github` first.',
+          });
+        }
+      }
+
+      if (services.includes('github') && !githubOrg) {
+        return reply.status(400).send({
+          success: false,
+          error: 'githubOrg is required when github service is selected',
         });
       }
 
