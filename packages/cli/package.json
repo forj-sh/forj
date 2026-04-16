@@ -1,12 +1,12 @@
 {
   "name": "forj-cli",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "private": false,
   "type": "module",
   "description": "Forj CLI — Infrastructure provisioning command-line tool",
   "main": "./dist/index.js",
   "bin": {
-    "forj": "./dist/cli.js"
+    "forj": "dist/cli.js"
   },
   "scripts": {
     "dev": "tsup --watch",
@@ -25,7 +25,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git@github.com:forj-sh/forj.git",
+    "url": "git+ssh://git@github.com/forj-sh/forj.git",
     "directory": "packages/cli"
   },
   "dependencies": {

@@ -127,8 +127,9 @@ export async function ensureVercelGitHubAccess(token: string, githubOrg: string)
   logger.info('Vercel needs the GitHub App installed with access to this org.');
   logger.info('');
 
-  // Use the direct GitHub App install URL with pre-selected target
-  const installUrl = `https://github.com/apps/vercel/installations/new/permissions?target_id=${encodeURIComponent(githubOrg)}`;
+  // GitHub App install URL — user picks the org/account from GitHub's UI
+  // (target_id requires a numeric GitHub org ID which we don't have from the slug)
+  const installUrl = 'https://github.com/apps/vercel/installations/new';
   const fallbackUrl = 'https://vercel.com/integrations/github';
 
   const { proceed } = await inquirer.prompt([
