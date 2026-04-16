@@ -1,6 +1,6 @@
 {
   "name": "forj-cli",
-  "version": "1.0.11",
+  "version": "1.1.0",
   "private": false,
   "type": "module",
   "description": "Forj CLI — Infrastructure provisioning command-line tool",
