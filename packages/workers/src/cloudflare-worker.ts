@@ -229,6 +229,17 @@ export class CloudflareWorker {
         throw new Error('Cloudflare account ID is required for zone creation');
       }
 
+      // Pre-check: if zone already exists, skip creation and use existing
+      // This handles the case where the zone was created in a previous run
+      const existingZones = await client.listZones(accountId, domain);
+      const preExisting = existingZones.find((z) => z.name === domain);
+      if (preExisting) {
+        console.log(`Zone for ${domain} already exists (pre-check), using existing...`);
+        await this.handleZoneCreationSuccess(job, currentState, preExisting, true);
+        currentState = CloudflareJobStatus.ZONE_CREATED;
+        return;
+      }
+
       const zone = await client.createZone({
         name: domain,
         account: { id: accountId },

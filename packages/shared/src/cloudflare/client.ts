@@ -66,19 +66,24 @@ export class CloudflareClient {
 
       // Handle non-OK HTTP responses before parsing JSON
       if (!response.ok) {
-        let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        const errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        let errorData: CloudflareApiResponse<T> | null = null;
         try {
-          const errorData = await response.json() as CloudflareApiResponse<T>;
-          if (errorData.errors?.length > 0) {
-            throw new CloudflareApiError(errorData.errors);
-          }
-        } catch (parseError) {
-          // If JSON parsing fails, use the HTTP status text
-          throw new CloudflareApiError([{
-            code: response.status,
-            message: errorMessage,
-          }]);
+          errorData = await response.json() as CloudflareApiResponse<T>;
+        } catch {
+          // JSON parsing failed — fall through to HTTP status fallback
         }
+
+        // If we got structured Cloudflare errors, use them (preserves error codes like 1061)
+        if (errorData?.errors?.length) {
+          throw new CloudflareApiError(errorData.errors);
+        }
+
+        // Fallback: use HTTP status code
+        throw new CloudflareApiError([{
+          code: response.status,
+          message: errorMessage,
+        }]);
       }
 
       const data = await response.json() as CloudflareApiResponse<T>;
